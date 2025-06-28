@@ -15,15 +15,18 @@ go get github.com/clipperhouse/ratelimiter
 ```go
 // Define a getter for the rate limiter "bucket"
 func byIP(req *http.Request) string {
+    // You can put arbitrary logic in here, perhaps by path or method,
+    // or a combination thereof. In this case, we'll just use IP address.
     return req.RemoteAddr
 }
 
+// 10 requests per second
 limit := ratelimiter.NewLimit(10, time.Second)
 
 // 10 requests per second per IP
-limiter := ratelimiter.NewRateLimiter(byIP, tenPerSecond)
+limiter := ratelimiter.NewRateLimiter(byIP, limit)
 
-// Wherever you handle http requests:
+// In your HTTP handler
 if limiter.Allow(r) {
     w.WriteHeader(http.StatusOK)
     w.Write([]byte("Success"))

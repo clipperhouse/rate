@@ -22,7 +22,11 @@ func NewRateLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limi
 	}
 }
 
-func (l *RateLimiter[TInput, TKey]) Allow(input TInput, now time.Time) bool {
+func (l *RateLimiter[TInput, TKey]) Allow(input TInput) bool {
+	return l.allow(input, time.Now())
+}
+
+func (l *RateLimiter[TInput, TKey]) allow(input TInput, now time.Time) bool {
 	key := l.keyer(input)
 
 	l.mu.Lock()
@@ -30,9 +34,9 @@ func (l *RateLimiter[TInput, TKey]) Allow(input TInput, now time.Time) bool {
 
 	b, ok := l.buckets[key]
 	if !ok {
-		b = NewBucket(now, l.limit)
+		b = newBucket(now, l.limit)
 		l.buckets[key] = b
 	}
 
-	return b.Allow(now, l.limit)
+	return b.allow(now, l.limit)
 }

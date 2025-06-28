@@ -30,3 +30,9 @@ jobs:
 
     - name: Run tests with race detector
       run: go test -race -v ./...
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v8
+      with:
+        version: latest
+        args: --timeout=1m

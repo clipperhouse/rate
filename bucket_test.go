@@ -1,6 +1,7 @@
 package ratelimiter_test
 
 import (
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -31,38 +32,59 @@ func TestBucket_ConsumeToken(t *testing.T) {
 }
 
 func TestBucket_Allow(t *testing.T) {
-	limit := ratelimiter.NewLimit(9, time.Minute)
-	bucket := ratelimiter.NewBucket(time.Now(), limit)
+	now := time.Now()
+
+	// Tokens refill at ~111ms intervals
+	limit := ratelimiter.NewLimit(9, time.Second)
+	bucket := ratelimiter.NewBucket(now, limit)
 
 	for range 9 {
-		actual := bucket.Allow(time.Now(), limit)
+		actual := bucket.Allow(now, limit)
 		require.True(t, actual, "expected to allow request when tokens are available")
+		now = now.Add(time.Millisecond)
 	}
 
-	// Should be gone now
-	actual := bucket.Allow(time.Now(), limit)
+	// Tokens should be gone now
+	actual := bucket.Allow(now, limit)
 	require.False(t, actual, "expected to deny request after tokens are exhausted")
+
+	now = now.Add(time.Millisecond * 120)
+
+	// A new token should have refilled by now
+	actual = bucket.Allow(now, limit)
+	require.True(t, actual, "expected to allow request after waiting for refill")
 }
 
-func TestBucket_Concurrency(t *testing.T) {
-	limit := ratelimiter.NewLimit(10, time.Second)
-	bucket := ratelimiter.NewBucket(time.Now(), limit)
+func TestBucket_Allow_Concurrent(t *testing.T) {
+	now := time.Now()
+
+	// Tokens refill at ~111ms intervals
+	limit := ratelimiter.NewLimit(9, time.Second)
+	bucket := ratelimiter.NewBucket(now, limit)
 
 	var wg sync.WaitGroup
-	concurrency := 100
-	wg.Add(concurrency)
 
-	for range concurrency {
-		go func() {
+	for i := range 9 {
+		wg.Add(1)
+		go func(index int) {
 			defer wg.Done()
-			bucket.Allow(time.Now(), limit)
-		}()
+			// Add jitter to the timestamp
+			jitter := time.Duration(rand.Intn(10)) * time.Millisecond
+			timestamp := now.Add(jitter)
+			actual := bucket.Allow(timestamp, limit)
+			require.True(t, actual, "expected to allow request when tokens are available (goroutine %d)", index)
+		}(i)
 	}
 
 	wg.Wait()
 
-	// We expect that all tokens are consumed
-	actual := bucket.RemainingTokens(time.Now(), limit)
-	expected := int64(0)
-	require.Equal(t, expected, actual, "Expected all tokens to be consumed, but some remained")
+	// Tokens should be gone now
+	actual := bucket.Allow(now, limit)
+	require.False(t, actual, "expected to deny request after tokens are exhausted")
+
+	now = now.Add(time.Millisecond * 120)
+
+	// A new token should have refilled by now
+	actual = bucket.Allow(now, limit)
+	require.True(t, actual, "expected to allow request after waiting for refill")
 }

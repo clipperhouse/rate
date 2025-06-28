@@ -6,20 +6,21 @@ import (
 )
 
 type bucket struct {
-	time  time.Time
-	mutex sync.Mutex
+	time time.Time
+	mu   sync.Mutex
 }
 
-func NewBucket(now time.Time, limit limit) bucket {
-	return bucket{
+func NewBucket(now time.Time, limit limit) *bucket {
+	return &bucket{
 		time: now.Add(-limit.Period),
 	}
 }
 
-// Allow returns true there are available tokens in the bucket
+// Allow returns true there are available tokens in the bucket, and consumes a token if so.
+// If it returns false, no tokens were consumed.
 func (b *bucket) Allow(now time.Time, limit limit) bool {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	// Check if enough time has passed such that there is at least one token
 	allow := b.time.Before(now.Add(-limit.DurationPerToken))
@@ -31,8 +32,8 @@ func (b *bucket) Allow(now time.Time, limit limit) bool {
 
 // ConsumeToken consumes a token from the bucket
 func (b *bucket) ConsumeToken(limit limit) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.consumeToken(limit)
 }
 

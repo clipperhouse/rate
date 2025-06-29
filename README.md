@@ -8,7 +8,7 @@ Early days! I am designing a token bucket rate limiter with an emphasis on clean
 go get github.com/clipperhouse/ratelimiter
 ```
 
-[![Tests](https://github.com/clipperhouse/ratelimiter/actions/workflows/test.yml/badge.svg)](https://github.com/clipperhouse/ratelimiter/actions/workflows/test.yml)
+[![Tests](https://github.com/clipperhouse/ratelimiter/actions/workflows/tests.yml/badge.svg)](https://github.com/clipperhouse/ratelimiter/actions/workflows/tests.yml)
 
 ## Sample code
 

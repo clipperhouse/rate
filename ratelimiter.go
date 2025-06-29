@@ -8,35 +8,60 @@ import (
 type Keyer[TInput any, TKey comparable] func(input TInput) TKey
 
 type RateLimiter[TInput any, TKey comparable] struct {
-	keyer   Keyer[TInput, TKey]
-	buckets map[TKey]*bucket
-	limit   limit
+	keyer        Keyer[TInput, TKey]
+	limitBuckets []limitBuckets[TKey]
+	mu           sync.Mutex
+}
+
+type limitBuckets[TKey comparable] struct {
 	mu      sync.Mutex
+	limit   limit
+	buckets map[TKey]*bucket
 }
 
-func NewRateLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limit limit) *RateLimiter[TInput, TKey] {
+func NewRateLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limits ...limit) *RateLimiter[TInput, TKey] {
+	lbs := make([]limitBuckets[TKey], len(limits))
+	for i := range limits {
+		lbs[i] = limitBuckets[TKey]{
+			limit:   limits[i],
+			buckets: make(map[TKey]*bucket),
+		}
+	}
 	return &RateLimiter[TInput, TKey]{
-		keyer:   keyer,
-		buckets: make(map[TKey]*bucket),
-		limit:   limit,
+		keyer:        keyer,
+		limitBuckets: lbs,
 	}
 }
 
-func (l *RateLimiter[TInput, TKey]) Allow(input TInput) bool {
-	return l.allow(input, time.Now())
+// Allow returns true if the input is allowed to proceed, false otherwise.
+// In the case of multiple limits, all limits must be satisfied, or it will return false.
+func (r *RateLimiter[TInput, TKey]) Allow(input TInput) bool {
+	return r.allow(input, time.Now())
 }
 
-func (l *RateLimiter[TInput, TKey]) allow(input TInput, now time.Time) bool {
-	key := l.keyer(input)
+func (r *RateLimiter[TInput, TKey]) allow(input TInput, now time.Time) bool {
+	key := r.keyer(input)
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	b, ok := l.buckets[key]
-	if !ok {
-		b = newBucket(now, l.limit)
-		l.buckets[key] = b
+	for i := range r.limitBuckets {
+		lb := &r.limitBuckets[i]
+		lb.mu.Lock()
+
+		b, ok := lb.buckets[key]
+		if !ok {
+			b = newBucket(now, lb.limit)
+			lb.buckets[key] = b
+		}
+
+		allow := b.allow(now, lb.limit)
+		lb.mu.Unlock()
+
+		if !allow {
+			return false
+		}
 	}
 
-	return b.allow(now, l.limit)
+	return true
 }

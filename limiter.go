@@ -1,4 +1,4 @@
-package ratelimiter
+package rate
 
 import (
 	"sync"
@@ -7,7 +7,7 @@ import (
 
 type Keyer[TInput any, TKey comparable] func(input TInput) TKey
 
-type RateLimiter[TInput any, TKey comparable] struct {
+type Limiter[TInput any, TKey comparable] struct {
 	keyer        Keyer[TInput, TKey]
 	limitBuckets []limitBuckets[TKey]
 	mu           sync.Mutex
@@ -19,7 +19,7 @@ type limitBuckets[TKey comparable] struct {
 	buckets map[TKey]*bucket
 }
 
-func NewRateLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limits ...limit) *RateLimiter[TInput, TKey] {
+func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limits ...limit) *Limiter[TInput, TKey] {
 	lbs := make([]limitBuckets[TKey], len(limits))
 	for i := range limits {
 		lbs[i] = limitBuckets[TKey]{
@@ -27,7 +27,7 @@ func NewRateLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limi
 			buckets: make(map[TKey]*bucket),
 		}
 	}
-	return &RateLimiter[TInput, TKey]{
+	return &Limiter[TInput, TKey]{
 		keyer:        keyer,
 		limitBuckets: lbs,
 	}
@@ -35,11 +35,11 @@ func NewRateLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limi
 
 // Allow returns true if the input is allowed to proceed, false otherwise.
 // In the case of multiple limits, all limits must be satisfied, or it will return false.
-func (r *RateLimiter[TInput, TKey]) Allow(input TInput) bool {
+func (r *Limiter[TInput, TKey]) Allow(input TInput) bool {
 	return r.allow(input, time.Now())
 }
 
-func (r *RateLimiter[TInput, TKey]) allow(input TInput, now time.Time) bool {
+func (r *Limiter[TInput, TKey]) allow(input TInput, now time.Time) bool {
 	key := r.keyer(input)
 
 	r.mu.Lock()

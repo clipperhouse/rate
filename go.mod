@@ -1,4 +1,4 @@
-module github.com/clipperhouse/ratelimiter
+module github.com/clipperhouse/rate
 
 go 1.24.4
 

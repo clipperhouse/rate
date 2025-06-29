@@ -1,4 +1,4 @@
-package ratelimiter
+package rate
 
 import (
 	"fmt"
@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRateLimiter_Allow_SingleBucket(t *testing.T) {
+func TestLimiter_Allow_SingleBucket(t *testing.T) {
 	keyer := func(input string) string {
 		return input
 	}
 	limit := NewLimit(9, time.Second)
-	limiter := NewRateLimiter(keyer, limit)
+	limiter := NewLimiter(keyer, limit)
 
 	now := time.Now()
 
@@ -30,13 +30,13 @@ func TestRateLimiter_Allow_SingleBucket(t *testing.T) {
 	require.True(t, limiter.allow("test", now))
 }
 
-func TestRateLimiter_Allow_MultipleBuckets(t *testing.T) {
+func TestLimiter_Allow_MultipleBuckets(t *testing.T) {
 	keyer := func(input string) string {
 		return input
 	}
 	const buckets = 3
 	limit := NewLimit(9, time.Second)
-	limiter := NewRateLimiter(keyer, limit)
+	limiter := NewLimiter(keyer, limit)
 	now := time.Now()
 
 	for i := range buckets {
@@ -47,13 +47,13 @@ func TestRateLimiter_Allow_MultipleBuckets(t *testing.T) {
 	}
 }
 
-func TestRateLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
+func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 	keyer := func(bucketID int) string {
 		return fmt.Sprintf("test-bucket-%d", bucketID)
 	}
 	const buckets = 3
 	limit := NewLimit(9, time.Second)
-	limiter := NewRateLimiter(keyer, limit)
+	limiter := NewLimiter(keyer, limit)
 	start := time.Now()
 
 	var wg sync.WaitGroup
@@ -88,7 +88,7 @@ func TestRateLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 	}
 }
 
-func TestRateLimiter_Allow_MultipleLimits(t *testing.T) {
+func TestLimiter_Allow_MultipleLimits(t *testing.T) {
 	keyer := func(input string) string {
 		return input
 	}
@@ -97,7 +97,7 @@ func TestRateLimiter_Allow_MultipleLimits(t *testing.T) {
 	limitPerSecond := NewLimit(9, time.Second)
 	limitPerHour := NewLimit(21, time.Hour)
 
-	limiter := NewRateLimiter(keyer, limitPerSecond, limitPerHour)
+	limiter := NewLimiter(keyer, limitPerSecond, limitPerHour)
 	now := time.Now()
 
 	for range 2 {
@@ -124,7 +124,7 @@ func TestRateLimiter_Allow_MultipleLimits(t *testing.T) {
 	}
 }
 
-func TestRateLimiter_Allow_MultipleLimits_MultipleBuckets(t *testing.T) {
+func TestLimiter_Allow_MultipleLimits_MultipleBuckets(t *testing.T) {
 	keyer := func(bucketID int) string {
 		return fmt.Sprintf("bucket-%d", bucketID)
 	}
@@ -132,7 +132,7 @@ func TestRateLimiter_Allow_MultipleLimits_MultipleBuckets(t *testing.T) {
 	// Create two limits: 5 per second and 15 per hour
 	limitPerSecond := NewLimit(5, time.Second)
 	limitPerHour := NewLimit(15, time.Hour)
-	limiter := NewRateLimiter(keyer, limitPerSecond, limitPerHour)
+	limiter := NewLimiter(keyer, limitPerSecond, limitPerHour)
 	const buckets = 7
 
 	now := time.Now()
@@ -182,7 +182,7 @@ func TestRateLimiter_Allow_MultipleLimits_MultipleBuckets(t *testing.T) {
 	}
 }
 
-func TestRateLimiter_Allow_MultipleLimits_MultipleBuckets_Concurrent(t *testing.T) {
+func TestLimiter_Allow_MultipleLimits_MultipleBuckets_Concurrent(t *testing.T) {
 	keyer := func(bucketID int) string {
 		return fmt.Sprintf("bucket-%d", bucketID)
 	}
@@ -190,7 +190,7 @@ func TestRateLimiter_Allow_MultipleLimits_MultipleBuckets_Concurrent(t *testing.
 	// Create two limits: 5 per second and 15 per hour
 	limitPerSecond := NewLimit(5, time.Second)
 	limitPerHour := NewLimit(15, time.Hour)
-	limiter := NewRateLimiter(keyer, limitPerSecond, limitPerHour)
+	limiter := NewLimiter(keyer, limitPerSecond, limitPerHour)
 	const buckets = 7
 
 	now := time.Now()

@@ -50,8 +50,8 @@ are allowed as long as there is at least one token remaining in the bucket.
 The bucket is refilled by the passage of time. If you define a limit of 10 req/s,
 a new token will be added every 100ms.
 
-<small>* More precisely, a token is deducted when the request is allowed; if the request
-is denied for lack of tokens, no token is deducted, i.e. debt is not incurred.</small>
+<small>_* More precisely, a token is deducted when the request is allowed; if the request
+is denied for lack of tokens, no token is deducted, i.e. debt is not incurred._</small>
 
 ### `keyer`
 
@@ -75,7 +75,7 @@ The resulting limiter will be typed by the input parameter of your `keyer`.
 Your `limiter.Allow()` call will take the input type of your `keyer`.
 
 ```go
-// Somewhere if your HTTP handler, where r is the incoming http.Request:
+// Somewhere in your HTTP handler, where r is the incoming http.Request:
 
 limiter.Allow(r)
 ```

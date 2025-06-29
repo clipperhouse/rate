@@ -1,11 +1,18 @@
 package ratelimiter
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type limit struct {
 	Count            int64
 	Period           time.Duration
 	durationPerToken time.Duration
+}
+
+func (l limit) String() string {
+	return fmt.Sprintf("%d requests per %s", l.Count, l.Period.String())
 }
 
 // NewLimit creates a new limit with the given count and period.

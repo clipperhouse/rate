@@ -25,7 +25,8 @@ func (b *bucket) allow(now time.Time, limit limit) bool {
 	b.checkMaxTokens(now, limit)
 
 	// Check if enough time has passed such that there is at least one token
-	allow := b.time.Before(now.Add(-limit.durationPerToken))
+	// Using !After to represent "Before or Equal"
+	allow := !b.time.After(now.Add(-limit.durationPerToken))
 	if allow {
 		b.consumeToken(limit)
 	}
@@ -39,7 +40,7 @@ func (b *bucket) consumeToken(limit limit) {
 }
 
 // remainingTokens returns the number of tokens remaining in the bucket
-// only call it for testing our math
+// only current use is for testing our math
 func (b *bucket) remainingTokens(now time.Time, limit limit) int64 {
 	b.checkMaxTokens(now, limit)
 	return int64(now.Sub(b.time) / limit.durationPerToken)

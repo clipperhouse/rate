@@ -9,15 +9,15 @@ import (
 
 // Benchmark single allow calls for this package
 func BenchmarkAllow_Single(b *testing.B) {
-	lim := NewLimit(100, time.Second)
-	bucket := newBucket(time.Now(), lim)
+	limit := NewLimit(100, time.Second)
+	bucket := newBucket(time.Now(), limit)
 	now := time.Now()
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
-		bucket.allow(now, lim)
+		bucket.allow(now, limit)
 	}
 }
 

@@ -13,9 +13,9 @@ go get github.com/clipperhouse/rate
 ## Example
 
 ```go
-// Define a getter for the rate limiter "bucket"
+// Define a getter for the rate limiter “bucket”
 func byIP(req *http.Request) string {
-    // You can put arbitrary logic in here. In this case, we'll just use IP address.
+    // You can put arbitrary logic in here. In this case, we’ll just use IP address.
     return req.RemoteAddr
 }
 
@@ -25,7 +25,7 @@ limit := rate.NewLimit(10, time.Second)
 // 10 requests per second per IP
 limiter := rate.NewLimiter(byIP, limit)
 
-// In your HTTP handler
+// In your HTTP handler, where r is the http.Request
 if limiter.Allow(r) {
     w.WriteHeader(http.StatusOK)
     w.Write([]byte("Success"))
@@ -33,36 +33,34 @@ if limiter.Allow(r) {
     w.WriteHeader(http.StatusTooManyRequests)
     w.Write([]byte("Too many requests"))
 }
-
-// Note that the limiter.Allow call is typed for http.Request, due to the signature of byIP
 ```
 
 ## Concepts
 
 ### `bucket`
 
-The rate-limiting algorithm is a "token bucket". The bucket begins with _n_ tokens
+The rate-limiting algorithm is a “token bucket”. The bucket begins with _n_ tokens
 as defined by your `limit`.
 
-When you `Allow` a request, a token is deducted from the bucket *. Requests
+When you `Allow` a request, a token is deducted from the bucket <sup>[*]</sup>. Requests
 are allowed as long as there is at least one token remaining in the bucket.
 
 The bucket is refilled by the passage of time. If you define a limit of 10 req/s,
 a new token will be added every 100ms.
 
-<small>_* More precisely, a token is deducted when the request is allowed; if the request
-is denied for lack of tokens, no token is deducted, i.e. debt is not incurred._</small>
+<sup>_[*] More precisely, a token is deducted when the request is allowed; if the request
+is denied for lack of tokens, no token is deducted, i.e. debt is not incurred._</sup>
 
 ### `keyer`
 
 You define your buckets with a `func` that takes one parameter,
-and returns a bucket's unique identifier (key).
+and returns a bucket’s unique identifier (key).
 
 ```go
 type Keyer[TInput any, TKey comparable] func(input TInput) TKey
 ```
 
-Go's type inference makes this read cleanly, don't worry. To limit by IP address,
+Go’s type inference makes this read cleanly, don’t worry. To limit by IP address,
 for example:
 
 ```go
@@ -80,7 +78,7 @@ Your `limiter.Allow()` call will take the input type of your `keyer`.
 limiter.Allow(r)
 ```
 
-I think that's elegant.
+I think that’s elegant.
 
 Nothing about this is HTTP-specific, you can use it for anything you wish to rate-limit:
 
@@ -95,20 +93,12 @@ func byUser(db myDatabase) int {
 A `limit` is a count over a period of time, which is tracked in a `bucket`. It is
 defined by calling (e.g.) `rate.NewLimit(10, time.Second)`.
 
-A rate limiter can accept multiple limits. You might wish to allow short spikes
-while prohibiting high sustained load. For this you would define two limits:
-
 ```go
 perSecond := rate.NewLimit(10, time.Second)
-perMinute := rate.NewLimit(100, time.Minute)
-
-limiter := rate.NewLimiter(byUser, perSecond, perMinute)
+limiter := rate.NewLimiter(byUser, perSecond)
 ```
 
-Calls to `limiter.Allow` must must satisfy **all limits** to return `true`.
-
-You can use arbitrary `time.Duration`'s. It's up to you to do the math of how that
-will behave!
+You can use arbitrary `time.Duration`’s.
 
 ## Prior art
 

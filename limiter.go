@@ -8,28 +8,17 @@ import (
 type Keyer[TInput any, TKey comparable] func(input TInput) TKey
 
 type Limiter[TInput any, TKey comparable] struct {
-	keyer        Keyer[TInput, TKey]
-	limitBuckets []limitBuckets[TKey]
-	mu           sync.Mutex
-}
-
-type limitBuckets[TKey comparable] struct {
-	mu      sync.Mutex
+	keyer   Keyer[TInput, TKey]
 	limit   limit
 	buckets map[TKey]*bucket
+	mu      sync.Mutex
 }
 
-func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limits ...limit) *Limiter[TInput, TKey] {
-	lbs := make([]limitBuckets[TKey], len(limits))
-	for i := range limits {
-		lbs[i] = limitBuckets[TKey]{
-			limit:   limits[i],
-			buckets: make(map[TKey]*bucket),
-		}
-	}
+func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limit limit) *Limiter[TInput, TKey] {
 	return &Limiter[TInput, TKey]{
-		keyer:        keyer,
-		limitBuckets: lbs,
+		keyer:   keyer,
+		buckets: make(map[TKey]*bucket),
+		limit:   limit,
 	}
 }
 
@@ -40,28 +29,15 @@ func (r *Limiter[TInput, TKey]) Allow(input TInput) bool {
 }
 
 func (r *Limiter[TInput, TKey]) allow(input TInput, now time.Time) bool {
-	key := r.keyer(input)
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for i := range r.limitBuckets {
-		lb := &r.limitBuckets[i]
-		lb.mu.Lock()
-
-		b, ok := lb.buckets[key]
-		if !ok {
-			b = newBucket(now, lb.limit)
-			lb.buckets[key] = b
-		}
-
-		allow := b.allow(now, lb.limit)
-		lb.mu.Unlock()
-
-		if !allow {
-			return false
-		}
+	key := r.keyer(input)
+	b, ok := r.buckets[key]
+	if !ok {
+		b = newBucket(now, r.limit)
+		r.buckets[key] = b
 	}
 
-	return true
+	return b.allow(now, r.limit)
 }

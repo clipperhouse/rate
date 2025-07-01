@@ -50,18 +50,39 @@ func TestBucket_Allow(t *testing.T) {
 	for range limit.Count {
 		actual := bucket.allow(now, limit)
 		require.True(t, actual, "expected to allow request when tokens are available")
-		now = now.Add(time.Millisecond)
 	}
 
 	// Tokens should be gone now
-	actual := bucket.allow(now, limit)
-	require.False(t, actual, "expected to deny request after tokens are exhausted")
+	{
+		actual := bucket.allow(now, limit)
+		require.False(t, actual, "expected to deny request after tokens are exhausted")
+	}
 
-	now = now.Add(time.Millisecond * 112)
+	// Refill with one token and consume it
+	{
+		now = now.Add(time.Millisecond * 112)
+		actual := bucket.allow(now, limit)
+		require.True(t, actual, "expected to allow request after waiting for refill")
+	}
 
-	// One new token should have refilled by now
-	actual = bucket.allow(now, limit)
-	require.True(t, actual, "expected to allow request after waiting for refill")
+	// Token should be gone now
+	{
+		actual := bucket.allow(now, limit)
+		require.False(t, actual, "expected to deny request after one refilled token is consumed")
+	}
+
+	// If the bucket is old, it should not mistakenly be interpreted as having too many tokens
+	now = now.Add(time.Hour)
+	for range limit.Count {
+		actual := bucket.allow(now, limit)
+		require.True(t, actual, "expected to allow requests with old bucket")
+	}
+
+	// Tokens should be gone now
+	{
+		actual := bucket.allow(now, limit)
+		require.False(t, actual, "expected to deny request after old bucket's tokens are exhausted")
+	}
 }
 
 func TestBucket_Allow_Concurrent(t *testing.T) {

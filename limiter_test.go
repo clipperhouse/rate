@@ -88,6 +88,23 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 	}
 }
 
+func TestLimiter_AllowWithDetails(t *testing.T) {
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(9, time.Second)
+	limiter := NewLimiter(keyer, limit)
+
+	now := time.Now()
+
+	allow, details := limiter.allowWithDetails("test-details", now)
+	require.True(t, allow)
+	require.Equal(t, limit, details.Limit())
+	require.Equal(t, now, details.ExecutionTime())
+	require.Equal(t, "test-details", details.BucketKey())
+	require.Equal(t, limit.Count-1, details.RemainingTokens())
+}
+
 func TestLimiter_Peek_SingleBucket(t *testing.T) {
 	const key = "single-test-bucket"
 	keyer := func(input string) string {
@@ -222,4 +239,21 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent(t *testing.T) {
 		}
 		wg.Wait()
 	}
+}
+
+func TestLimiter_PeekWithDetails(t *testing.T) {
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(9, time.Second)
+	limiter := NewLimiter(keyer, limit)
+
+	now := time.Now()
+
+	allowed, details := limiter.peekWithDetails("test-details", now)
+	require.True(t, allowed)
+	require.Equal(t, limit, details.Limit())
+	require.Equal(t, now, details.ExecutionTime())
+	require.Equal(t, "test-details", details.BucketKey())
+	require.Equal(t, limit.Count, details.RemainingTokens())
 }

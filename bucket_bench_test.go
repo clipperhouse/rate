@@ -26,6 +26,7 @@ func BenchmarkRate_Allow_Single(b *testing.B) {
 	limiter := rate.NewLimiter(rate.Limit(100), 0)
 	now := time.Now()
 
+	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {

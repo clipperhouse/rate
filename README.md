@@ -40,7 +40,7 @@ if limiter.Allow(r) {
 ### `bucket`
 
 The rate-limiting algorithm is a “token bucket”. The bucket begins with _n_ tokens
-as defined by your `limit`.
+as defined by your `Limit`.
 
 When you `Allow` a request, a token is deducted from the bucket <sup>[*]</sup>. Requests
 are allowed as long as there is at least one token remaining in the bucket.
@@ -51,7 +51,7 @@ a new token will be added every 100ms.
 <sup>_[*] More precisely, a token is deducted when the request is allowed; if the request
 is denied for lack of tokens, no token is deducted, i.e. debt is not incurred._</sup>
 
-### `keyer`
+### `Keyer`
 
 You define your buckets with a `func` that takes one parameter,
 and returns a bucket’s unique identifier (key).
@@ -83,12 +83,13 @@ I think that’s elegant.
 Nothing about this is HTTP-specific, you can use it for anything you wish to rate-limit:
 
 ```go
-func byUser(db myDatabase) int {
-    return db.GetUser()
+var db = getDBConnection()  // a closure might be handy
+func byUserID(email string) int {
+    return db.GetUserIDByEmail(email)
 }
 ```
 
-### `limit`
+### `Limit`
 
 A `limit` is a count over a period of time, which is tracked in a `bucket`. It is
 defined by calling (e.g.) `rate.NewLimit(10, time.Second)`.
@@ -100,10 +101,59 @@ limiter := rate.NewLimiter(byUser, perSecond)
 
 You can use arbitrary `time.Duration`’s.
 
+## Tips & tricks
+
+If your `Keyer` requires more than one input, consider a closure:
+
+```go
+var db = getDBConnection()
+func byUserID(email string) int {
+    return db.GetUserIDByEmail(email)
+}
+```
+...or create a new struct type to represent the multiple inputs. If it requires zero inputs,
+just use `_`.
+
+If you want different limits for different requests, use `NewLimiterFunc`.
+
+```go
+// reads are cheap
+readLimit := rate.NewLimit(50, time.Second)
+// writes are expensive
+writeLimit := rate.NewLimit(10, time.Second)
+
+limitFunc := func(r *http.Request) Limit {
+    if r.Method == "GET" {
+        return readLimit
+    }
+    return writeLimit
+}
+limiter := rate.NewLimiterFunc(keyer, limitFunc)
+```
+
+If you want to allow short spikes but prevent sustained ones, create two `rate.Limiter`’s
+and call `Allow` in succession.
+
+```go
+perSecond := rate.NewLimit(10, time.Second)
+perMinute := rate.NewLimit(100, time.Minute)
+
+limiters := []rate.Limiter {
+    rate.NewLimiter(keyer, perSecond),
+    rate.NewLimiter(keyer, perMinute),
+}
+
+for _, limiter := range limiters {
+    if limiter.Allow() {
+        ...
+    }
+}
+```
+
 ## Prior art
 
 The Go team offers [golang.org/x/time/rate](https://golang.org/x/time/rate). What they call
 a `limiter` is equivalent to our `bucket` type above.
 
 This package builds on top of that primitive concept, to look up buckets by key, and to
-accommodate multiple limits.
+accommodate dynamic limits.

@@ -514,3 +514,31 @@ func TestLimiter_PeekWithDetails_Func(t *testing.T) {
 	require.Equal(t, "test-details", details.BucketKey())
 	require.Equal(t, limit.count, details.RemainingTokens())
 }
+
+func TestLimiter_UsesLimitFunc(t *testing.T) {
+	keyer := func(input int) string {
+		return fmt.Sprintf("test-bucket-%d", input)
+	}
+	{
+		limitFunc := func(input int) Limit {
+			return NewLimit(int64(10*input), time.Second)
+		}
+		limiter := NewLimiterFunc(keyer, limitFunc)
+
+		for i := range 3 {
+			allow, details := limiter.allowWithDetails(i+1, time.Now())
+			require.True(t, allow)
+			require.Equal(t, limitFunc(i+1), details.Limit())
+		}
+	}
+	{
+		limit := NewLimit(888, time.Second)
+		limiter := NewLimiter(keyer, limit)
+
+		for i := range 3 {
+			allow, details := limiter.allowWithDetails(i+1, time.Now())
+			require.True(t, allow)
+			require.Equal(t, limit, details.Limit())
+		}
+	}
+}

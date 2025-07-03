@@ -26,7 +26,9 @@ func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limit Li
 	}
 }
 
-// NewLimiterFunc creates a new rate limiter with a dynamic limit function.
+// NewLimiterFunc creates a new rate limiter with a dynamic limit function. Use this if you
+// wish to apply a different limit based on the input, for example by URL path. The LimitFunc
+// takes the same input type as the Keyer function.
 func NewLimiterFunc[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limitFunc LimitFunc[TInput]) *Limiter[TInput, TKey] {
 	return &Limiter[TInput, TKey]{
 		keyer:     keyer,

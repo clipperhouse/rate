@@ -1,6 +1,7 @@
 package rate
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -540,5 +541,138 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 			require.True(t, allow)
 			require.Equal(t, limit, details.Limit())
 		}
+	}
+}
+
+func TestLimiter_Wait_SingleBucket(t *testing.T) {
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(2, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Consume all tokens
+	for range limit.count {
+		ok := limiter.allow("test", executionTime)
+		require.True(t, ok, "should allow initial tokens")
+	}
+
+	// Should not allow immediately
+	ok := limiter.allow("test", executionTime)
+	require.False(t, ok, "should not allow when tokens exhausted")
+
+	// Wait for a token, with sufficient timeout
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		time.AfterFunc(limit.durationPerToken, cancel)
+		allow := limiter.wait(ctx, "test", executionTime)
+		require.True(t, allow, "should acquire token after waiting")
+
+		// We waited
+		executionTime = executionTime.Add(limit.durationPerToken)
+	}
+
+	// Should not allow again immediately after wait
+	ok = limiter.allow("test", executionTime)
+	require.False(t, ok, "should not allow again immediately after wait")
+
+	// Wait with a context that times out before token is available
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		time.AfterFunc(limit.durationPerToken/5, cancel)
+		allow := limiter.wait(ctx, "test", executionTime)
+		require.False(t, allow, "should not acquire token if context times out first")
+	}
+}
+
+func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
+	keyer := func(input int) string {
+		return fmt.Sprintf("test-bucket-%d", input)
+	}
+	const buckets = 3
+	limit := NewLimit(2, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+	executionTime := time.Now()
+
+	// Exhaust tokens for all buckets
+	for bucketID := range buckets {
+		for range limit.count {
+			allow := limiter.allow(bucketID, executionTime)
+			require.True(t, allow, "should allow initial tokens for bucket %d", bucketID)
+		}
+	}
+
+	// Should not allow immediately for any bucket
+	for bucketID := range buckets {
+		allow := limiter.allow(bucketID, executionTime)
+		require.False(t, allow, "should not allow when tokens exhausted for bucket %d", bucketID)
+	}
+
+	// Wait for a token for each bucket
+	for bucketID := range buckets {
+		ctx, cancel := context.WithCancel(context.Background())
+		time.AfterFunc(limit.durationPerToken, cancel)
+		allow := limiter.wait(ctx, bucketID, executionTime)
+		require.True(t, allow, "should acquire token after waiting for bucket %d", bucketID)
+	}
+
+	// We waited
+	executionTime = executionTime.Add(limit.durationPerToken)
+
+	// Buckets should be empty again
+	for bucketID := range buckets {
+		ok := limiter.allow(bucketID, executionTime)
+		require.False(t, ok, "should not allow again immediately after wait for bucket %d", bucketID)
+	}
+}
+
+func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
+	keyer := func(input int) string {
+		return fmt.Sprintf("test-bucket-%d", input)
+	}
+	const buckets = 3
+	limit := NewLimit(2, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+	executionTime := time.Now()
+
+	// Exhaust tokens for all buckets
+	for bucketID := range buckets {
+		for range limit.count {
+			allow := limiter.allow(bucketID, executionTime)
+			require.True(t, allow, "should allow initial tokens for bucket %d", bucketID)
+		}
+	}
+
+	// Buckets should be empty
+	for bucketID := range buckets {
+		allow := limiter.allow(bucketID, executionTime)
+		require.False(t, allow, "should not allow when tokens exhausted for bucket %d", bucketID)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	const fudge = 2 * time.Millisecond
+
+	// Concurrently wait for a token for each bucket
+	var wg sync.WaitGroup
+	wg.Add(buckets)
+	for bucketID := range buckets {
+		go func(i int) {
+			defer wg.Done()
+			allow := limiter.wait(ctx, i, executionTime)
+			require.True(t, allow, "should acquire token after waiting for bucket %d", i)
+		}(bucketID)
+	}
+	time.AfterFunc(limit.durationPerToken+fudge, cancel)
+	wg.Wait()
+
+	// We waited
+	executionTime = executionTime.Add(limit.durationPerToken + fudge)
+
+	// Buckets should be empty again
+	for bucketID := range buckets {
+		ok := limiter.allow(bucketID, executionTime)
+		require.False(t, ok, "should not allow again immediately after wait for bucket %d", bucketID)
 	}
 }

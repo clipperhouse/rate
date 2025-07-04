@@ -652,7 +652,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	fudge := 1 * time.Millisecond
+	const fudge = 2 * time.Millisecond
 
 	// Concurrently wait for a token for each bucket
 	var wg sync.WaitGroup

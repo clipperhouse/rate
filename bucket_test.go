@@ -226,7 +226,7 @@ func TestBucket_Wait(t *testing.T) {
 	// Wait with a context without enough time to acquire a token
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-		fudge := 2 * time.Millisecond // account for timing imprecision, ugh
+		const fudge = 2 * time.Millisecond // account for timing imprecision, ugh
 		time.AfterFunc(limit.durationPerToken-fudge, cancel)
 		allow := bucket.wait(ctx, now, limit)
 		require.False(t, allow, "should not acquire token if context is cancelled before next token is available")
@@ -295,31 +295,28 @@ func TestBucket_Wait_Concurrent_With_Timeout(t *testing.T) {
 	// All tokens should be exhausted
 	require.False(t, bucket.allow(now, limit), "should not allow when tokens exhausted")
 
-	var wg sync.WaitGroup
 	// The context will be cancelled after enough time for all tokens to be refilled
 	ctx, cancel := context.WithCancel(context.Background())
+	const fudge = 3 * time.Millisecond // account for timing imprecision, ugh
 
-	const fudge = 4 * time.Millisecond // account for timing imprecision, ugh
-	time.AfterFunc(limit.period+fudge, cancel)
+	// Start more goroutines than available tokens
+	concurrency := limit.count * 3
+	results := make([]bool, concurrency)
 
-	concurrency := limit.count * 3 // Start more goroutines than available tokens
-	successes := make(chan bool, concurrency)
-
+	var wg sync.WaitGroup
 	// These waits should queue up and execute as tokens become available.
 	for i := range concurrency {
 		wg.Add(1)
 		go func(i int64) {
 			defer wg.Done()
-			allow := bucket.wait(ctx, now, limit)
-			successes <- allow
+			results[i] = bucket.wait(ctx, now, limit)
 		}(i)
 	}
-
+	time.AfterFunc(limit.period+fudge, cancel)
 	wg.Wait()
-	close(successes)
 
 	var successCount, failureCount int64
-	for s := range successes {
+	for _, s := range results {
 		if s {
 			successCount++
 		} else {

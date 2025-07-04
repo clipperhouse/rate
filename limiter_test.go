@@ -651,9 +651,8 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		require.False(t, allow, "should not allow when tokens exhausted for bucket %d", bucketID)
 	}
 
-	fudge := 2 * time.Millisecond
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(limit.durationPerToken+fudge, cancel)
+	fudge := 1 * time.Millisecond
 
 	// Concurrently wait for a token for each bucket
 	var wg sync.WaitGroup
@@ -665,6 +664,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 			require.True(t, allow, "should acquire token after waiting for bucket %d", i)
 		}(bucketID)
 	}
+	time.AfterFunc(limit.durationPerToken+fudge, cancel)
 	wg.Wait()
 
 	// We waited

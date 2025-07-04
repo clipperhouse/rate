@@ -1,6 +1,7 @@
 package rate
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -45,16 +46,21 @@ func (r *Limiter[TInput, TKey]) Allow(input TInput) bool {
 }
 
 func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+	r.mu.RLock()
 	limit := r.getLimit(input)
-
 	key := r.keyer(input)
 	b, ok := r.buckets[key]
+	r.mu.RUnlock()
+
 	if !ok {
-		b = newBucket(executionTime, limit)
-		r.buckets[key] = b
+		// lock again in case another goroutine created the bucket
+		r.mu.Lock()
+		b, ok = r.buckets[key]
+		if !ok {
+			b = newBucket(executionTime, limit)
+			r.buckets[key] = b
+		}
+		r.mu.Unlock()
 	}
 
 	return b.allow(executionTime, limit)
@@ -71,16 +77,21 @@ func (r *Limiter[TInput, TKey]) AllowWithDetails(input TInput) (bool, Details[TI
 }
 
 func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime time.Time) (bool, Details[TInput, TKey]) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+	r.mu.RLock()
 	limit := r.getLimit(input)
-
 	key := r.keyer(input)
 	b, ok := r.buckets[key]
+	r.mu.RUnlock()
+
 	if !ok {
-		b = newBucket(executionTime, limit)
-		r.buckets[key] = b
+		// lock again in case another goroutine created the bucket
+		r.mu.Lock()
+		b, ok = r.buckets[key]
+		if !ok {
+			b = newBucket(executionTime, limit)
+			r.buckets[key] = b
+		}
+		r.mu.Unlock()
 	}
 
 	allowed := b.allow(executionTime, limit)
@@ -146,6 +157,51 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 		bucketInput:   input,
 		bucketKey:     key,
 	}
+}
+
+// Wait will poll the [Limiter.Allow] method for a period of time,
+// until it is cancelled by the passed context. It has the
+// effect of adding latency to requests instead of refusing
+// them immediately. Consider it graceful degradation.
+//
+// Wait will return true if a token becomes available prior to
+// the context cancellation, and will consume a token. It will
+// return false if not, and therefore not consume a token.
+//
+// Take care to create an appropriate context. You almost certainly
+// want [context.WithTimeout] or [context.WithDeadline].
+//
+// You should be conservative, as Wait will introduce
+// backpressure on your upstream systems -- connections
+// may be held open longer, requests may queue in memory.
+//
+// A good starting place will be to timeout after waiting
+// for one token. For example:
+//
+//	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
+func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
+	return r.wait(ctx, input, time.Now())
+}
+
+func (r *Limiter[TInput, TKey]) wait(ctx context.Context, input TInput, executionTime time.Time) bool {
+	r.mu.RLock()
+	limit := r.getLimit(input)
+	key := r.keyer(input)
+	b, ok := r.buckets[key]
+	r.mu.RUnlock()
+
+	if !ok {
+		// lock again in case another goroutine created the bucket
+		r.mu.Lock()
+		b, ok = r.buckets[key]
+		if !ok {
+			b = newBucket(executionTime, limit)
+			r.buckets[key] = b
+		}
+		r.mu.Unlock()
+	}
+
+	return b.wait(ctx, executionTime, limit)
 }
 
 func (r *Limiter[TInput, TKey]) getLimit(input TInput) Limit {

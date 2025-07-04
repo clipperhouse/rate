@@ -23,3 +23,15 @@ func NewLimit(count int64, period time.Duration) Limit {
 		durationPerToken: period / time.Duration(count),
 	}
 }
+
+func (l Limit) Count() int64 {
+	return l.count
+}
+
+func (l Limit) Period() time.Duration {
+	return l.period
+}
+
+func (l Limit) DurationPerToken() time.Duration {
+	return l.durationPerToken
+}

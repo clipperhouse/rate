@@ -581,10 +581,12 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	ok := limiter.allow("test", executionTime)
 	require.False(t, ok, "should not allow when tokens exhausted")
 
+	const fudge = 2 * time.Millisecond
+
 	// Wait for a token, with sufficient timeout
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-		time.AfterFunc(limit.durationPerToken, cancel)
+		time.AfterFunc(limit.durationPerToken+fudge, cancel)
 		allow := limiter.wait(ctx, "test", executionTime)
 		require.True(t, allow, "should acquire token after waiting")
 

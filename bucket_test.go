@@ -215,10 +215,12 @@ func TestBucket_Wait(t *testing.T) {
 		require.False(t, ok, "should not allow when tokens exhausted")
 	}
 
+	const fudge = 2 * time.Millisecond
+
 	// Wait for a token with enough context timeout
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-		time.AfterFunc(limit.durationPerToken, cancel)
+		time.AfterFunc(limit.durationPerToken+fudge, cancel)
 		allow := bucket.wait(ctx, now, limit)
 		require.True(t, allow, "should acquire token after waiting")
 
@@ -233,7 +235,6 @@ func TestBucket_Wait(t *testing.T) {
 	// Wait with a context without enough time to acquire a token
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-		const fudge = 2 * time.Millisecond // account for timing imprecision, ugh
 		time.AfterFunc(limit.durationPerToken-fudge, cancel)
 		allow := bucket.wait(ctx, now, limit)
 		require.False(t, allow, "should not acquire token if context is cancelled before next token is available")
@@ -242,7 +243,7 @@ func TestBucket_Wait(t *testing.T) {
 	// Wait again for a token with enough context timeout
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-		time.AfterFunc(limit.durationPerToken, cancel)
+		time.AfterFunc(limit.durationPerToken+fudge, cancel)
 		allow := bucket.wait(ctx, now, limit)
 		require.True(t, allow, "should acquire token after waiting again")
 

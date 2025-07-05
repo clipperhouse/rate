@@ -184,6 +184,22 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 }
 
 func (r *Limiter[TInput, TKey]) wait(ctx context.Context, input TInput, executionTime time.Time) bool {
+	return r.waitWithCancellation(
+		input,
+		executionTime,
+		ctx.Deadline,
+		ctx.Done,
+	)
+}
+
+// waitWithCancellation is a more testable version of wait that accepts
+// deadline and done functions instead of a context, allowing for deterministic testing.
+func (r *Limiter[TInput, TKey]) waitWithCancellation(
+	input TInput,
+	executionTime time.Time,
+	deadline func() (time.Time, bool),
+	done func() <-chan struct{},
+) bool {
 	r.mu.RLock()
 	limit := r.getLimit(input)
 	key := r.keyer(input)
@@ -201,7 +217,7 @@ func (r *Limiter[TInput, TKey]) wait(ctx context.Context, input TInput, executio
 		r.mu.Unlock()
 	}
 
-	return b.wait(ctx, executionTime, limit)
+	return b.waitWithCancellation(executionTime, limit, deadline, done)
 }
 
 func (r *Limiter[TInput, TKey]) getLimit(input TInput) Limit {

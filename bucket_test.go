@@ -10,6 +10,7 @@ import (
 )
 
 func TestBucket_RemainingTokens(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	limit := NewLimit(9, time.Second)
 	bucket := newBucket(now, limit)
@@ -29,6 +30,7 @@ func TestBucket_RemainingTokens(t *testing.T) {
 }
 
 func TestBucket_ConsumeToken(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	limit := NewLimit(9, time.Second)
 	bucket := newBucket(now, limit)
@@ -42,6 +44,7 @@ func TestBucket_ConsumeToken(t *testing.T) {
 }
 
 func TestBucket_Allow(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 
 	// Tokens refill at ~111ms intervals
@@ -87,6 +90,7 @@ func TestBucket_Allow(t *testing.T) {
 }
 
 func TestBucket_Allow_Concurrent(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 
 	// Tokens refill at ~111ms intervals
@@ -118,6 +122,7 @@ func TestBucket_Allow_Concurrent(t *testing.T) {
 }
 
 func TestBucket_Peek(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 
 	// Tokens refill at ~111ms intervals
@@ -150,6 +155,7 @@ func TestBucket_Peek(t *testing.T) {
 }
 
 func TestBucket_Peek_Concurrent(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 
 	// Tokens refill at ~111ms intervals
@@ -192,6 +198,7 @@ func TestBucket_Peek_Concurrent(t *testing.T) {
 }
 
 func TestBucket_Wait(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	limit := NewLimit(2, 100*time.Millisecond) // 2 tokens per 100ms (1 every 50ms)
 	bucket := newBucket(now, limit)
@@ -249,6 +256,7 @@ func TestBucket_Wait(t *testing.T) {
 }
 
 func TestBucket_Wait_Concurrent(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	limit := NewLimit(5, 100*time.Millisecond)
 	bucket := newBucket(now, limit)
@@ -282,6 +290,7 @@ func TestBucket_Wait_Concurrent(t *testing.T) {
 }
 
 func TestBucket_Wait_Concurrent_With_Timeout(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	limit := NewLimit(5, 100*time.Millisecond)
 	bucket := newBucket(now, limit)
@@ -297,7 +306,7 @@ func TestBucket_Wait_Concurrent_With_Timeout(t *testing.T) {
 
 	// The context will be cancelled after enough time for all tokens to be refilled
 	ctx, cancel := context.WithCancel(context.Background())
-	const fudge = 3 * time.Millisecond // account for timing imprecision, ugh
+	const fudge = 4 * time.Millisecond // account for timing imprecision, ugh
 
 	// Start more goroutines than available tokens
 	concurrency := limit.count * 3

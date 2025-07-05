@@ -11,6 +11,7 @@ import (
 )
 
 func TestLimiter_Allow_SingleBucket(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -32,6 +33,7 @@ func TestLimiter_Allow_SingleBucket(t *testing.T) {
 }
 
 func TestLimiter_Allow_MultipleBuckets(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -49,6 +51,7 @@ func TestLimiter_Allow_MultipleBuckets(t *testing.T) {
 }
 
 func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
+	t.Parallel()
 	keyer := func(bucketID int) string {
 		return fmt.Sprintf("test-bucket-%d", bucketID)
 	}
@@ -90,6 +93,7 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 }
 
 func TestLimiter_AllowWithDetails(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -107,6 +111,7 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 }
 
 func TestLimiter_Peek_SingleBucket(t *testing.T) {
+	t.Parallel()
 	const key = "single-test-bucket"
 	keyer := func(input string) string {
 		return input
@@ -136,6 +141,7 @@ func TestLimiter_Peek_SingleBucket(t *testing.T) {
 }
 
 func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
+	t.Parallel()
 	keyer := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
@@ -174,6 +180,7 @@ func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
 }
 
 func TestLimiter_Peek_MultipleBuckets_Concurrent(t *testing.T) {
+	t.Parallel()
 	keyer := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
@@ -243,6 +250,7 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent(t *testing.T) {
 }
 
 func TestLimiter_PeekWithDetails(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -260,6 +268,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 }
 
 func TestLimiter_Allow_SingleBucket_Func(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -282,6 +291,7 @@ func TestLimiter_Allow_SingleBucket_Func(t *testing.T) {
 }
 
 func TestLimiter_Allow_MultipleBuckets_Func(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -300,6 +310,7 @@ func TestLimiter_Allow_MultipleBuckets_Func(t *testing.T) {
 }
 
 func TestLimiter_Allow_MultipleBuckets_Concurrent_Func(t *testing.T) {
+	t.Parallel()
 	keyer := func(bucketID int) string {
 		return fmt.Sprintf("test-bucket-%d", bucketID)
 	}
@@ -342,6 +353,7 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent_Func(t *testing.T) {
 }
 
 func TestLimiter_AllowWithDetails_Func(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -360,6 +372,7 @@ func TestLimiter_AllowWithDetails_Func(t *testing.T) {
 }
 
 func TestLimiter_Peek_SingleBucket_Func(t *testing.T) {
+	t.Parallel()
 	const key = "single-test-bucket"
 	keyer := func(input string) string {
 		return input
@@ -390,6 +403,7 @@ func TestLimiter_Peek_SingleBucket_Func(t *testing.T) {
 }
 
 func TestLimiter_Peek_MultipleBuckets_Func(t *testing.T) {
+	t.Parallel()
 	keyer := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
@@ -429,6 +443,7 @@ func TestLimiter_Peek_MultipleBuckets_Func(t *testing.T) {
 }
 
 func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
+	t.Parallel()
 	keyer := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
@@ -499,6 +514,7 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 }
 
 func TestLimiter_PeekWithDetails_Func(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -517,6 +533,7 @@ func TestLimiter_PeekWithDetails_Func(t *testing.T) {
 }
 
 func TestLimiter_UsesLimitFunc(t *testing.T) {
+	t.Parallel()
 	keyer := func(input int) string {
 		return fmt.Sprintf("test-bucket-%d", input)
 	}
@@ -545,6 +562,7 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 }
 
 func TestLimiter_Wait_SingleBucket(t *testing.T) {
+	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
@@ -588,6 +606,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 }
 
 func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
+	t.Parallel()
 	keyer := func(input int) string {
 		return fmt.Sprintf("test-bucket-%d", input)
 	}
@@ -629,6 +648,7 @@ func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
 }
 
 func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
+	t.Parallel()
 	keyer := func(input int) string {
 		return fmt.Sprintf("test-bucket-%d", input)
 	}

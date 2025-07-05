@@ -8,6 +8,7 @@ import (
 )
 
 func TestLimit_DurationPerToken(t *testing.T) {
+	t.Parallel()
 	limit := NewLimit(10, time.Second)
 	actual := limit.durationPerToken
 	expected := time.Millisecond * 100

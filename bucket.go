@@ -78,13 +78,21 @@ func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit)
 	return int64(executionTime.Sub(bucketTime) / limit.durationPerToken)
 }
 
-// wait tries to acquire a token, retrying until the context is done or a token is acquired.
-// Returns true if a token was acquired, false if the context was done.
-func (b *bucket) wait(ctx context.Context, executionTime time.Time, limit Limit) bool {
-	checkTime := executionTime
+// wait tries to acquire a token by polling b.allow(), until the context is cancelled
+// or the allow succeeds.
+//
+// As with [allow], it returns true if a token was acquired, false if not.
+func (b *bucket) wait(ctx context.Context, startTime time.Time, limit Limit) bool {
+
+	// This is a difficult function to test, because it's not stateless:
+	// the context cancellation depends on the real system clock.
+
+	// "current" time is meant to be an approximation of the
+	// delta between the start time and the real system clock.
+	currentTime := startTime
 
 	for {
-		if b.allow(checkTime, limit) {
+		if b.allow(currentTime, limit) {
 			return true
 		}
 
@@ -97,13 +105,16 @@ func (b *bucket) wait(ctx context.Context, executionTime time.Time, limit Limit)
 			}
 		}
 
-		untilNext := nextToken.Sub(executionTime)
+		untilNext := nextToken.Sub(currentTime)
+
+		// when is the soonest we might get a token?
 		wait := min(untilNext, limit.durationPerToken)
+
 		select {
 		case <-ctx.Done():
 			return false
 		case <-time.After(wait):
-			checkTime = checkTime.Add(wait)
+			currentTime = currentTime.Add(wait)
 		}
 	}
 }

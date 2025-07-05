@@ -83,10 +83,22 @@ func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit)
 //
 // As with [allow], it returns true if a token was acquired, false if not.
 func (b *bucket) wait(ctx context.Context, startTime time.Time, limit Limit) bool {
+	return b.waitWithCancellation(
+		startTime,
+		limit,
+		ctx.Deadline,
+		ctx.Done,
+	)
+}
 
-	// This is a difficult function to test, because it's not stateless:
-	// the context cancellation depends on the real system clock.
-
+// waitWithCancellation is a more testable version of wait that accepts
+// deadline and done functions instead of a context, allowing for deterministic testing.
+func (b *bucket) waitWithCancellation(
+	startTime time.Time,
+	limit Limit,
+	deadline func() (time.Time, bool),
+	done func() <-chan struct{},
+) bool {
 	// "current" time is meant to be an approximation of the
 	// delta between the start time and the real system clock.
 	currentTime := startTime
@@ -99,7 +111,7 @@ func (b *bucket) wait(ctx context.Context, startTime time.Time, limit Limit) boo
 		nextToken := b.nextTokenTime(limit)
 
 		// early return if we can't possibly acquire a token before the context is done
-		if deadline, ok := ctx.Deadline(); ok {
+		if deadline, ok := deadline(); ok {
 			if deadline.Before(nextToken) {
 				return false
 			}
@@ -111,7 +123,7 @@ func (b *bucket) wait(ctx context.Context, startTime time.Time, limit Limit) boo
 		wait := min(untilNext, limit.durationPerToken)
 
 		select {
-		case <-ctx.Done():
+		case <-done():
 			return false
 		case <-time.After(wait):
 			currentTime = currentTime.Add(wait)

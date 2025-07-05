@@ -1,7 +1,6 @@
 package rate
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -581,13 +580,19 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	ok := limiter.allow("test", executionTime)
 	require.False(t, ok, "should not allow when tokens exhausted")
 
-	const fudge = 2 * time.Millisecond
-
-	// Wait for a token, with sufficient timeout
+	// Test 1: Wait with enough time to acquire a token
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-		time.AfterFunc(limit.durationPerToken+fudge, cancel)
-		allow := limiter.wait(ctx, "test", executionTime)
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.durationPerToken), true
+		}
+
+		// Done channel that never closes (no cancellation)
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		allow := limiter.waitWithCancellation("test", executionTime, deadline, done)
 		require.True(t, allow, "should acquire token after waiting")
 
 		// We waited
@@ -598,12 +603,65 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	ok = limiter.allow("test", executionTime)
 	require.False(t, ok, "should not allow again immediately after wait")
 
-	// Wait with a context that times out before token is available
+	// Test 2: Wait with deadline that expires before token is available
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-		time.AfterFunc(limit.durationPerToken/5, cancel)
-		allow := limiter.wait(ctx, "test", executionTime)
-		require.False(t, allow, "should not acquire token if context times out first")
+		// Deadline that expires too soon
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.durationPerToken / 2), true
+		}
+
+		// Done channel that never closes
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		allow := limiter.waitWithCancellation("test", executionTime, deadline, done)
+		require.False(t, allow, "should not acquire token if deadline expires before token is available")
+	}
+
+	// Test 3: Wait with immediate cancellation
+	{
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.durationPerToken + 10*time.Millisecond), true
+		}
+
+		// Done channel that closes immediately
+		done := func() <-chan struct{} {
+			ch := make(chan struct{})
+			close(ch) // immediately closed
+			return ch
+		}
+
+		allow := limiter.waitWithCancellation("test", executionTime, deadline, done)
+		require.False(t, allow, "should not acquire token if context is cancelled immediately")
+	}
+
+	// Test 4: Wait with no deadline
+	{
+		// Deadline that returns no deadline
+		deadline := func() (time.Time, bool) {
+			return time.Time{}, false
+		}
+
+		// Done channel that never closes
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		{
+			allow := limiter.waitWithCancellation("test", executionTime, deadline, done)
+			require.True(t, allow, "should acquire token when no deadline is set")
+		}
+
+		// We waited
+		executionTime = executionTime.Add(limit.durationPerToken)
+
+		// Should not allow again immediately
+		{
+			allow := limiter.allow("test", executionTime)
+			require.False(t, allow, "should not allow again immediately after wait")
+		}
 	}
 }
 
@@ -633,9 +691,17 @@ func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
 
 	// Wait for a token for each bucket
 	for bucketID := range buckets {
-		ctx, cancel := context.WithCancel(context.Background())
-		time.AfterFunc(limit.durationPerToken, cancel)
-		allow := limiter.wait(ctx, bucketID, executionTime)
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.durationPerToken), true
+		}
+
+		// Done channel that never closes (no cancellation)
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		allow := limiter.waitWithCancellation(bucketID, executionTime, deadline, done)
 		require.True(t, allow, "should acquire token after waiting for bucket %d", bucketID)
 	}
 
@@ -651,10 +717,10 @@ func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
 
 func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 	t.Parallel()
-	keyer := func(input int) string {
+	keyer := func(input int64) string {
 		return fmt.Sprintf("test-bucket-%d", input)
 	}
-	const buckets = 3
+	const buckets int64 = 3
 	limit := NewLimit(2, 100*time.Millisecond)
 	limiter := NewLimiter(keyer, limit)
 	executionTime := time.Now()
@@ -673,28 +739,123 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		require.False(t, allow, "should not allow when tokens exhausted for bucket %d", bucketID)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	const fudge = 2 * time.Millisecond
+	// Test 1: Multiple goroutines competing for tokens with enough time
+	{
+		// More goroutines than available tokens to create competition
+		tokens := buckets * limit.count
+		concurrency := tokens * 3 // oversubscribe by 3x
+		results := make([]bool, concurrency)
+		var wg sync.WaitGroup
 
-	// Concurrently wait for a token for each bucket
-	var wg sync.WaitGroup
-	wg.Add(buckets)
-	for bucketID := range buckets {
-		go func(i int) {
-			defer wg.Done()
-			allow := limiter.wait(ctx, i, executionTime)
-			require.True(t, allow, "should acquire token after waiting for bucket %d", i)
-		}(bucketID)
+		// Deadline that gives enough time for all tokens to be refilled
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.period), true
+		}
+
+		// Done channel that never closes
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		// Start concurrent waits
+		for i := range concurrency {
+			wg.Add(1)
+			go func(i int64) {
+				defer wg.Done()
+				bucketID := i % buckets
+				results[i] = limiter.waitWithCancellation(bucketID, executionTime, deadline, done)
+			}(i)
+		}
+
+		wg.Wait()
+
+		// We waited
+		executionTime = executionTime.Add(limit.period)
+
+		// Count successes and failures
+		var successes, failures int64
+		for _, result := range results {
+			if result {
+				successes++
+			} else {
+				failures++
+			}
+		}
+
+		// Exactly limit.count tokens per bucket should succeed, 3 buckets * 2 tokens each
+		expectedSuccesses := buckets * limit.count
+		require.Equal(t, expectedSuccesses, successes, "expected exactly %d goroutines to acquire tokens", expectedSuccesses)
+
+		// The rest should fail due to competition
+		expectedFailures := concurrency - expectedSuccesses
+		require.Equal(t, expectedFailures, failures, "expected %d goroutines to fail due to competition", expectedFailures)
 	}
-	time.AfterFunc(limit.durationPerToken+fudge, cancel)
-	wg.Wait()
 
-	// We waited
-	executionTime = executionTime.Add(limit.durationPerToken + fudge)
+	// Test 2: Multiple goroutines with deadline that expires before tokens are available
+	{
+		concurrency := buckets
+		results := make([]bool, concurrency)
+		var wg sync.WaitGroup
 
-	// Buckets should be empty again
-	for bucketID := range buckets {
-		ok := limiter.allow(bucketID, executionTime)
-		require.False(t, ok, "should not allow again immediately after wait for bucket %d", bucketID)
+		// Deadline that expires too soon
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.durationPerToken / 2), true
+		}
+
+		// Done channel that never closes
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		// Start concurrent waits
+		for i := range concurrency {
+			wg.Add(1)
+			go func(i int64) {
+				defer wg.Done()
+				results[i] = limiter.waitWithCancellation(i, executionTime, deadline, done)
+			}(i)
+		}
+
+		wg.Wait()
+
+		// All should fail because deadline expires before tokens are available
+		for i, result := range results {
+			require.False(t, result, "goroutine %d should not acquire token due to early deadline", i)
+		}
+	}
+
+	// Test 3: Multiple goroutines with immediate cancellation
+	{
+		concurrency := buckets
+		results := make([]bool, concurrency)
+		var wg sync.WaitGroup
+
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.period), true
+		}
+
+		// Done channel that closes immediately
+		done := func() <-chan struct{} {
+			ch := make(chan struct{})
+			close(ch) // immediately closed
+			return ch
+		}
+
+		// Start concurrent waits
+		for i := range concurrency {
+			wg.Add(1)
+			go func(i int64) {
+				defer wg.Done()
+				results[i] = limiter.waitWithCancellation(i, executionTime, deadline, done)
+			}(i)
+		}
+
+		wg.Wait()
+
+		// All should fail because context is cancelled immediately
+		for i, result := range results {
+			require.False(t, result, "goroutine %d should not acquire token due to immediate cancellation", i)
+		}
 	}
 }

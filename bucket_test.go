@@ -286,7 +286,7 @@ func TestBucket_WaitWithCancellation(t *testing.T) {
 	{
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken + 10*time.Millisecond), true
+			return executionTime.Add(limit.durationPerToken), true
 		}
 
 		// Done channel that closes immediately

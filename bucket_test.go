@@ -98,16 +98,14 @@ func TestBucket_Allow_Concurrent(t *testing.T) {
 	bucket := newBucket(now, limit)
 
 	var wg sync.WaitGroup
-
-	for i := range limit.count {
+	for processID := range limit.count {
 		wg.Add(1)
-		go func(i int64) {
+		go func(processID int64) {
 			defer wg.Done()
 			actual := bucket.allow(now, limit)
-			require.True(t, actual, "expected to allow request when tokens are available (goroutine %d)", i)
-		}(i)
+			require.True(t, actual, "expected to allow request when tokens are available (goroutine %d)", processID)
+		}(processID)
 	}
-
 	wg.Wait()
 
 	// Tokens should be gone now
@@ -165,34 +163,30 @@ func TestBucket_Peek_Concurrent(t *testing.T) {
 	// any number of peeks should return true
 	{
 		var wg sync.WaitGroup
-
-		for i := range limit.count * 2 {
+		for processID := range limit.count * 2 {
 			wg.Add(1)
-			go func(index int64) {
+			go func(processID int64) {
 				defer wg.Done()
 				actual := bucket.peek(now, limit)
-				require.True(t, actual, "expected any number of peeks to be true (goroutine %d)", index)
-			}(i)
+				require.True(t, actual, "expected any number of peeks to be true (goroutine %d)", processID)
+			}(processID)
 		}
-
 		wg.Wait()
 	}
 
 	// interleave allows and peeks
 	{
 		var wg sync.WaitGroup
-
-		for i := range limit.count {
+		for processID := range limit.count {
 			wg.Add(1)
-			go func(index int64) {
+			go func(processID int64) {
 				defer wg.Done()
 				peek := bucket.peek(now, limit)
-				require.True(t, peek, "expected peek to be true (goroutine %d)", index)
+				require.True(t, peek, "expected peek to be true (goroutine %d)", processID)
 				allow := bucket.allow(now, limit)
-				require.True(t, allow, "expected allow to be true (goroutine %d)", index)
-			}(i)
+				require.True(t, allow, "expected allow to be true (goroutine %d)", processID)
+			}(processID)
 		}
-
 		wg.Wait()
 	}
 }
@@ -216,13 +210,13 @@ func TestBucket_Wait_Concurrent(t *testing.T) {
 	ctx := context.Background()
 
 	// These waits should queue up and execute as tokens become available
-	for i := range limit.count {
+	for processID := range limit.count {
 		wg.Add(1)
-		go func(i int64) {
+		go func(processID int64) {
 			defer wg.Done()
 			allow := bucket.wait(ctx, now, limit)
-			require.True(t, allow, "should acquire token after waiting (goroutine %d)", i)
-		}(i)
+			require.True(t, allow, "should acquire token after waiting (goroutine %d)", processID)
+		}(processID)
 	}
 
 	wg.Wait()
@@ -245,20 +239,20 @@ func TestBucket_WaitWithCancellation(t *testing.T) {
 
 	// Should not allow immediately
 	{
-		ok := bucket.allow(executionTime, limit)
-		require.False(t, ok, "should not allow when tokens exhausted")
+		allow := bucket.allow(executionTime, limit)
+		require.False(t, allow, "should not allow when tokens exhausted")
 	}
 
 	// Test 1: Wait with enough time to acquire a token
 	{
-		// Mock deadline that gives enough time
+		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
 			return executionTime.Add(limit.durationPerToken), true
 		}
 
-		// Mock done channel that never closes (no cancellation)
+		// Done channel that never closes (no cancellation)
 		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
+			return make(chan struct{})
 		}
 
 		allow := bucket.waitWithCancellation(executionTime, limit, deadline, done)
@@ -281,7 +275,7 @@ func TestBucket_WaitWithCancellation(t *testing.T) {
 
 		// Done channel that never closes
 		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
+			return make(chan struct{})
 		}
 
 		allow := bucket.waitWithCancellation(executionTime, limit, deadline, done)
@@ -298,7 +292,7 @@ func TestBucket_WaitWithCancellation(t *testing.T) {
 		// Done channel that closes immediately
 		done := func() <-chan struct{} {
 			ch := make(chan struct{})
-			close(ch) // immediately closed
+			close(ch)
 			return ch
 		}
 
@@ -315,7 +309,7 @@ func TestBucket_WaitWithCancellation(t *testing.T) {
 
 		// Done channel that never closes
 		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
+			return make(chan struct{})
 		}
 
 		{
@@ -342,8 +336,8 @@ func TestBucket_WaitWithCancellation_Concurrent(t *testing.T) {
 
 	// Consume all initial tokens
 	for range limit.count {
-		ok := bucket.allow(executionTime, limit)
-		require.True(t, ok, "should allow initial tokens")
+		allow := bucket.allow(executionTime, limit)
+		require.True(t, allow, "should allow initial tokens")
 	}
 
 	// All tokens should be exhausted
@@ -354,7 +348,6 @@ func TestBucket_WaitWithCancellation_Concurrent(t *testing.T) {
 		// More goroutines than available tokens
 		concurrency := limit.count * 3
 		results := make([]bool, concurrency)
-		var wg sync.WaitGroup
 
 		// Deadline that gives enough time for all tokens to be refilled
 		deadline := func() (time.Time, bool) {
@@ -363,37 +356,36 @@ func TestBucket_WaitWithCancellation_Concurrent(t *testing.T) {
 
 		// Done channel that never closes
 		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
+			return make(chan struct{})
 		}
 
-		// Start concurrent waits
-		for i := range concurrency {
+		var wg sync.WaitGroup
+		for processID := range concurrency {
 			wg.Add(1)
-			go func(i int64) {
+			go func(processID int64) {
 				defer wg.Done()
-				results[i] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			}(i)
+				results[processID] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
+			}(processID)
 		}
-
 		wg.Wait()
 
 		// We waited
 		executionTime = executionTime.Add(limit.period)
 
 		// Count successes and failures
-		var successCount, failureCount int64
+		var sucesses, failures int64
 		for _, result := range results {
 			if result {
-				successCount++
+				sucesses++
 			} else {
-				failureCount++
+				failures++
 			}
 		}
 
 		// Exactly limit.count goroutines should have acquired a token
-		require.Equal(t, limit.count, successCount, "expected exactly %d goroutines to acquire a token", limit.count)
+		require.Equal(t, limit.count, sucesses, "expected exactly %d goroutines to acquire a token", limit.count)
 		// The rest should have been denied
-		require.Equal(t, concurrency-limit.count, failureCount, "expected %d goroutines to fail", concurrency-limit.count)
+		require.Equal(t, concurrency-limit.count, failures, "expected %d goroutines to fail", concurrency-limit.count)
 
 		// All tokens should be exhausted again
 		allow := bucket.allow(executionTime, limit)
@@ -405,7 +397,6 @@ func TestBucket_WaitWithCancellation_Concurrent(t *testing.T) {
 		// More goroutines than available tokens
 		concurrency := limit.count * 3
 		results := make([]bool, concurrency)
-		var wg sync.WaitGroup
 
 		// Deadline that expires too soon
 		deadline := func() (time.Time, bool) {
@@ -414,23 +405,22 @@ func TestBucket_WaitWithCancellation_Concurrent(t *testing.T) {
 
 		// Done channel that never closes
 		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
+			return make(chan struct{})
 		}
 
-		// Start concurrent waits
-		for i := range concurrency {
+		var wg sync.WaitGroup
+		for processID := range concurrency {
 			wg.Add(1)
-			go func(i int64) {
+			go func(processID int64) {
 				defer wg.Done()
-				results[i] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			}(i)
+				results[processID] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
+			}(processID)
 		}
-
 		wg.Wait()
 
 		// All should fail because deadline expires before tokens are available
-		for i, result := range results {
-			require.False(t, result, "goroutine %d should not acquire token due to early deadline", i)
+		for processID, result := range results {
+			require.False(t, result, "goroutine %d should not acquire token due to early deadline", processID)
 		}
 	}
 
@@ -438,34 +428,33 @@ func TestBucket_WaitWithCancellation_Concurrent(t *testing.T) {
 	{
 		concurrency := limit.count
 		results := make([]bool, concurrency)
-		var wg sync.WaitGroup
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
 			return executionTime.Add(limit.period), true
 		}
 
-		// Done channel that closes immediately
+		// Done channel that closes (cancels) immediately
 		done := func() <-chan struct{} {
 			ch := make(chan struct{})
-			close(ch) // immediately closed
+			close(ch)
 			return ch
 		}
 
 		// Start concurrent waits
-		for i := range concurrency {
+		var wg sync.WaitGroup
+		for processID := range concurrency {
 			wg.Add(1)
-			go func(i int64) {
+			go func(processID int64) {
 				defer wg.Done()
-				results[i] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			}(i)
+				results[processID] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
+			}(processID)
 		}
-
 		wg.Wait()
 
 		// All should fail because context is cancelled immediately
-		for i, result := range results {
-			require.False(t, result, "goroutine %d should not acquire token due to immediate cancellation", i)
+		for processID, result := range results {
+			require.False(t, result, "goroutine %d should not acquire token due to immediate cancellation", processID)
 		}
 	}
 
@@ -473,41 +462,41 @@ func TestBucket_WaitWithCancellation_Concurrent(t *testing.T) {
 	{
 		concurrency := limit.count * 3
 		results := make([]bool, concurrency)
-		var wg sync.WaitGroup
 
-		// Start concurrent waits with different deadlines
-		for i := range concurrency {
+		var wg sync.WaitGroup
+		for processID := range concurrency {
 			wg.Add(1)
-			go func(i int64) {
+			go func(processID int64) {
 				defer wg.Done()
 
 				// Each goroutine gets a different deadline
-				deadlineOffset := time.Duration(i) * limit.durationPerToken
+				deadlineOffset := time.Duration(processID) * limit.durationPerToken
 				deadline := func() (time.Time, bool) {
-					return executionTime.Add(deadlineOffset + limit.durationPerToken + 5*time.Millisecond), true
+					return executionTime.Add(deadlineOffset + limit.durationPerToken), true
 				}
 
+				// never cancels
 				done := func() <-chan struct{} {
-					return make(chan struct{}) // never closes
+					return make(chan struct{})
 				}
 
-				results[i] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			}(i)
+				results[processID] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
+			}(processID)
 		}
 
 		wg.Wait()
 
 		// Count successes
-		var successCount int64
+		var successes int64
 		for _, result := range results {
 			if result {
-				successCount++
+				successes++
 			}
 		}
 
 		// Some should succeed (those with deadlines after tokens become available)
 		// and some should fail (those with deadlines before tokens become available)
-		require.Greater(t, successCount, int64(0), "expected some goroutines to succeed")
-		require.Less(t, successCount, concurrency, "expected some goroutines to fail")
+		require.Greater(t, successes, int64(0), "expected some goroutines to succeed")
+		require.Less(t, successes, concurrency, "expected some goroutines to fail")
 	}
 }

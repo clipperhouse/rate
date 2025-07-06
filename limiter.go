@@ -106,7 +106,7 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 	}
 }
 
-// Allow returns true if tokens are available for the given key,
+// Peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
 	return r.peek(input, time.Now())

@@ -59,9 +59,8 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 	limiter := NewLimiter(keyer, limit)
 	start := time.Now()
 
-	var wg sync.WaitGroup
-
 	// Enough concurrent processes for each bucket to precisely exhaust the limit
+	var wg sync.WaitGroup
 	for bucketID := range buckets {
 		for processID := range limit.count {
 			wg.Add(1)
@@ -72,7 +71,6 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 			}(bucketID, processID)
 		}
 	}
-
 	wg.Wait()
 
 	// Verify that additional requests are rejected, all buckets should be exhausted

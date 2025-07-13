@@ -14,7 +14,7 @@ type Limiter[TInput any, TKey comparable] struct {
 	keyer     Keyer[TInput, TKey]
 	limit     Limit
 	limitFunc LimitFunc[TInput]
-	buckets   map[TKey]*bucket
+	buckets   map[TKey]*Bucket
 	mu        sync.RWMutex
 }
 
@@ -22,7 +22,7 @@ type Limiter[TInput any, TKey comparable] struct {
 func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limit Limit) *Limiter[TInput, TKey] {
 	return &Limiter[TInput, TKey]{
 		keyer:   keyer,
-		buckets: make(map[TKey]*bucket),
+		buckets: make(map[TKey]*Bucket),
 		limit:   limit,
 	}
 }
@@ -33,7 +33,7 @@ func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limit Li
 func NewLimiterFunc[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limitFunc LimitFunc[TInput]) *Limiter[TInput, TKey] {
 	return &Limiter[TInput, TKey]{
 		keyer:     keyer,
-		buckets:   make(map[TKey]*bucket),
+		buckets:   make(map[TKey]*Bucket),
 		limitFunc: limitFunc,
 	}
 }
@@ -63,7 +63,7 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 		r.mu.Unlock()
 	}
 
-	return b.allow(executionTime, limit)
+	return b.Allow(executionTime, limit)
 }
 
 // AllowWithDetails returns true if tokens are available for the given key,
@@ -123,7 +123,7 @@ func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool
 	if !ok {
 		b = newBucket(executionTime, limit)
 	}
-	return b.peek(executionTime, limit)
+	return b.HasToken(executionTime, limit)
 }
 
 // PeekWithDetails returns true if tokens are available for the given key,
@@ -147,7 +147,7 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 		b = newBucket(executionTime, limit)
 	}
 
-	allowed := b.peek(executionTime, limit)
+	allowed := b.hasToken(executionTime, limit)
 
 	return allowed, Details[TInput, TKey]{
 		allowed:       allowed,

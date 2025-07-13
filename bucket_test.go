@@ -29,6 +29,42 @@ func TestBucket_RemainingTokens(t *testing.T) {
 	}
 }
 
+func TestBucket_RemainingTokens_Concurrent(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	limit := NewLimit(100, time.Second)
+	bucket := newBucket(now, limit)
+
+	// Number of concurrent operations
+	const numOps = 200
+
+	var wg sync.WaitGroup
+	for i := range numOps {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			// Interleave consumption and reading
+			if i%2 == 0 {
+				bucket.ConsumeToken(limit)
+				return
+			}
+
+			// We can't assert a specific value, but we can ensure it's within bounds
+			// and doesn't crash.
+			remaining := bucket.RemainingTokens(now, limit)
+			require.GreaterOrEqual(t, remaining, int64(0), "remaining tokens should not be negative")
+			require.LessOrEqual(t, remaining, limit.count, "remaining tokens should not exceed limit")
+
+		}(i)
+	}
+	wg.Wait()
+
+	// 100 tokens should have been consumed after all
+	expected := limit.count - (numOps / 2)
+	actual := bucket.RemainingTokens(now, limit)
+	require.Equal(t, expected, actual, "final token count should be correct")
+}
+
 func TestBucket_ConsumeToken(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -102,24 +138,24 @@ func TestBucket_Allow_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func(processID int64) {
 			defer wg.Done()
-			actual := bucket.allow(now, limit)
+			actual := bucket.Allow(now, limit)
 			require.True(t, actual, "expected to allow request when tokens are available (goroutine %d)", processID)
 		}(processID)
 	}
 	wg.Wait()
 
 	// Tokens should be gone now
-	actual := bucket.allow(now, limit)
+	actual := bucket.Allow(now, limit)
 	require.False(t, actual, "expected to deny request after tokens are exhausted")
 
 	now = now.Add(limit.durationPerToken)
 
 	// A new token should have refilled by now
-	actual = bucket.allow(now, limit)
+	actual = bucket.Allow(now, limit)
 	require.True(t, actual, "expected to allow request after waiting for refill")
 }
 
-func TestBucket_Peek(t *testing.T) {
+func TestBucket_HasToken(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
 
@@ -128,31 +164,31 @@ func TestBucket_Peek(t *testing.T) {
 	bucket := newBucket(now, limit)
 
 	for range limit.count * 2 {
-		// any number of peeks should return true
-		actual := bucket.peek(now, limit)
-		require.True(t, actual, "expected to allow request with any number of peeks")
+		// any number of hasToken should return true, not mutate the bucket
+		actual := bucket.hasToken(now, limit)
+		require.True(t, actual, "expected to allow request with any number of hasToken calls")
 	}
 
 	// Consume all the tokens
 	for range limit.count {
 		actual := bucket.allow(now, limit)
-		require.True(t, actual, "expected to allow requests as normal when peek previously called")
+		require.True(t, actual, "expected to allow requests as normal when hasToken previously called")
 	}
 
 	require.False(t, bucket.allow(now, limit), "should have exhausted tokens")
 
 	for range limit.count * 2 {
-		// any number of peeks should return false with no remianing tokens
-		actual := bucket.peek(now, limit)
-		require.False(t, actual, "expected to deny peek requests when all tokens are gone")
+		// any number of hasToken should return false with no remaining tokens
+		actual := bucket.hasToken(now, limit)
+		require.False(t, actual, "expected all tokens to be gone")
 	}
 
 	// Refill one token
 	now = now.Add(limit.durationPerToken)
-	require.True(t, bucket.peek(now, limit), "peek should return true after tokens refill")
+	require.True(t, bucket.hasToken(now, limit), "hasToken should return true after token refill")
 }
 
-func TestBucket_Peek_Concurrent(t *testing.T) {
+func TestBucket_HasToken_Concurrent(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
 
@@ -160,15 +196,15 @@ func TestBucket_Peek_Concurrent(t *testing.T) {
 	limit := NewLimit(9, time.Second)
 	bucket := newBucket(now, limit)
 
-	// any number of peeks should return true
+	// any number of hasToken calls should return true
 	{
 		var wg sync.WaitGroup
 		for processID := range limit.count * 2 {
 			wg.Add(1)
 			go func(processID int64) {
 				defer wg.Done()
-				actual := bucket.peek(now, limit)
-				require.True(t, actual, "expected any number of peeks to be true (goroutine %d)", processID)
+				actual := bucket.HasToken(now, limit)
+				require.True(t, actual, "expected any number of hasToken calls to be true (goroutine %d)", processID)
 			}(processID)
 		}
 		wg.Wait()
@@ -181,9 +217,9 @@ func TestBucket_Peek_Concurrent(t *testing.T) {
 			wg.Add(1)
 			go func(processID int64) {
 				defer wg.Done()
-				peek := bucket.peek(now, limit)
-				require.True(t, peek, "expected peek to be true (goroutine %d)", processID)
-				allow := bucket.allow(now, limit)
+				hasToken := bucket.HasToken(now, limit)
+				require.True(t, hasToken, "expected hasToken to be true (goroutine %d)", processID)
+				allow := bucket.Allow(now, limit)
 				require.True(t, allow, "expected allow to be true (goroutine %d)", processID)
 			}(processID)
 		}
@@ -206,10 +242,10 @@ func TestBucket_Wait_Concurrent(t *testing.T) {
 	// All tokens should be exhausted
 	require.False(t, bucket.allow(now, limit), "should not allow when tokens exhausted")
 
-	var wg sync.WaitGroup
 	ctx := context.Background()
 
 	// These waits should queue up and execute as tokens become available
+	var wg sync.WaitGroup
 	for processID := range limit.count {
 		wg.Add(1)
 		go func(processID int64) {
@@ -218,7 +254,6 @@ func TestBucket_Wait_Concurrent(t *testing.T) {
 			require.True(t, allow, "should acquire token after waiting (goroutine %d)", processID)
 		}(processID)
 	}
-
 	wg.Wait()
 
 	// All tokens should be exhausted again

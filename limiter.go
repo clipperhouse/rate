@@ -27,7 +27,7 @@ type bucketSpec[TKey comparable] struct {
 }
 
 // bucketMap is just a name for less verbosity
-type bucketMap[TKey comparable] map[bucketSpec[TKey]]*Bucket
+type bucketMap[TKey comparable] map[bucketSpec[TKey]]*bucket
 
 // NewLimiter creates a new rate limiter
 func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limit Limit) *Limiter[TInput, TKey] {

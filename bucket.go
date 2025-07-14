@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+/*
+By convention, the private methods (mostly) are meant to be called from
+within the public methods that handle locking. Public methods are
+intended to be thread-safe.
+
+Private methods offer primitives allowing higher-level synchronization,
+such as in Limiter, for fine control.
+*/
+
 // bucket is a primitive for tracking tokens.
 // It's only meaningful with a specific limit;
 // using different limits with the same bucket
@@ -39,14 +48,16 @@ func (b *bucket) Allow(executionTime time.Time, limit Limit) bool {
 	return b.allow(executionTime, limit)
 }
 
-/*
-The private methods (mostly) are meant to be called from within
-the public methods that handle locking. Public methods are
-intended to be thread-safe, and safely callable.
-
-Private methods offer primitives allowing higher-level logic,
-such as in Limiter, for fine control.
-*/
+// AllowWithDetails returns true if tokens are available and the bucket time after the operation.
+// If a token is available, it returns true and consumes a token.
+// If no token is available, it returns false and does not consume a token.
+// It is thread-safe.
+func (b *bucket) AllowWithDetails(executionTime time.Time, limit Limit) (bool, time.Time) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	allowed := b.allow(executionTime, limit)
+	return allowed, b.time
+}
 
 // allow returns true if there are available tokens in the bucket, and consumes a token if so.
 // If false, no tokens were consumed.
@@ -70,6 +81,14 @@ func (b *bucket) HasToken(executionTime time.Time, limit Limit) bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.hasToken(executionTime, limit)
+}
+
+// HasTokenWithDetails checks if there are available tokens and returns the bucket time.
+// It is thread-safe and does not consume any tokens.
+func (b *bucket) HasTokenWithDetails(executionTime time.Time, limit Limit) (bool, time.Time) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.hasToken(executionTime, limit), b.time
 }
 
 // hasToken checks if any tokens are available in the bucket

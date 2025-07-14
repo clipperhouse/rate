@@ -6,23 +6,34 @@ import (
 	"time"
 )
 
-// Keyer is a function that takes an input and returns a bucket key.
-type Keyer[TInput any, TKey comparable] func(input TInput) TKey
-
 // Limiter is a rate limiter that can be used to limit the rate of requests to a given key.
 type Limiter[TInput any, TKey comparable] struct {
 	keyer     Keyer[TInput, TKey]
 	limit     Limit
 	limitFunc LimitFunc[TInput]
-	buckets   map[TKey]*Bucket
+	buckets   bucketMap[TKey]
 	mu        sync.RWMutex
 }
+
+// Keyer is a function that takes an input and returns a bucket key.
+type Keyer[TInput any, TKey comparable] func(input TInput) TKey
+
+// bucketSpec is a key for the bucket map, which includes the limit and the user key.
+// It is a composite key to ensure that each bucket is unique for a given limit and user key.
+type bucketSpec[TKey comparable] struct {
+	limit Limit
+	// userKey is the result of calling the user-defined Keyer
+	userKey TKey
+}
+
+// bucketMap is just a name for less verbosity
+type bucketMap[TKey comparable] map[bucketSpec[TKey]]*bucket
 
 // NewLimiter creates a new rate limiter
 func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limit Limit) *Limiter[TInput, TKey] {
 	return &Limiter[TInput, TKey]{
 		keyer:   keyer,
-		buckets: make(map[TKey]*Bucket),
+		buckets: make(bucketMap[TKey]),
 		limit:   limit,
 	}
 }
@@ -33,7 +44,7 @@ func NewLimiter[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limit Li
 func NewLimiterFunc[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limitFunc LimitFunc[TInput]) *Limiter[TInput, TKey] {
 	return &Limiter[TInput, TKey]{
 		keyer:     keyer,
-		buckets:   make(map[TKey]*Bucket),
+		buckets:   make(bucketMap[TKey]),
 		limitFunc: limitFunc,
 	}
 }
@@ -45,10 +56,17 @@ func (r *Limiter[TInput, TKey]) Allow(input TInput) bool {
 	return r.allow(input, time.Now())
 }
 
+func (r *Limiter[TInput, TKey]) getBucketSpec(input TInput) bucketSpec[TKey] {
+	return bucketSpec[TKey]{
+		limit:   r.getLimit(input),
+		userKey: r.keyer(input),
+	}
+}
+
 func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) bool {
 	r.mu.RLock()
-	limit := r.getLimit(input)
-	key := r.keyer(input)
+	key := r.getBucketSpec(input)
+	limit := key.limit
 	b, ok := r.buckets[key]
 	r.mu.RUnlock()
 
@@ -78,18 +96,18 @@ func (r *Limiter[TInput, TKey]) AllowWithDetails(input TInput) (bool, Details[TI
 
 func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime time.Time) (bool, Details[TInput, TKey]) {
 	r.mu.RLock()
-	limit := r.getLimit(input)
-	key := r.keyer(input)
-	b, ok := r.buckets[key]
+	spec := r.getBucketSpec(input)
+	limit := spec.limit
+	b, ok := r.buckets[spec]
 	r.mu.RUnlock()
 
 	if !ok {
 		// lock again in case another goroutine created the bucket
 		r.mu.Lock()
-		b, ok = r.buckets[key]
+		b, ok = r.buckets[spec]
 		if !ok {
 			b = newBucket(executionTime, limit)
-			r.buckets[key] = b
+			r.buckets[spec] = b
 		}
 		r.mu.Unlock()
 	}
@@ -102,7 +120,7 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 		limit:         limit,
 		bucketTime:    b.time,
 		bucketInput:   input,
-		bucketKey:     key,
+		bucketKey:     spec.userKey,
 	}
 }
 
@@ -116,10 +134,10 @@ func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	limit := r.getLimit(input)
+	spec := r.getBucketSpec(input)
+	limit := spec.limit
 
-	key := r.keyer(input)
-	b, ok := r.buckets[key]
+	b, ok := r.buckets[spec]
 	if !ok {
 		b = newBucket(executionTime, limit)
 	}
@@ -139,10 +157,10 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	limit := r.getLimit(input)
+	spec := r.getBucketSpec(input)
+	limit := spec.limit
 
-	key := r.keyer(input)
-	b, ok := r.buckets[key]
+	b, ok := r.buckets[spec]
 	if !ok {
 		b = newBucket(executionTime, limit)
 	}
@@ -155,7 +173,7 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 		limit:         limit,
 		bucketTime:    b.time,
 		bucketInput:   input,
-		bucketKey:     key,
+		bucketKey:     spec.userKey,
 	}
 }
 
@@ -201,18 +219,18 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 	done func() <-chan struct{},
 ) bool {
 	r.mu.RLock()
-	limit := r.getLimit(input)
-	key := r.keyer(input)
-	b, ok := r.buckets[key]
+	spec := r.getBucketSpec(input)
+	limit := spec.limit
+	b, ok := r.buckets[spec]
 	r.mu.RUnlock()
 
 	if !ok {
 		// lock again in case another goroutine created the bucket
 		r.mu.Lock()
-		b, ok = r.buckets[key]
+		b, ok = r.buckets[spec]
 		if !ok {
 			b = newBucket(executionTime, limit)
-			r.buckets[key] = b
+			r.buckets[spec] = b
 		}
 		r.mu.Unlock()
 	}

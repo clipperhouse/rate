@@ -101,10 +101,11 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 
 	allow, details := limiter.allowWithDetails("test-details", now)
 	require.True(t, allow)
-	require.Equal(t, limit, details.Limit())
-	require.Equal(t, now, details.ExecutionTime())
-	require.Equal(t, "test-details", details.BucketKey())
-	require.Equal(t, limit.count-1, details.RemainingTokens())
+	d := details[0]
+	require.Equal(t, limit, d.Limit())
+	require.Equal(t, now, d.ExecutionTime())
+	require.Equal(t, "test-details", d.BucketKey())
+	require.Equal(t, limit.count-1, d.RemainingTokens())
 }
 
 func TestLimiter_Peek_SingleBucket(t *testing.T) {
@@ -258,10 +259,11 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 
 	allowed, details := limiter.peekWithDetails("test-details", now)
 	require.True(t, allowed)
-	require.Equal(t, limit, details.Limit())
-	require.Equal(t, now, details.ExecutionTime())
-	require.Equal(t, "test-details", details.BucketKey())
-	require.Equal(t, limit.count, details.RemainingTokens())
+	d := details[0]
+	require.Equal(t, limit, d.Limit())
+	require.Equal(t, now, d.ExecutionTime())
+	require.Equal(t, "test-details", d.BucketKey())
+	require.Equal(t, limit.count, d.RemainingTokens())
 }
 
 func TestLimiter_Allow_SingleBucket_Func(t *testing.T) {
@@ -362,10 +364,11 @@ func TestLimiter_AllowWithDetails_Func(t *testing.T) {
 
 	allow, details := limiter.allowWithDetails("test-details", now)
 	require.True(t, allow)
-	require.Equal(t, limit, details.Limit())
-	require.Equal(t, now, details.ExecutionTime())
-	require.Equal(t, "test-details", details.BucketKey())
-	require.Equal(t, limit.count-1, details.RemainingTokens())
+	d := details[0]
+	require.Equal(t, limit, d.Limit())
+	require.Equal(t, now, d.ExecutionTime())
+	require.Equal(t, "test-details", d.BucketKey())
+	require.Equal(t, limit.count-1, d.RemainingTokens())
 }
 
 func TestLimiter_Peek_SingleBucket_Func(t *testing.T) {
@@ -523,10 +526,11 @@ func TestLimiter_PeekWithDetails_Func(t *testing.T) {
 
 	allowed, details := limiter.peekWithDetails("test-details", now)
 	require.True(t, allowed)
-	require.Equal(t, limit, details.Limit())
-	require.Equal(t, now, details.ExecutionTime())
-	require.Equal(t, "test-details", details.BucketKey())
-	require.Equal(t, limit.count, details.RemainingTokens())
+	d := details[0]
+	require.Equal(t, limit, d.Limit())
+	require.Equal(t, now, d.ExecutionTime())
+	require.Equal(t, "test-details", d.BucketKey())
+	require.Equal(t, limit.count, d.RemainingTokens())
 }
 
 func TestLimiter_UsesLimitFunc(t *testing.T) {
@@ -543,7 +547,8 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 		for i := range 3 {
 			allow, details := limiter.allowWithDetails(i+1, time.Now())
 			require.True(t, allow)
-			require.Equal(t, limitFunc(i+1), details.Limit())
+			d := details[0]
+			require.Equal(t, limitFunc(i+1), d.Limit())
 		}
 	}
 	{
@@ -553,7 +558,8 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 		for i := range 3 {
 			allow, details := limiter.allowWithDetails(i+1, time.Now())
 			require.True(t, allow)
-			require.Equal(t, limit, details.Limit())
+			d := details[0]
+			require.Equal(t, limit, d.Limit())
 		}
 	}
 }

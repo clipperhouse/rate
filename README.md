@@ -1,8 +1,10 @@
 [![Tests](https://github.com/clipperhouse/rate/actions/workflows/tests.yml/badge.svg)](https://github.com/clipperhouse/rate/actions/workflows/tests.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/clipperhouse/rate.svg)](https://pkg.go.dev/github.com/clipperhouse/rate)
 
-# Rate
+I am designing a new, composable rate limiter for Go, with an emphasis on clean API and low overhead. Early days!
 
-I am designing a token bucket rate limiter with an emphasis on clean API and low overhead. Early days!
+Rate limiters are typically an expression of several layers of policy. You might limit by user, by product, or by URL, or all of the above. You might allow short spikes; you might apply dynamic limits; you may want to stack several limiters on top of one another.
+
+This library intends to make all the above use cases expressible, readable and easy to reason about. 
 
 ## Installation
 

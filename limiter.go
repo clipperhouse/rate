@@ -76,6 +76,9 @@ func (r *Limiter[TInput, TKey]) getBucketSpecs(input TInput) []bucketSpec[TKey] 
 	return nil
 }
 
+// getBucketsAndLimits retrieves the buckets and limits for the given input and execution time.
+// It returns "parallel" slices of buckets and limits; the i'th element in each slice corresponds
+// to the same limit/bucket pair.
 func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, executionTime time.Time) ([]*bucket, []Limit) {
 	specs := r.getBucketSpecs(input)
 	buckets := make([]*bucket, len(specs))
@@ -195,12 +198,15 @@ func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
 	return r.peek(input, time.Now())
 }
 
+// peek returns true if tokens are available for the given key,
+// but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
-	specs := r.getBucketSpecs(input)
+	buckets, limits := r.getBucketsAndLimits(input, executionTime)
 
-	for _, spec := range specs {
-		b := r.buckets.loadOrReturn(spec, newBucket(executionTime, spec.limit))
-		if !b.HasToken(executionTime, spec.limit) {
+	for i := range buckets {
+		b := buckets[i]
+		limit := limits[i]
+		if !b.HasToken(executionTime, limit) {
 			return false
 		}
 	}
@@ -218,15 +224,14 @@ func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, []Details[T
 }
 
 func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
-	specs := r.getBucketSpecs(input)
+	buckets, limits := r.getBucketsAndLimits(input, executionTime)
 
-	details := make([]Details[TInput, TKey], len(specs))
+	details := make([]Details[TInput, TKey], len(buckets))
 	allowAll := true
 
-	for i, spec := range specs {
-		limit := spec.limit
-		// Get the bucket for the given spec, creating it if it doesn't exist.
-		b := r.buckets.loadOrReturn(spec, newBucket(executionTime, limit))
+	for i := range buckets {
+		b := buckets[i]
+		limit := limits[i]
 
 		allow, bucketTime := b.HasTokenWithDetails(executionTime, limit)
 		allowAll = allowAll && allow
@@ -237,7 +242,7 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 			limit:         limit,
 			bucketTime:    bucketTime,
 			bucketInput:   input,
-			bucketKey:     spec.userKey,
+			bucketKey:     r.keyer(input),
 		}
 	}
 

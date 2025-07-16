@@ -31,21 +31,100 @@ func TestLimiter_Allow_SingleBucket(t *testing.T) {
 	require.True(t, limiter.allow("test", now))
 }
 
-func TestLimiter_Allow_MultipleBuckets(t *testing.T) {
+func TestLimiter_Allow_SingleBucket_MultipleLimits(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input
 	}
+
+	// Set up a limiter with multiple limits:
+	// - 2 requests per second (more restrictive)
+	// - 3 requests per minute (less restrictive per-second, but more restrictive overall)
+	// This demonstrates that ALL limits must allow for a token to be consumed
+	perSecond := NewLimit(2, time.Second)
+	perMinute := NewLimit(3, time.Minute)
+	limiter := NewLimiter(keyer, perSecond, perMinute)
+
+	now := time.Now()
+
+	// Consume tokens up to the per-second limit
+	calls := perSecond.Count() // 2
+	for i := range calls {
+		allowed := limiter.allow("test", now)
+		require.True(t, allowed, "should allow token %d", i+1)
+	}
+
+	//...leaving 0 in the per-second bucket and 1 in the per-minute bucket
+
+	// 2 tokens should have been consumed from both buckets
+	_, details1 := limiter.peekWithDetails("test", now)
+	require.Len(t, details1, 2, "should have details for both limits")                          // TODO this should be a separate test
+	require.Equal(t, perSecond, details1[0].Limit(), "should have per-second limit in details") // TODO this should be a separate test
+	require.Equal(t, perSecond.Count()-calls, details1[0].RemainingTokens(), "per-second bucket should be exhausted")
+	require.Equal(t, perMinute, details1[1].Limit(), "should have per-minute limit in details") // TODO this should be a separate test
+	require.Equal(t, perMinute.Count()-calls, details1[1].RemainingTokens(), "per-minute bucket should have 1 token remaining")
+
+	// Per-second limit exhausted, but per-minute has 1 token left,
+	// should fail because we require all limits to allow
+	allowed := limiter.allow("test", now)
+	require.False(t, allowed, "should not allow when per-second limit is exhausted")
+
+	// Verify that no tokens were consumed from any bucket,
+	// because the above request was denied
+	_, details2 := limiter.peekWithDetails("test", now)
+	require.Equal(t, details1, details2, "details should be the same before and after the failed request")
+
+	// Refill per-second bucket (to 2), by forwarding time; per-minute still has 1
+	now = now.Add(time.Second)
+	// Consume 1 token from both buckets
+	allowed = limiter.allow("test", now)
+	require.True(t, allowed, "should allow after per-second bucket refills")
+
+	// ...leaving 1 in the per-second bucket, 0 in the per-minute bucket
+
+	// Even though per-second has 1 token, should fail because per-minute is exhausted
+	allowed = limiter.allow("test", now)
+	require.False(t, allowed, "should not allow when per-minute limit is exhausted")
+
+	// Verify per-second bucket was not affected by the failed request
+	_, details3 := limiter.peekWithDetails("test", now)
+	require.Equal(t, int64(1), details3[0].RemainingTokens(), "per-second bucket should be unchanged after denial")
+	require.Equal(t, int64(0), details3[1].RemainingTokens(), "per-minute bucket should remain exhausted")
+
+	// Refill both buckets by advancing time
+	now = now.Add(time.Minute)
+
+	// Should work now that per-minute is refilled
+	allowed = limiter.allow("test", now)
+	require.True(t, allowed, "should allow after per-minute bucket refills")
+
+	// Use allowWithDetails to verify both buckets are working
+	allow, details3 := limiter.allowWithDetails("test", now)
+	require.True(t, allow, "should allow with details")                // TODO this should be a separate test
+	require.Len(t, details3, 2, "should have details for both limits") // TODO this should be a separate test
+
+	// Both details should show the request was allowed
+	for _, detail := range details3 {
+		require.True(t, detail.Allowed(), "both limits should have allowed the request") // TODO this should be a separate test
+	}
+}
+
+func TestLimiter_Allow_MultipleBuckets(t *testing.T) {
+	t.Parallel()
+	keyer := func(input int) string {
+		return fmt.Sprintf("test-bucket-%d", input)
+	}
 	const buckets = 3
+
 	limit := NewLimit(9, time.Second)
 	limiter := NewLimiter(keyer, limit)
 	now := time.Now()
 
-	for i := range buckets {
+	for bucketID := range buckets {
 		for range 9 {
-			limiter.allow(fmt.Sprintf("test-%d", i), now)
+			require.True(t, limiter.allow(bucketID, now))
 		}
-		require.False(t, limiter.allow(fmt.Sprintf("test-%d", i), now))
+		require.False(t, limiter.allow(bucketID, now))
 	}
 }
 

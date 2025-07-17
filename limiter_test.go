@@ -337,6 +337,50 @@ func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
 	}
 }
 
+func TestLimiter_Peek_MultipleBuckets_MultipleLimits(t *testing.T) {
+	t.Parallel()
+	keyer := func(i int) string {
+		return fmt.Sprintf("test-bucket-%d", i)
+	}
+	const buckets = 3
+	perSecond := NewLimit(2, time.Second)
+	perMinute := NewLimit(3, time.Minute)
+	limiter := NewLimiter(keyer, perSecond, perMinute)
+	now := time.Now()
+
+	// any number of peeks should be true
+	for bucketID := range buckets {
+		for range 20 {
+			actual := limiter.peek(bucketID, now)
+			require.True(t, actual, now)
+		}
+	}
+
+	// exhaust the per-second limit
+	for bucketID := range buckets {
+		for range perSecond.Count() {
+			actual := limiter.allow(bucketID, now)
+			require.True(t, actual, "bucket %d should have tokens for allow", bucketID)
+		}
+	}
+	require.False(t, limiter.allow(0, now), "bucket 0 should be exhausted for allow after per-second limit")
+
+	// no peeks should succeed, one of the limits is exceeded
+	for bucketID := range buckets {
+		for range 20 {
+			require.False(t, limiter.peek(bucketID, now), "bucket %d should be exhausted for peek", bucketID)
+		}
+	}
+
+	// refill both buckets
+	now = now.Add(time.Minute)
+
+	for bucketID := range buckets {
+		require.True(t, limiter.peek(bucketID, now), "bucket %d should have tokens for peek", bucketID)
+		require.True(t, limiter.allow(bucketID, now), "bucket %d should have tokens for allow", bucketID)
+	}
+}
+
 func TestLimiter_Peek_MultipleBuckets_Concurrent(t *testing.T) {
 	t.Parallel()
 	keyer := func(i int) string {

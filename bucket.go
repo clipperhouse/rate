@@ -118,7 +118,7 @@ func (b *bucket) consumeToken(limit Limit) {
 func (b *bucket) RemainingTokens(executionTime time.Time, limit Limit) int64 {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return remainingTokens(executionTime, b.time, limit)
+	return b.remainingTokens(executionTime, limit)
 }
 
 // remainingTokens returns the number of tokens remaining in the bucket

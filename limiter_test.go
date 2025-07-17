@@ -130,6 +130,35 @@ func TestLimiter_Allow_MultipleBuckets(t *testing.T) {
 	}
 }
 
+func TestLimiter_Allow_MultipleBuckets_MultipleLimits(t *testing.T) {
+	t.Parallel()
+	keyer := func(input int) string {
+		return fmt.Sprintf("test-bucket-%d", input)
+	}
+	const buckets = 2
+	perSecond := NewLimit(2, time.Second)
+	perMinute := NewLimit(3, time.Minute)
+	limiter := NewLimiter(keyer, perSecond, perMinute)
+	executionTime := time.Now()
+
+	for bucketID := range buckets {
+		for range perSecond.Count() {
+			// exhaust the per-second limit
+			require.True(t, limiter.allow(bucketID, executionTime), "bucket %d should allow request", bucketID)
+		}
+		// per-second limit exhausted, per-minute has 1 token remaining
+		require.False(t, limiter.allow(bucketID, executionTime), "bucket %d should not allow request", bucketID)
+
+		// other buckets should be unaffected
+		require.True(t, limiter.peek(bucketID+1, executionTime), "bucket %d should allow request", bucketID+1)
+		require.True(t, limiter.peek(bucketID+2, executionTime), "bucket %d should allow request", bucketID+2)
+
+		// refill per-second limit
+		executionTime = executionTime.Add(time.Second)
+		require.True(t, limiter.allow(bucketID, executionTime), "bucket %d should allow request", bucketID)
+	}
+}
+
 func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 	t.Parallel()
 	keyer := func(bucketID int) string {
@@ -976,7 +1005,7 @@ func TestLimiter_GetBucketsAndLimits(t *testing.T) {
 	allow := limiter.allow("test", executionTime)
 	require.True(t, allow, "should allow initial token")
 
-	buckets, limits := limiter.getBucketsAndLimits("test", executionTime)
+	buckets, limits := limiter.getBucketsAndLimits("test", executionTime, false)
 	require.Len(t, buckets, 2, "should have two buckets")
 	require.Len(t, limits, 2, "should have two limits")
 	require.Equal(t, perSecond, limits[0], "first limit should match")

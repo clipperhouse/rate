@@ -79,7 +79,7 @@ func (r *Limiter[TInput, TKey]) getBucketSpecs(input TInput) []bucketSpec[TKey] 
 // getBucketsAndLimits retrieves the buckets and limits for the given input and execution time.
 // It returns "parallel" slices of buckets and limits; the i'th element in each slice corresponds
 // to the same limit/bucket pair.
-func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, executionTime time.Time) ([]*bucket, []Limit) {
+func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, executionTime time.Time, persist bool) ([]*bucket, []Limit) {
 	specs := r.getBucketSpecs(input)
 	buckets := make([]*bucket, len(specs))
 	limits := make([]Limit, len(specs))
@@ -88,7 +88,12 @@ func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, executionTime 
 	// so the right limit is applied to the right bucket.
 
 	for i, spec := range specs {
-		b := r.buckets.loadOrStore(spec, newBucket(executionTime, spec.limit))
+		var b *bucket
+		if persist {
+			b = r.buckets.loadOrStore(spec, newBucket(executionTime, spec.limit))
+		} else {
+			b = r.buckets.loadOrReturn(spec, newBucket(executionTime, spec.limit))
+		}
 		buckets[i] = b
 		limits[i] = spec.limit
 	}
@@ -112,26 +117,26 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
-	buckets, limits := r.getBucketsAndLimits(input, executionTime)
+	buckets, limits := r.getBucketsAndLimits(input, executionTime, true)
 	unlock := lockBuckets(buckets)
 	defer unlock()
 
 	// specs and buckets must be the same length and ordering,
 	// so the right limit is applied to the right bucket.
 
-	// Check if all buckets allow the token
-	allow := true
+	// Check if all buckets allowAll the token
+	allowAll := true
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
 		if !b.hasToken(executionTime, limit) {
-			allow = false
+			allowAll = false
 			break
 		}
 	}
 
 	// Consume tokens only when all buckets allow
-	if allow {
+	if allowAll {
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
@@ -139,7 +144,7 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 		}
 	}
 
-	return allow
+	return allowAll
 }
 
 // AllowWithDetails returns true if tokens are available for the given key,
@@ -157,7 +162,7 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
-	buckets, limits := r.getBucketsAndLimits(input, executionTime)
+	buckets, limits := r.getBucketsAndLimits(input, executionTime, true)
 	unlock := lockBuckets(buckets)
 	defer unlock()
 
@@ -201,7 +206,7 @@ func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
-	buckets, limits := r.getBucketsAndLimits(input, executionTime)
+	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
 	for i := range buckets {
 		b := buckets[i]
@@ -224,7 +229,7 @@ func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, []Details[T
 }
 
 func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
-	buckets, limits := r.getBucketsAndLimits(input, executionTime)
+	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
 	details := make([]Details[TInput, TKey], len(buckets))
 	allowAll := true
@@ -299,9 +304,9 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 			return true
 		}
 
-		// Optimization: find the b	est time to try again
+		// Optimization: find the best time to try again
 
-		buckets, limits := r.getBucketsAndLimits(input, currentTime)
+		buckets, limits := r.getBucketsAndLimits(input, currentTime, true)
 
 		// Pick a default, is there a better way?
 		wait := 100 * time.Millisecond

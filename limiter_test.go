@@ -24,6 +24,26 @@ small, narrow tests to allow fast repros, plus broad tests that
 are essentially integrations.
 */
 
+func TestLimiter_Allow_AlwaysPersists(t *testing.T) {
+	t.Parallel()
+	keyer := func(input int) string {
+		return fmt.Sprintf("bucket-allow-always-persists-%d", input)
+	}
+	limit1 := NewLimit(9, time.Second)
+	limit2 := NewLimit(99, time.Second)
+	limiter := NewLimiter(keyer, limit1, limit2)
+	const buckets = 3
+
+	now := time.Now()
+
+	for bucketID := range buckets {
+		limiter.allow(bucketID, now)
+	}
+
+	expected := buckets * len(limiter.limits)
+	require.Equal(t, limiter.buckets.Count(), expected, "buckets should have persisted after allow")
+}
+
 func TestLimiter_Allow_SingleBucket(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
@@ -225,6 +245,27 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 	require.Equal(t, executionTime, details[1].ExecutionTime(), "execution time should match for per-minute limit")
 	require.Equal(t, "test-allow-with-details", details[1].BucketKey(), "bucket key should match for per-minute limit")
 	require.Equal(t, perMinute.Count()-1, details[1].RemainingTokens(), "remaining tokens should match for per-minute limit")
+}
+
+func TestLimiter_Peek_NeverPersists(t *testing.T) {
+	t.Parallel()
+	const key = "single-test-bucket"
+	keyer := func(input string) string {
+		return input
+	}
+	limit1 := NewLimit(rand.Int63n(9)+1, time.Second)
+	limit2 := NewLimit(rand.Int63n(99)+1, time.Second)
+	limiter := NewLimiter(keyer, limit1, limit2)
+
+	now := time.Now()
+
+	// any number of peeks should be true
+	for range limit1.count * 20 {
+		require.True(t, limiter.peek(key, now))
+	}
+
+	// no buckets should have been stored
+	require.Equal(t, limiter.buckets.Count(), 0, "buckets should not persist after peeking")
 }
 
 func TestLimiter_Peek_SingleBucket(t *testing.T) {

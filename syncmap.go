@@ -27,3 +27,12 @@ func (sm *syncMap[K, V]) loadOrStore(key K, value V) V {
 	actual, _ := sm.m.LoadOrStore(key, value)
 	return actual.(V)
 }
+
+func (sm *syncMap[K, V]) Count() int {
+	count := 0
+	sm.m.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	return count
+}

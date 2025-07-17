@@ -72,10 +72,17 @@ func TestBucket_ConsumeToken(t *testing.T) {
 	bucket := newBucket(now, limit)
 
 	for i := range limit.count {
+		{
+			actual := bucket.remainingTokens(now, limit)
+			expected := limit.count - i
+			require.Equal(t, expected, actual, "remaining tokens expected consumption")
+		}
 		bucket.consumeToken(limit)
-		actual := bucket.remainingTokens(now, limit)
-		expected := limit.count - i - 1
-		require.Equal(t, expected, actual, "remaining tokens should be one less after consumption")
+		{
+			actual := bucket.remainingTokens(now, limit)
+			expected := limit.count - i - 1
+			require.Equal(t, expected, actual, "remaining tokens should be one less after consumption")
+		}
 	}
 }
 

@@ -8,11 +8,11 @@ import (
 
 /*
 By convention, the private methods (mostly) are meant to be called from
-within the public methods that handle locking. Public methods are
-intended to be thread-safe.
+public methods that handle locking. Public methods are intended to be
+thread-safe.
 
-Private methods offer primitives allowing higher-level synchronization,
-such as in Limiter, for fine control.
+Private methods are primitives that depend on higher-level synchronization,
+such as in Limiter.
 */
 
 // bucket is a primitive for tracking tokens.
@@ -65,12 +65,7 @@ func (b *bucket) AllowWithDetails(executionTime time.Time, limit Limit) (bool, t
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) allow(executionTime time.Time, limit Limit) bool {
 	if b.hasToken(executionTime, limit) {
-		// If the bucket is old, it should not mistakenly be interpreted as having too many tokens
-		cutoff := executionTime.Add(-limit.period)
-		if b.time.Before(cutoff) {
-			b.time = cutoff
-		}
-		b.consumeToken(limit)
+		b.consumeToken(executionTime, limit)
 		return true
 	}
 	return false
@@ -99,19 +94,30 @@ func (b *bucket) hasToken(executionTime time.Time, limit Limit) bool {
 }
 
 // ConsumeToken removes one token from the bucket
-func (b *bucket) ConsumeToken(limit Limit) {
+func (b *bucket) ConsumeToken(executionTime time.Time, limit Limit) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.hasToken(time.Now(), limit) {
-		b.consumeToken(limit)
+		b.consumeToken(executionTime, limit)
 	}
 }
 
 // consumeToken removes one token from the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) consumeToken(limit Limit) {
+func (b *bucket) consumeToken(executionTime time.Time, limit Limit) {
+	b.checkCutoff(executionTime, limit)
 	b.time = b.time.Add(limit.durationPerToken)
+}
+
+func (b *bucket) checkCutoff(executionTime time.Time, limit Limit) (updated bool) {
+	// If the bucket is old, it should not mistakenly be interpreted as having too many tokens
+	cutoff := executionTime.Add(-limit.period)
+	if b.time.Before(cutoff) {
+		b.time = cutoff
+		return true
+	}
+	return false
 }
 
 // RemainingTokens returns the number of tokens remaining in the bucket
@@ -125,7 +131,15 @@ func (b *bucket) RemainingTokens(executionTime time.Time, limit Limit) int64 {
 //
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) remainingTokens(executionTime time.Time, limit Limit) int64 {
+	// TODO: not sure I love this, maybe remainingTokens should not mutate the bucket.
+	b.checkCutoff(executionTime, limit)
 	return remainingTokens(executionTime, b.time, limit)
+}
+
+// remainingTokens returns the number of tokens based on the difference
+// between the execution time and the bucket time, divided by the duration per token.
+func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit) int64 {
+	return int64(executionTime.Sub(bucketTime) / limit.durationPerToken)
 }
 
 // NextTokenTime returns the time when the next token might be available
@@ -144,16 +158,6 @@ func (b *bucket) NextTokenTime(limit Limit) time.Time {
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) nextTokenTime(limit Limit) time.Time {
 	return b.time.Add(limit.durationPerToken)
-}
-
-// remainingTokens returns the number of tokens remaining in the bucket
-func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit) int64 {
-	// If the bucket is old, it should not mistakenly be interpreted as having too many tokens
-	cutoff := executionTime.Add(-limit.period)
-	if bucketTime.Before(cutoff) {
-		return limit.count
-	}
-	return int64(executionTime.Sub(bucketTime) / limit.durationPerToken)
 }
 
 // wait tries to acquire a token by polling b.allow(), until the context is cancelled

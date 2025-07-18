@@ -21,6 +21,8 @@ func TestBucket_RemainingTokens(t *testing.T) {
 		require.Equal(t, expected, actual, "remaining tokens should equal to limit count")
 	}
 
+	// Age the bucket. If the arithmetic is naive, an old bucket would be mistakenly
+	// interpreted as having more tokens than the limit.
 	now = now.Add(time.Hour)
 	{
 		actual := bucket.remainingTokens(now, limit)
@@ -45,7 +47,7 @@ func TestBucket_RemainingTokens_Concurrent(t *testing.T) {
 			defer wg.Done()
 			// Interleave consumption and reading
 			if i%2 == 0 {
-				bucket.ConsumeToken(limit)
+				bucket.ConsumeToken(now, limit)
 				return
 			}
 
@@ -77,13 +79,53 @@ func TestBucket_ConsumeToken(t *testing.T) {
 			expected := limit.count - i
 			require.Equal(t, expected, actual, "remaining tokens expected consumption")
 		}
-		bucket.consumeToken(limit)
+		bucket.consumeToken(now, limit)
 		{
 			actual := bucket.remainingTokens(now, limit)
 			expected := limit.count - i - 1
 			require.Equal(t, expected, actual, "remaining tokens should be one less after consumption")
 		}
 	}
+}
+
+func TestBucket_ConsumeToken_OldBucket(t *testing.T) {
+	// ensure that an old bucket does proper accounting of consumed tokens
+	// if the arithmetic is too naive, and old bucket would be mistakenly
+	// interpreted as having more tokens that the limit
+	t.Parallel()
+	executionTime := time.Now()
+	limit := NewLimit(11, time.Second)
+	bucket := newBucket(executionTime, limit)
+
+	// exhaust the bucket
+	for range limit.count {
+		bucket.consumeToken(executionTime, limit)
+	}
+	require.False(t, bucket.hasToken(executionTime, limit), "expected to have no tokens after exhausting the bucket")
+
+	// age the bucket
+	executionTime = executionTime.Add(time.Hour)
+
+	// exhaust it quickly again
+	for range limit.count {
+		bucket.consumeToken(executionTime, limit)
+	}
+	require.False(t, bucket.hasToken(executionTime, limit), "expected to have no tokens after exhausting the old bucket")
+}
+
+func TestBucket_CheckCutoff(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	limit := NewLimit(13, time.Second)
+	bucket := newBucket(now, limit)
+
+	require.False(t, bucket.checkCutoff(now, limit), "expected no cutoff update on fresh bucket")
+
+	bucket.consumeToken(now, limit)
+	require.False(t, bucket.checkCutoff(now, limit), "expected no cutoff update bucket after consumption")
+
+	now = now.Add(time.Hour)
+	require.True(t, bucket.checkCutoff(now, limit), "expected cutoff update on old bucket")
 }
 
 func TestBucket_Allow(t *testing.T) {

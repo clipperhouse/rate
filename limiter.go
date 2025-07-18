@@ -140,7 +140,7 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			b.consumeToken(limit)
+			b.consumeToken(executionTime, limit)
 		}
 	}
 
@@ -189,7 +189,7 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			b.consumeToken(limit)
+			b.consumeToken(executionTime, limit)
 			details[i].bucketTime = b.time
 		}
 	}

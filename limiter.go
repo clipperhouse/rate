@@ -112,6 +112,17 @@ func lockBuckets(buckets []*bucket) (unlock func()) {
 	}
 }
 
+func rLockBuckets(buckets []*bucket) (unlock func()) {
+	for _, b := range buckets {
+		b.mu.RLock()
+	}
+	return func() {
+		for _, b := range buckets {
+			b.mu.RUnlock()
+		}
+	}
+}
+
 func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) bool {
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
@@ -208,10 +219,12 @@ func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
 func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
+	unlock := rLockBuckets(buckets)
+	defer unlock()
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
-		if !b.HasToken(executionTime, limit) {
+		if !b.hasToken(executionTime, limit) {
 			return false
 		}
 	}
@@ -234,11 +247,14 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 	details := make([]Details[TInput, TKey], len(buckets))
 	allowAll := true
 
+	unlock := rLockBuckets(buckets)
+	defer unlock()
+
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
 
-		allow, bucketTime := b.HasTokenWithDetails(executionTime, limit)
+		allow, bucketTime := b.hasTokenWithDetails(executionTime, limit)
 		allowAll = allowAll && allow
 
 		details[i] = Details[TInput, TKey]{
@@ -308,15 +324,16 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 
 		buckets, limits := r.getBucketsAndLimits(input, currentTime, true)
 
-		// Pick a default, is there a better way?
-		wait := 100 * time.Millisecond
+		unlock := rLockBuckets(buckets)
+		wait := 100 * time.Millisecond // arbitrary default, is there a better way?
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			nextToken := b.NextTokenTime(limit)
+			nextToken := b.nextTokenTime(limit)
 			untilNext := nextToken.Sub(currentTime)
 			wait = min(wait, untilNext)
 		}
+		unlock()
 
 		// early return if we can't possibly acquire a token before the context is done
 		if deadline, ok := deadline(); ok {

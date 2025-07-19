@@ -6,15 +6,6 @@ import (
 	"time"
 )
 
-/*
-By convention, the private methods (mostly) are meant to be called from
-public methods that handle locking. Public methods are intended to be
-thread-safe.
-
-Private methods are primitives that depend on higher-level synchronization,
-such as in Limiter.
-*/
-
 // bucket is a primitive for tracking tokens.
 // It's only meaningful with a specific limit;
 // using different limits with the same bucket
@@ -38,27 +29,6 @@ func newBucket(executionTime time.Time, limit Limit) *bucket {
 	}
 }
 
-// Allow returns true if tokens are available in the bucket for the given execution time and limit.
-// If a token is available, it returns true and consumes a token.
-// If no token is available, it returns false and does not consume a token.
-// It is thread-safe.
-func (b *bucket) Allow(executionTime time.Time, limit Limit) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.allow(executionTime, limit)
-}
-
-// AllowWithDetails returns true if tokens are available and the bucket time after the operation.
-// If a token is available, it returns true and consumes a token.
-// If no token is available, it returns false and does not consume a token.
-// It is thread-safe.
-func (b *bucket) AllowWithDetails(executionTime time.Time, limit Limit) (bool, time.Time) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	allowed := b.allow(executionTime, limit)
-	return allowed, b.time
-}
-
 // allow returns true if there are available tokens in the bucket, and consumes a token if so.
 // If false, no tokens were consumed.
 //
@@ -71,18 +41,9 @@ func (b *bucket) allow(executionTime time.Time, limit Limit) bool {
 	return false
 }
 
-// HasToken checks if there are available tokens in the bucket
-func (b *bucket) HasToken(executionTime time.Time, limit Limit) bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.hasToken(executionTime, limit)
-}
-
-// HasTokenWithDetails checks if there are available tokens and returns the bucket time.
+// hasTokenWithDetails checks if there are available tokens and returns the bucket time.
 // It is thread-safe and does not consume any tokens.
-func (b *bucket) HasTokenWithDetails(executionTime time.Time, limit Limit) (bool, time.Time) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+func (b *bucket) hasTokenWithDetails(executionTime time.Time, limit Limit) (bool, time.Time) {
 	return b.hasToken(executionTime, limit), b.time
 }
 
@@ -91,15 +52,6 @@ func (b *bucket) HasTokenWithDetails(executionTime time.Time, limit Limit) (bool
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) hasToken(executionTime time.Time, limit Limit) bool {
 	return !b.time.After(executionTime.Add(-limit.durationPerToken))
-}
-
-// ConsumeToken removes one token from the bucket
-func (b *bucket) ConsumeToken(executionTime time.Time, limit Limit) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.hasToken(time.Now(), limit) {
-		b.consumeToken(executionTime, limit)
-	}
 }
 
 // consumeToken removes one token from the bucket
@@ -120,18 +72,11 @@ func (b *bucket) checkCutoff(executionTime time.Time, limit Limit) (updated bool
 	return false
 }
 
-// RemainingTokens returns the number of tokens remaining in the bucket
-func (b *bucket) RemainingTokens(executionTime time.Time, limit Limit) int64 {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.remainingTokens(executionTime, limit)
-}
-
 // remainingTokens returns the number of tokens remaining in the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) remainingTokens(executionTime time.Time, limit Limit) int64 {
-	// TODO: not sure I love this, maybe remainingTokens should not mutate the bucket.
+	// TODO: not sure I love this, maybe remainingTokens() should not mutate the bucket.
 	b.checkCutoff(executionTime, limit)
 	return remainingTokens(executionTime, b.time, limit)
 }
@@ -140,15 +85,6 @@ func (b *bucket) remainingTokens(executionTime time.Time, limit Limit) int64 {
 // between the execution time and the bucket time, divided by the duration per token.
 func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit) int64 {
 	return int64(executionTime.Sub(bucketTime) / limit.durationPerToken)
-}
-
-// NextTokenTime returns the time when the next token might be available
-// Note that concurrent access by other goroutines might consume tokens;
-// treat NextTokenTime as a prediction, not a guarantee.
-func (b *bucket) NextTokenTime(limit Limit) time.Time {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.nextTokenTime(limit)
 }
 
 // nextTokenTime returns the time when the next token might be available

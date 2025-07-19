@@ -1,12 +1,15 @@
 package rate
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestLimiter_ConcurrentAccess_SyncMap(t *testing.T) {
+func TestSyncMap_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
 	keyer := func(input string) string {
@@ -42,4 +45,21 @@ func TestLimiter_ConcurrentAccess_SyncMap(t *testing.T) {
 
 	// If we get here without panic or race conditions, the test passes
 	t.Log("Concurrent access test completed successfully")
+}
+
+func TestSyncMap_Count(t *testing.T) {
+	t.Parallel()
+
+	sm := &syncMap[string, int]{}
+
+	for range 2 {
+		// should only be stored once despite multiple calls
+		for key := range 101 {
+			sm.loadOrStore(fmt.Sprint(key), key)
+		}
+	}
+
+	expected := 101
+	actual := sm.Count()
+	require.Equal(t, expected, actual, "expected Count() to be accurate")
 }

@@ -1,6 +1,7 @@
 package rate
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -22,6 +23,14 @@ func NewLimit(count int64, period time.Duration) Limit {
 		period:           period,
 		durationPerToken: period / time.Duration(count),
 	}
+}
+
+func (l Limit) String() string {
+	return "Limit{" +
+		"count: " + fmt.Sprint(l.count) +
+		", period: " + l.period.String() +
+		", durationPerToken: " + l.durationPerToken.String() +
+		"}"
 }
 
 func (l Limit) Count() int64 {

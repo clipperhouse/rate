@@ -4,12 +4,12 @@ import "time"
 
 // Details is a struct that contains the details of a rate limit check.
 type Details[TInput any, TKey comparable] struct {
-	allowed       bool
-	limit         Limit
-	executionTime time.Time
-	bucketTime    time.Time
-	bucketInput   TInput
-	bucketKey     TKey
+	allowed         bool
+	limit           Limit
+	executionTime   time.Time
+	remainingTokens int64
+	bucketInput     TInput
+	bucketKey       TKey
 }
 
 // Allowed returns true if the request was allowed.
@@ -39,5 +39,5 @@ func (d Details[TInput, TKey]) BucketKey() TKey {
 
 // RemainingTokens returns the number of remaining tokens in the bucket
 func (d Details[TInput, TKey]) RemainingTokens() int64 {
-	return remainingTokens(d.executionTime, d.bucketTime, d.limit)
+	return d.remainingTokens
 }

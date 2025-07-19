@@ -17,7 +17,7 @@ func BenchmarkAllow_Single(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		bucket.Allow(now, limit)
+		bucket.allow(now, limit)
 	}
 }
 

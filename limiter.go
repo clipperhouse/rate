@@ -186,12 +186,12 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 		allow := b.hasToken(executionTime, limit)
 		allowAll = allowAll && allow
 		details[i] = Details[TInput, TKey]{
-			allowed:       allow,
-			executionTime: executionTime,
-			limit:         limit,
-			bucketTime:    b.time,
-			bucketInput:   input,
-			bucketKey:     r.keyer(input),
+			allowed:         allow,
+			executionTime:   executionTime,
+			limit:           limit,
+			remainingTokens: b.remainingTokens(executionTime, limit),
+			bucketInput:     input,
+			bucketKey:       r.keyer(input),
 		}
 	}
 
@@ -201,7 +201,7 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 			b := buckets[i]
 			limit := limits[i]
 			b.consumeToken(executionTime, limit)
-			details[i].bucketTime = b.time
+			details[i].remainingTokens = b.remainingTokens(executionTime, limit)
 		}
 	}
 
@@ -254,16 +254,16 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 		b := buckets[i]
 		limit := limits[i]
 
-		allow, bucketTime := b.hasTokenWithDetails(executionTime, limit)
+		allow := b.hasToken(executionTime, limit)
 		allowAll = allowAll && allow
 
 		details[i] = Details[TInput, TKey]{
-			allowed:       allow,
-			executionTime: executionTime,
-			limit:         limit,
-			bucketTime:    bucketTime,
-			bucketInput:   input,
-			bucketKey:     r.keyer(input),
+			allowed:         allow,
+			executionTime:   executionTime,
+			limit:           limit,
+			remainingTokens: b.remainingTokens(executionTime, limit),
+			bucketInput:     input,
+			bucketKey:       r.keyer(input),
 		}
 	}
 

@@ -41,12 +41,6 @@ func (b *bucket) allow(executionTime time.Time, limit Limit) bool {
 	return false
 }
 
-// hasTokenWithDetails checks if there are available tokens and returns the bucket time.
-// It is thread-safe and does not consume any tokens.
-func (b *bucket) hasTokenWithDetails(executionTime time.Time, limit Limit) (bool, time.Time) {
-	return b.hasToken(executionTime, limit), b.time
-}
-
 // hasToken checks if any tokens are available in the bucket
 //
 // ⚠️ caller is responsible for locking appropriately

@@ -774,7 +774,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 	}
 }
 
-func TestLimiter_Allow_SingleBucket_Func(t *testing.T) {
+func TestLimiter_Allow_SingleBucket_SingleLimit_Func(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input
@@ -797,7 +797,7 @@ func TestLimiter_Allow_SingleBucket_Func(t *testing.T) {
 	require.True(t, limiter.allow("test", now))
 }
 
-func TestLimiter_Allow_MultipleBuckets_Func(t *testing.T) {
+func TestLimiter_Allow_MultipleBuckets_SingleLimit_Func(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input

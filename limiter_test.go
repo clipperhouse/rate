@@ -131,7 +131,7 @@ func TestLimiter_Allow_SingleBucket_MultipleLimits(t *testing.T) {
 	require.True(t, allowed, "should allow after per-minute bucket refills")
 }
 
-func TestLimiter_Allow_MultipleBuckets(t *testing.T) {
+func TestLimiter_Allow_MultipleBuckets_SingleLimit(t *testing.T) {
 	t.Parallel()
 	keyer := func(input int) string {
 		return fmt.Sprintf("test-bucket-%d", input)
@@ -179,7 +179,7 @@ func TestLimiter_Allow_MultipleBuckets_MultipleLimits(t *testing.T) {
 	}
 }
 
-func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
+func TestLimiter_Allow_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 	t.Parallel()
 	keyer := func(bucketID int) string {
 		return fmt.Sprintf("test-bucket-%d", bucketID)
@@ -190,18 +190,20 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 	start := time.Now()
 
 	// Enough concurrent processes for each bucket to precisely exhaust the limit
-	var wg sync.WaitGroup
-	for bucketID := range buckets {
-		for processID := range limit.count {
-			wg.Add(1)
-			go func(bucketID int, processID int64) {
-				defer wg.Done()
-				allowed := limiter.allow(bucketID, start)
-				require.True(t, allowed, "process %d for bucket %s should be allowed", processID, keyer(bucketID))
-			}(bucketID, processID)
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			for processID := range limit.count {
+				wg.Add(1)
+				go func(bucketID int, processID int64) {
+					defer wg.Done()
+					allowed := limiter.allow(bucketID, start)
+					require.True(t, allowed, "process %d for bucket %s should be allowed", processID, keyer(bucketID))
+				}(bucketID, processID)
+			}
 		}
+		wg.Wait()
 	}
-	wg.Wait()
 
 	// Verify that additional requests are rejected, all buckets should be exhausted
 	for bucketID := range buckets {
@@ -211,15 +213,115 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent(t *testing.T) {
 
 	// Complete refill
 	now := start.Add(limit.period)
-	for bucketID := range buckets {
-		for range limit.count {
-			allowed := limiter.allow(bucketID, now)
-			require.True(t, allowed, "bucket %d should be refilled after 1 second", bucketID)
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				for range limit.count {
+					allowed := limiter.allow(bucketID, now)
+					require.True(t, allowed, "bucket %d should be refilled after 1 second", bucketID)
+				}
+			}(bucketID)
 		}
+		wg.Wait()
 	}
 }
 
-func TestLimiter_AllowWithDetails(t *testing.T) {
+func TestLimiter_Allow_MultipleBuckets_MultipleLimits_Concurrent(t *testing.T) {
+	t.Parallel()
+	keyer := func(bucketID int) string {
+		return fmt.Sprintf("test-bucket-%d", bucketID)
+	}
+	const buckets = 3
+	perSecond := NewLimit(2, time.Second)
+	perMinute := NewLimit(3, time.Minute)
+	limiter := NewLimiter(keyer, perSecond, perMinute)
+	executionTime := time.Now()
+
+	// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			for processID := range perSecond.count {
+				wg.Add(1)
+				go func(bucketID int, processID int64) {
+					defer wg.Done()
+					allowed := limiter.allow(bucketID, executionTime)
+					require.True(t, allowed, "process %d for bucket %s should be allowed", processID, keyer(bucketID))
+				}(bucketID, processID)
+			}
+		}
+		wg.Wait()
+	}
+
+	// Verify that additional requests are rejected, all buckets should be exhausted on per-second limit
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				allowed := limiter.allow(bucketID, executionTime)
+				require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, perSecond.count)
+			}(bucketID)
+		}
+		wg.Wait()
+	}
+
+	// Refill per-second limit by advancing time
+	executionTime = executionTime.Add(time.Second)
+
+	// Each bucket should now have 1 more token available from per-second limit,
+	// but per-minute limit should still have 1 token remaining (3-2=1)
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				allowed := limiter.allow(bucketID, executionTime)
+				require.True(t, allowed, "bucket %d should allow request after per-second refill", bucketID)
+			}(bucketID)
+		}
+		wg.Wait()
+	}
+
+	// Now all buckets should be exhausted on per-minute limit (used all 3 tokens: 2 initially + 1 after refill)
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				allowed := limiter.allow(bucketID, executionTime)
+				require.False(t, allowed, "bucket %d should be exhausted on per-minute limit", bucketID)
+			}(bucketID)
+		}
+		wg.Wait()
+	}
+
+	// Complete refill by advancing to refill both limits
+	executionTime = executionTime.Add(time.Minute)
+
+	// Test concurrent access after full refill
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			for processID := range perSecond.count {
+				wg.Add(1)
+				go func(bucketID int, processID int64) {
+					defer wg.Done()
+					allowed := limiter.allow(bucketID, executionTime)
+					require.True(t, allowed, "process %d for bucket %s should be allowed after refill", processID, keyer(bucketID))
+				}(bucketID, processID)
+			}
+		}
+		wg.Wait()
+	}
+}
+func TestLimiter_AllowWithDetails_SingleBucket_MultipleLimits(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input
@@ -268,6 +370,172 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 		require.Equal(t, perMinute, details[1].Limit(), "should have per-minute limit in details")
 		require.Equal(t, executionTime, details[1].ExecutionTime(), "execution time should match for per-minute limit")
 		require.Equal(t, "test-allow-with-details", details[1].BucketKey(), "bucket key should match for per-minute limit")
+	}
+}
+
+func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *testing.T) {
+	t.Parallel()
+	keyer := func(bucketID int) string {
+		return fmt.Sprintf("test-bucket-%d", bucketID)
+	}
+	const buckets = 3
+	perSecond := NewLimit(2, time.Second)
+	perMinute := NewLimit(3, time.Minute)
+	limiter := NewLimiter(keyer, perSecond, perMinute)
+	executionTime := time.Now()
+
+	// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
+	{
+		results := make([][]Details[int, string], buckets*int(perSecond.count))
+		resultIndex := 0
+
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			for processID := range perSecond.count {
+				wg.Add(1)
+				go func(bucketID int, processID int64, index int) {
+					defer wg.Done()
+					allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+					require.True(t, allowed, "process %d for bucket %d should be allowed", processID, bucketID)
+					require.Len(t, details, 2, "should have details for both limits")
+					results[index] = details
+				}(bucketID, processID, resultIndex)
+				resultIndex++
+			}
+		}
+		wg.Wait()
+
+		// Verify all results have the correct structure
+		for i, details := range results {
+			require.Equal(t, perSecond, details[0].Limit(), "result %d should have per-second limit", i)
+			require.True(t, details[0].Allowed(), "result %d per-second should be allowed", i)
+			require.Equal(t, executionTime, details[0].ExecutionTime(), "result %d execution time should match", i)
+
+			require.Equal(t, perMinute, details[1].Limit(), "result %d should have per-minute limit", i)
+			require.True(t, details[1].Allowed(), "result %d per-minute should be allowed", i)
+			require.Equal(t, executionTime, details[1].ExecutionTime(), "result %d execution time should match", i)
+		}
+	}
+
+	// Verify that additional requests are rejected, all buckets should be exhausted on per-second limit
+	{
+		var wg sync.WaitGroup
+		results := make([][]Details[int, string], buckets)
+
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+				require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, perSecond.count)
+				require.Len(t, details, 2, "should have details for both limits")
+				results[bucketID] = details
+			}(bucketID)
+		}
+		wg.Wait()
+
+		// Verify all results show exhaustion correctly
+		for bucketID, details := range results {
+			// per-second should be denied
+			require.False(t, details[0].Allowed(), "bucket %d per-second should be denied", bucketID)
+			require.Equal(t, int64(0), details[0].RemainingTokens(), "bucket %d per-second should have 0 tokens", bucketID)
+			require.Equal(t, perSecond, details[0].Limit(), "bucket %d should have per-second limit", bucketID)
+
+			// per-minute still has 1 token
+			require.True(t, details[1].Allowed(), "bucket %d per-minute should still allow", bucketID)
+			require.Equal(t, int64(1), details[1].RemainingTokens(), "bucket %d per-minute should have 1 token", bucketID)
+			require.Equal(t, perMinute, details[1].Limit(), "bucket %d should have per-minute limit", bucketID)
+		}
+	}
+
+	// Refill per-second limit by advancing time
+	executionTime = executionTime.Add(time.Second)
+
+	// Per-second bucket should now have 1 more token available
+	{
+		var wg sync.WaitGroup
+		results := make([][]Details[int, string], buckets)
+
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+				require.True(t, allowed, "bucket %d should allow request after per-second refill", bucketID)
+				require.Len(t, details, 2, "should have details for both limits")
+				results[bucketID] = details
+			}(bucketID)
+		}
+		wg.Wait()
+
+		// Verify all results show successful consumption
+		for bucketID, details := range results {
+			require.True(t, details[0].Allowed(), "bucket %d per-second should allow", bucketID)
+			require.Equal(t, perSecond.Count()-1, details[0].RemainingTokens(), "bucket %d per-second should have 1 token remaining", bucketID)
+
+			require.True(t, details[1].Allowed(), "bucket %d per-minute should allow", bucketID)
+			require.Equal(t, int64(0), details[1].RemainingTokens(), "bucket %d per-minute should have 0 tokens remaining", bucketID)
+		}
+	}
+
+	// Now all buckets should be exhausted on per-minute limit
+	{
+		var wg sync.WaitGroup
+		results := make([][]Details[int, string], buckets)
+
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+				require.False(t, allowed, "bucket %d should be exhausted on per-minute limit", bucketID)
+				require.Len(t, details, 2, "should have details for both limits")
+				results[bucketID] = details
+			}(bucketID)
+		}
+		wg.Wait()
+
+		// Verify all results show per-minute exhaustion
+		for bucketID, details := range results {
+			// per-second should still allow
+			require.True(t, details[0].Allowed(), "bucket %d per-second should still allow", bucketID)
+			require.Equal(t, perSecond.Count()-1, details[0].RemainingTokens(), "bucket %d per-second should have 1 token remaining", bucketID)
+
+			// per-minute should be exhausted
+			require.False(t, details[1].Allowed(), "bucket %d per-minute should be denied", bucketID)
+			require.Equal(t, int64(0), details[1].RemainingTokens(), "bucket %d per-minute should have 0 tokens", bucketID)
+		}
+	}
+
+	// Complete refill by advancing to refill both limits
+	executionTime = executionTime.Add(time.Minute)
+
+	// Test concurrent access after full refill
+	{
+		var wg sync.WaitGroup
+		results := make([][]Details[int, string], buckets*int(perSecond.count))
+		resultIndex := 0
+
+		for bucketID := range buckets {
+			for processID := range perSecond.count {
+				wg.Add(1)
+				go func(bucketID int, processID int64, index int) {
+					defer wg.Done()
+					allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+					require.True(t, allowed, "process %d for bucket %d should be allowed after refill", processID, bucketID)
+					require.Len(t, details, 2, "should have details for both limits")
+					results[index] = details
+				}(bucketID, processID, resultIndex)
+				resultIndex++
+			}
+		}
+		wg.Wait()
+
+		// Verify all results after refill
+		for i, details := range results {
+			require.True(t, details[0].Allowed(), "result %d per-second should be allowed", i)
+			require.True(t, details[1].Allowed(), "result %d per-minute should be allowed", i)
+		}
 	}
 }
 
@@ -405,7 +673,7 @@ func TestLimiter_Peek_MultipleBuckets_MultipleLimits(t *testing.T) {
 	}
 }
 
-func TestLimiter_Peek_MultipleBuckets_Concurrent(t *testing.T) {
+func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 	t.Parallel()
 	keyer := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
@@ -559,35 +827,51 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent_Func(t *testing.T) {
 	limiter := NewLimiterFunc(keyer, limitFunc)
 	start := time.Now()
 
-	var wg sync.WaitGroup
-
 	// Enough concurrent processes for each bucket to precisely exhaust the limit
-	for bucketID := range buckets {
-		for processID := range limit.count {
-			wg.Add(1)
-			go func(bucketID int, processID int64) {
-				defer wg.Done()
-				allowed := limiter.allow(bucketID, start)
-				require.True(t, allowed, "process %d for bucket %s should be allowed", processID, keyer(bucketID))
-			}(bucketID, processID)
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			for processID := range limit.count {
+				wg.Add(1)
+				go func(bucketID int, processID int64) {
+					defer wg.Done()
+					allowed := limiter.allow(bucketID, start)
+					require.True(t, allowed, "process %d for bucket %s should be allowed", processID, keyer(bucketID))
+				}(bucketID, processID)
+			}
 		}
+		wg.Wait()
 	}
 
-	wg.Wait()
-
 	// Verify that additional requests are rejected, all buckets should be exhausted
-	for bucketID := range buckets {
-		allowed := limiter.allow(bucketID, start)
-		require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, limit.count)
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				allowed := limiter.allow(bucketID, start)
+				require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, limit.count)
+			}(bucketID)
+		}
+		wg.Wait()
 	}
 
 	// Complete refill
 	now := start.Add(limit.period)
-	for bucketID := range buckets {
-		for range limit.count {
-			allowed := limiter.allow(bucketID, now)
-			require.True(t, allowed, "bucket %d should be refilled after 1 second", bucketID)
+	{
+		var wg sync.WaitGroup
+		for bucketID := range buckets {
+			wg.Add(1)
+			go func(bucketID int) {
+				defer wg.Done()
+				for range limit.count {
+					allowed := limiter.allow(bucketID, now)
+					require.True(t, allowed, "bucket %d should be refilled after 1 second", bucketID)
+				}
+			}(bucketID)
 		}
+		wg.Wait()
 	}
 }
 

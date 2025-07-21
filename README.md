@@ -4,7 +4,9 @@ I am designing a new, composable rate limiter for Go, with an emphasis on clean 
 
 Rate limiters are typically an expression of several layers of policy. You might limit by user, by product, or by URL, or all of the above. You might allow short spikes; you might apply dynamic limits; you may want to stack several limiters on top of one another.
 
-This library intends to make all the above use cases expressible, readable and easy to reason about. 
+This library intends to make all the above use cases expressible, readable and easy to reason about.
+
+Here is a [blog post describing the design](https://clipperhouse.com/composable-rate-limiter/).
 
 ## Installation
 

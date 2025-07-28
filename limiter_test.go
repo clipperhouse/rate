@@ -93,8 +93,8 @@ func TestLimiter_Allow_SingleBucket_MultipleLimits(t *testing.T) {
 
 	// 2 tokens should have been consumed from both buckets
 	_, details1 := limiter.peekWithDetails("test", now)
-	require.Equal(t, perSecond.Count()-calls, details1[0].RemainingTokens(), "per-second bucket should be exhausted")
-	require.Equal(t, perMinute.Count()-calls, details1[1].RemainingTokens(), "per-minute bucket should have 1 token remaining")
+	require.Equal(t, perSecond.Count()-calls, details1[0].TokensRemaining(), "per-second bucket should be exhausted")
+	require.Equal(t, perMinute.Count()-calls, details1[1].TokensRemaining(), "per-minute bucket should have 1 token remaining")
 
 	// Per-second limit exhausted, but per-minute has 1 token left,
 	// should fail because we require all limits to allow
@@ -120,8 +120,8 @@ func TestLimiter_Allow_SingleBucket_MultipleLimits(t *testing.T) {
 
 	// Verify per-second bucket was not affected by the failed request
 	_, details3 := limiter.peekWithDetails("test", now)
-	require.Equal(t, int64(1), details3[0].RemainingTokens(), "per-second bucket should be unchanged after denial")
-	require.Equal(t, int64(0), details3[1].RemainingTokens(), "per-minute bucket should remain exhausted")
+	require.Equal(t, int64(1), details3[0].TokensRemaining(), "per-second bucket should be unchanged after denial")
+	require.Equal(t, int64(0), details3[1].TokensRemaining(), "per-minute bucket should remain exhausted")
 
 	// Refill both buckets by advancing time
 	now = now.Add(time.Minute)
@@ -342,13 +342,13 @@ func TestLimiter_AllowWithDetails_SingleBucket_MultipleLimits(t *testing.T) {
 			require.Equal(t, allowed, details[0].Allowed(), "allowed should match for per-second limit")
 			require.Equal(t, executionTime, details[0].ExecutionTime(), "execution time should match for per-second limit")
 			require.Equal(t, "test-allow-with-details", details[0].BucketKey(), "bucket key should match for per-second limit")
-			require.Equal(t, perSecond.Count()-i-1, details[0].RemainingTokens(), "remaining tokens should match for per-second limit")
+			require.Equal(t, perSecond.Count()-i-1, details[0].TokensRemaining(), "remaining tokens should match for per-second limit")
 
 			require.Equal(t, perMinute, details[1].Limit(), "should have per-minute limit in details")
 			require.Equal(t, allowed, details[1].Allowed(), "allowed should match for per-minute limit")
 			require.Equal(t, executionTime, details[1].ExecutionTime(), "execution time should match for per-minute limit")
 			require.Equal(t, "test-allow-with-details", details[1].BucketKey(), "bucket key should match for per-minute limit")
-			require.Equal(t, perMinute.Count()-i-1, details[1].RemainingTokens(), "remaining tokens should match for per-minute limit")
+			require.Equal(t, perMinute.Count()-i-1, details[1].TokensRemaining(), "remaining tokens should match for per-minute limit")
 		}
 	}
 
@@ -359,14 +359,14 @@ func TestLimiter_AllowWithDetails_SingleBucket_MultipleLimits(t *testing.T) {
 
 		// per-second should have been denied
 		require.False(t, details[0].Allowed(), "allowed should match for per-second limit")
-		require.Equal(t, int64(0), details[0].RemainingTokens(), "remaining tokens should match for per-second limit")
+		require.Equal(t, int64(0), details[0].TokensRemaining(), "remaining tokens should match for per-second limit")
 		require.Equal(t, perSecond, details[0].Limit(), "should have per-second limit in details")
 		require.Equal(t, executionTime, details[0].ExecutionTime(), "execution time should match for per-second limit")
 		require.Equal(t, "test-allow-with-details", details[0].BucketKey(), "bucket key should match for per-second limit")
 
 		// per-minute still has 1 token
 		require.True(t, details[1].Allowed(), "allowed should match for per-minute limit")
-		require.Equal(t, int64(1), details[1].RemainingTokens(), "per-minute limit should have 1 remaining token")
+		require.Equal(t, int64(1), details[1].TokensRemaining(), "per-minute limit should have 1 remaining token")
 		require.Equal(t, perMinute, details[1].Limit(), "should have per-minute limit in details")
 		require.Equal(t, executionTime, details[1].ExecutionTime(), "execution time should match for per-minute limit")
 		require.Equal(t, "test-allow-with-details", details[1].BucketKey(), "bucket key should match for per-minute limit")
@@ -438,12 +438,12 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 		for bucketID, details := range results {
 			// per-second should be denied
 			require.False(t, details[0].Allowed(), "bucket %d per-second should be denied", bucketID)
-			require.Equal(t, int64(0), details[0].RemainingTokens(), "bucket %d per-second should have 0 tokens", bucketID)
+			require.Equal(t, int64(0), details[0].TokensRemaining(), "bucket %d per-second should have 0 tokens", bucketID)
 			require.Equal(t, perSecond, details[0].Limit(), "bucket %d should have per-second limit", bucketID)
 
 			// per-minute still has 1 token
 			require.True(t, details[1].Allowed(), "bucket %d per-minute should still allow", bucketID)
-			require.Equal(t, int64(1), details[1].RemainingTokens(), "bucket %d per-minute should have 1 token", bucketID)
+			require.Equal(t, int64(1), details[1].TokensRemaining(), "bucket %d per-minute should have 1 token", bucketID)
 			require.Equal(t, perMinute, details[1].Limit(), "bucket %d should have per-minute limit", bucketID)
 		}
 	}
@@ -471,10 +471,10 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 		// Verify all results show successful consumption
 		for bucketID, details := range results {
 			require.True(t, details[0].Allowed(), "bucket %d per-second should allow", bucketID)
-			require.Equal(t, perSecond.Count()-1, details[0].RemainingTokens(), "bucket %d per-second should have 1 token remaining", bucketID)
+			require.Equal(t, perSecond.Count()-1, details[0].TokensRemaining(), "bucket %d per-second should have 1 token remaining", bucketID)
 
 			require.True(t, details[1].Allowed(), "bucket %d per-minute should allow", bucketID)
-			require.Equal(t, int64(0), details[1].RemainingTokens(), "bucket %d per-minute should have 0 tokens remaining", bucketID)
+			require.Equal(t, int64(0), details[1].TokensRemaining(), "bucket %d per-minute should have 0 tokens remaining", bucketID)
 		}
 	}
 
@@ -499,11 +499,11 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 		for bucketID, details := range results {
 			// per-second should still allow
 			require.True(t, details[0].Allowed(), "bucket %d per-second should still allow", bucketID)
-			require.Equal(t, perSecond.Count()-1, details[0].RemainingTokens(), "bucket %d per-second should have 1 token remaining", bucketID)
+			require.Equal(t, perSecond.Count()-1, details[0].TokensRemaining(), "bucket %d per-second should have 1 token remaining", bucketID)
 
 			// per-minute should be exhausted
 			require.False(t, details[1].Allowed(), "bucket %d per-minute should be denied", bucketID)
-			require.Equal(t, int64(0), details[1].RemainingTokens(), "bucket %d per-minute should have 0 tokens", bucketID)
+			require.Equal(t, int64(0), details[1].TokensRemaining(), "bucket %d per-minute should have 0 tokens", bucketID)
 		}
 	}
 
@@ -764,13 +764,13 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 		require.Equal(t, allowed, details[0].Allowed(), "allowed should match for per-second limit")
 		require.Equal(t, executionTime, details[0].ExecutionTime(), "execution time should match for per-second limit")
 		require.Equal(t, "test-details", details[0].BucketKey(), "bucket key should match for per-second limit")
-		require.Equal(t, perSecond.Count(), details[0].RemainingTokens(), "remaining tokens should match for per-second limit")
+		require.Equal(t, perSecond.Count(), details[0].TokensRemaining(), "remaining tokens should match for per-second limit")
 
 		require.Equal(t, perMinute, details[1].Limit(), "should have per-minute limit in details")
 		require.Equal(t, allowed, details[1].Allowed(), "allowed should match for per-minute limit")
 		require.Equal(t, executionTime, details[1].ExecutionTime(), "execution time should match for per-minute limit")
 		require.Equal(t, "test-details", details[1].BucketKey(), "bucket key should match for per-minute limit")
-		require.Equal(t, perMinute.Count(), details[1].RemainingTokens(), "remaining tokens should match for per-minute limit")
+		require.Equal(t, perMinute.Count(), details[1].TokensRemaining(), "remaining tokens should match for per-minute limit")
 	}
 }
 
@@ -892,7 +892,7 @@ func TestLimiter_AllowWithDetails_Func(t *testing.T) {
 	require.Equal(t, limit, d.Limit())
 	require.Equal(t, now, d.ExecutionTime())
 	require.Equal(t, "test-details", d.BucketKey())
-	require.Equal(t, limit.count-1, d.RemainingTokens())
+	require.Equal(t, limit.count-1, d.TokensRemaining())
 }
 
 func TestLimiter_Peek_SingleBucket_Func(t *testing.T) {
@@ -1054,7 +1054,7 @@ func TestLimiter_PeekWithDetails_Func(t *testing.T) {
 	require.Equal(t, limit, d.Limit())
 	require.Equal(t, now, d.ExecutionTime())
 	require.Equal(t, "test-details", d.BucketKey())
-	require.Equal(t, limit.count, d.RemainingTokens())
+	require.Equal(t, limit.count, d.TokensRemaining())
 }
 
 func TestLimiter_UsesLimitFunc(t *testing.T) {
@@ -1406,4 +1406,53 @@ func TestLimiter_GetBucketsAndLimits(t *testing.T) {
 	require.Len(t, limits, 2, "should have two limits")
 	require.Equal(t, perSecond, limits[0], "first limit should match")
 	require.Equal(t, perMinute, limits[1], "second limit should match")
+}
+
+func TestDetails_TokensRequestedAndConsumed(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input string) string { return input }
+	limit := NewLimit(5, time.Second)
+	limiter := NewLimiter(keyer, limit)
+
+	// Test AllowWithDetails when request is allowed
+	t.Run("AllowWithDetails_Allowed", func(t *testing.T) {
+		allowed, details := limiter.AllowWithDetails("test-key1")
+		require.True(t, allowed, "request should be allowed")
+		require.Len(t, details, 1, "should have one detail")
+
+		d := details[0]
+		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
+		require.Equal(t, int64(1), d.TokensConsumed(), "should consume 1 token when allowed")
+		require.Equal(t, int64(4), d.TokensRemaining(), "should have 4 tokens remaining")
+	})
+
+	// Test PeekWithDetails (no consumption)
+	t.Run("PeekWithDetails", func(t *testing.T) {
+		allowed, details := limiter.PeekWithDetails("test-key2")
+		require.True(t, allowed, "peek should show available tokens")
+		require.Len(t, details, 1, "should have one detail")
+
+		d := details[0]
+		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
+		require.Equal(t, int64(0), d.TokensConsumed(), "should consume 0 tokens on peek")
+		require.Equal(t, int64(5), d.TokensRemaining(), "should have all 5 tokens remaining")
+	})
+
+	// Test AllowWithDetails when request is denied
+	t.Run("AllowWithDetails_Denied", func(t *testing.T) {
+		// Exhaust the bucket first
+		for i := 0; i < 5; i++ {
+			limiter.Allow("test-key3")
+		}
+
+		allowed, details := limiter.AllowWithDetails("test-key3")
+		require.False(t, allowed, "request should be denied")
+		require.Len(t, details, 1, "should have one detail")
+
+		d := details[0]
+		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
+		require.Equal(t, int64(0), d.TokensConsumed(), "should consume 0 tokens when denied")
+		require.Equal(t, int64(0), d.TokensRemaining(), "should have 0 tokens remaining")
+	})
 }

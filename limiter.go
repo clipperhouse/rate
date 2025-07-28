@@ -128,6 +128,9 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
+	// TODO: n as a parameter
+	const n int64 = 1
+
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, true)
 	unlock := lockBuckets(buckets)
 	defer unlock()
@@ -140,7 +143,7 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
-		if !b.hasToken(executionTime, limit) {
+		if !b.hasTokens(executionTime, limit, n) {
 			allowAll = false
 			break
 		}
@@ -151,7 +154,7 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			b.consumeToken(executionTime, limit)
+			b.consumeTokens(executionTime, limit, n)
 		}
 	}
 
@@ -173,6 +176,9 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
+	// TODO: n as a parameter
+	const n int64 = 1
+
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, true)
 	unlock := lockBuckets(buckets)
 	defer unlock()
@@ -183,12 +189,13 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
-		allow := b.hasToken(executionTime, limit)
+		allow := b.hasTokens(executionTime, limit, n)
 		allowAll = allowAll && allow
 		details[i] = Details[TInput, TKey]{
 			allowed:         allow,
 			executionTime:   executionTime,
 			limit:           limit,
+			tokensRequested: n,
 			remainingTokens: b.remainingTokens(executionTime, limit),
 			bucketInput:     input,
 			bucketKey:       r.keyer(input),
@@ -200,8 +207,9 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			b.consumeToken(executionTime, limit)
+			b.consumeTokens(executionTime, limit, n)
 			details[i].remainingTokens = b.remainingTokens(executionTime, limit)
+			details[i].tokensConsumed = n
 		}
 	}
 
@@ -217,6 +225,9 @@ func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
+	// TODO: n as a parameter
+	const n int64 = 1
+
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
 	unlock := rLockBuckets(buckets)
@@ -224,7 +235,7 @@ func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
-		if !b.hasToken(executionTime, limit) {
+		if !b.hasTokens(executionTime, limit, n) {
 			return false
 		}
 	}
@@ -242,6 +253,9 @@ func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, []Details[T
 }
 
 func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
+	// TODO: n as a parameter
+	const n int64 = 1
+
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
 	details := make([]Details[TInput, TKey], len(buckets))
@@ -254,13 +268,15 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 		b := buckets[i]
 		limit := limits[i]
 
-		allow := b.hasToken(executionTime, limit)
+		allow := b.hasTokens(executionTime, limit, n)
 		allowAll = allowAll && allow
 
 		details[i] = Details[TInput, TKey]{
 			allowed:         allow,
 			executionTime:   executionTime,
 			limit:           limit,
+			tokensRequested: n,
+			tokensConsumed:  0, // Never consume tokens in peek
 			remainingTokens: b.remainingTokens(executionTime, limit),
 			bucketInput:     input,
 			bucketKey:       r.keyer(input),
@@ -311,6 +327,9 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
+	// TODO: n as a parameter
+	const n int64 = 1
+
 	// "current" time is meant to be an approximation of the
 	// delta between the start time and the real system clock.
 	currentTime := startTime
@@ -329,7 +348,7 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			nextToken := b.nextTokenTime(limit)
+			nextToken := b.nextTokensTime(limit, n)
 			untilNext := nextToken.Sub(currentTime)
 			wait = min(wait, untilNext)
 		}

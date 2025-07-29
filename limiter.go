@@ -362,29 +362,61 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
 func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
-	return r.wait(ctx, input, time.Now())
+	return r.waitN(ctx, input, time.Now(), 1)
 }
 
-func (r *Limiter[TInput, TKey]) wait(ctx context.Context, input TInput, executionTime time.Time) bool {
-	return r.waitWithCancellation(
+// WaitN will poll the [Limiter.Allow] method for a period of time,
+// until it is cancelled by the passed context. It has the
+// effect of adding latency to requests instead of refusing
+// them immediately. Consider it graceful degradation.
+//
+// WaitN will return true if `n` tokens become available prior to
+// the context cancellation, and will consume a token. It will
+// return false if not, and therefore not consume a token.
+//
+// Take care to create an appropriate context. You almost certainly
+// want [context.WithTimeout] or [context.WithDeadline].
+//
+// You should be conservative, as Wait will introduce
+// backpressure on your upstream systems -- connections
+// may be held open longer, requests may queue in memory.
+//
+// A good starting place will be to timeout after waiting
+// for one token. For example:
+//
+//	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
+func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
+	return r.waitN(ctx, input, time.Now(), n)
+}
+
+func (r *Limiter[TInput, TKey]) waitN(ctx context.Context, input TInput, executionTime time.Time, n int64) bool {
+	return r.waitNWithCancellation(
 		input,
 		executionTime,
+		n,
 		ctx.Deadline,
 		ctx.Done,
 	)
 }
 
-// waitWithCancellation is a more testable version of wait that accepts
-// deadline and done functions instead of a context, allowing for deterministic testing.
 func (r *Limiter[TInput, TKey]) waitWithCancellation(
 	input TInput,
 	startTime time.Time,
 	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
-	// TODO: n as a parameter
-	const n int64 = 1
+	return r.waitNWithCancellation(input, startTime, 1, deadline, done)
+}
 
+// waitWithCancellation is a more testable version of wait that accepts
+// deadline and done functions instead of a context, allowing for deterministic testing.
+func (r *Limiter[TInput, TKey]) waitNWithCancellation(
+	input TInput,
+	startTime time.Time,
+	n int64,
+	deadline func() (time.Time, bool),
+	done func() <-chan struct{},
+) bool {
 	// "current" time is meant to be an approximation of the
 	// delta between the start time and the real system clock.
 	currentTime := startTime

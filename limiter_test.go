@@ -1427,6 +1427,115 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	}
 }
 
+func TestLimiter_WaitN_SingleBucket(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(2, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Consume all tokens
+	{
+		ok := limiter.allowN("test", executionTime, limit.count)
+		require.True(t, ok, "should allow initial tokens")
+	}
+	{
+		// Should not allow immediately
+		ok := limiter.allowN("test", executionTime, 1)
+		require.False(t, ok, "should not allow when tokens exhausted")
+	}
+
+	// Test 1: Wait with enough time to acquire tokens
+	{
+		wait := time.Duration(limit.count) * limit.durationPerToken
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(wait), true
+		}
+
+		// Done channel that never closes (no cancellation)
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
+		require.True(t, allow, "should acquire tokens after waiting")
+
+		// We waited
+		executionTime = executionTime.Add(limit.durationPerToken)
+	}
+
+	{
+		// Should not allow again immediately after wait
+		ok := limiter.allow("test", executionTime)
+		require.False(t, ok, "should not allow again immediately after wait")
+	}
+
+	// Test 2: Wait with deadline that expires before n tokens are available
+	{
+		// Deadline that expires too soon
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.durationPerToken), true
+		}
+
+		// Done channel that never closes
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
+		require.False(t, allow, "should not acquire tokens if deadline expires before tokens are available")
+	}
+
+	// Test 3: Wait with immediate cancellation
+	{
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(limit.durationPerToken * time.Duration(limit.count)), true
+		}
+
+		// Done channel that closes immediately
+		done := func() <-chan struct{} {
+			ch := make(chan struct{})
+			close(ch) // immediately closed
+			return ch
+		}
+
+		allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
+		require.False(t, allow, "should not acquire tokens if context is cancelled immediately")
+	}
+
+	// Test 4: Wait with no deadline
+	{
+		// Deadline that returns no deadline
+		deadline := func() (time.Time, bool) {
+			return time.Time{}, false
+		}
+
+		// Done channel that never closes
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		{
+			allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
+			require.True(t, allow, "should acquire tokens when no deadline is set")
+		}
+
+		// We waited
+		executionTime = executionTime.Add(limit.durationPerToken)
+
+		// Should not allow again immediately
+		{
+			allow := limiter.allowN("test", executionTime, limit.count)
+			require.False(t, allow, "should not allow again immediately after wait")
+		}
+	}
+}
+
 func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
 	t.Parallel()
 	keyer := func(input int) string {

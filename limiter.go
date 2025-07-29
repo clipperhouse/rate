@@ -258,12 +258,21 @@ func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
 	return r.peek(input, time.Now())
 }
 
+// PeekN returns true if tokens are available for the given key,
+// but without consuming any tokens.
+func (r *Limiter[TInput, TKey]) PeekN(input TInput, n int64) bool {
+	return r.peekN(input, time.Now(), n)
+}
+
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
-	// TODO: n as a parameter
-	const n int64 = 1
+	return r.peekN(input, executionTime, 1)
+}
 
+// peek returns true if tokens are available for the given key,
+// but without consuming any tokens.
+func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n int64) bool {
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
 	unlock := rLockBuckets(buckets)
@@ -289,9 +298,19 @@ func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, []Details[T
 }
 
 func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
-	// TODO: n as a parameter
-	const n int64 = 1
+	return r.peekNWithDetails(input, executionTime, 1)
+}
 
+// PeekNWithDetails returns true if `n` tokens are available for the given key,
+// along with details about the bucket and remaining tokens. You might
+// use these details for logging, returning headers, etc.
+//
+// No tokens are consumed.
+func (r *Limiter[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool, []Details[TInput, TKey]) {
+	return r.peekNWithDetails(input, time.Now(), n)
+}
+
+func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, []Details[TInput, TKey]) {
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
 	details := make([]Details[TInput, TKey], len(buckets))

@@ -737,6 +737,31 @@ func TestLimiter_Peek_SingleBucket(t *testing.T) {
 	require.True(t, limiter.allow(key, now))
 }
 
+func TestLimiter_PeekN_SingleBucket(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(9, time.Second)
+	limiter := NewLimiter(keyer, limit)
+
+	now := time.Now()
+	require.False(t, limiter.peekN("test", now, 10))
+	require.True(t, limiter.peekN("test", now, 9))
+	require.True(t, limiter.peekN("test", now, 1))
+	require.True(t, limiter.peekN("test", now, 8))
+
+	// exhaust the bucket
+	require.True(t, limiter.allowN("test", now, 9))
+
+	require.False(t, limiter.peekN("test", now, 1))
+
+	now = now.Add(3 * limit.durationPerToken)
+	require.False(t, limiter.peekN("test", now, 4))
+	require.True(t, limiter.peekN("test", now, 3))
+	require.True(t, limiter.peekN("test", now, 1))
+}
+
 func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
 	t.Parallel()
 	keyer := func(i int) string {
@@ -1184,6 +1209,68 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 	}
 }
 
+func TestLimiter_PeekNWithDetails_SingleBucket(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return input + "-key"
+	}
+	perSecond := NewLimit(9, time.Second)
+	perHour := NewLimit(99, time.Hour)
+	limiter := NewLimiter(keyer, perSecond, perHour)
+
+	now := time.Now()
+
+	{
+		request := int64(10)
+		allowed, details := limiter.peekNWithDetails("test-allow-with-details", now, request)
+		require.False(t, allowed)
+		require.Len(t, details, 2, "should have details for both limits")
+
+		d0 := details[0]
+		require.False(t, d0.Allowed())
+		require.Equal(t, d0.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d0.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d0.ExecutionTime(), now)
+		require.Equal(t, d0.TokensRequested(), request)
+		require.Equal(t, d0.TokensConsumed(), int64(0))
+		require.Equal(t, d0.TokensRemaining(), perSecond.count)
+
+		d1 := details[1]
+		require.True(t, d1.Allowed())
+		require.Equal(t, d1.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d1.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d1.ExecutionTime(), now)
+		require.Equal(t, d1.TokensRequested(), request)
+		require.Equal(t, d1.TokensConsumed(), int64(0))
+		require.Equal(t, d1.TokensRemaining(), perHour.count)
+	}
+
+	{
+		request := int64(9)
+		allowed, details := limiter.peekNWithDetails("test-allow-with-details", now, request)
+		require.True(t, allowed)
+		require.Len(t, details, 2, "should have details for both limits")
+
+		d0 := details[0]
+		require.True(t, d0.Allowed())
+		require.Equal(t, d0.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d0.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d0.ExecutionTime(), now)
+		require.Equal(t, d0.TokensRequested(), request)
+		require.Equal(t, d0.TokensConsumed(), int64(0))
+		require.Equal(t, d0.TokensRemaining(), perSecond.count)
+
+		d1 := details[1]
+		require.True(t, d1.Allowed())
+		require.Equal(t, d1.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d1.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d1.ExecutionTime(), now)
+		require.Equal(t, d1.TokensRequested(), request)
+		require.Equal(t, d1.TokensConsumed(), int64(0))
+		require.Equal(t, d1.TokensRemaining(), perHour.count)
+	}
+}
+
 func TestLimiter_PeekWithDetails_Func(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
@@ -1588,8 +1675,8 @@ func TestDetails_TokensRequestedAndConsumed(t *testing.T) {
 
 	// Test AllowWithDetails when request is denied
 	t.Run("AllowWithDetails_Denied", func(t *testing.T) {
-		// Exhaust the bucket first
-		for i := 0; i < 5; i++ {
+		// Exhaust the bucket
+		for range limit.count {
 			limiter.Allow("test-key3")
 		}
 

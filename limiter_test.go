@@ -66,6 +66,25 @@ func TestLimiter_Allow_SingleBucket(t *testing.T) {
 	require.True(t, limiter.allow("test", now))
 }
 
+func TestLimiter_AllowN_SingleBucket(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(9, time.Second)
+	limiter := NewLimiter(keyer, limit)
+
+	now := time.Now()
+	require.True(t, limiter.allowN("test", now, 1))
+	require.True(t, limiter.allowN("test", now, 8))
+	require.False(t, limiter.allowN("test", now, 1))
+
+	now = now.Add(3 * limit.durationPerToken)
+	require.True(t, limiter.allowN("test", now, 2))
+	require.True(t, limiter.allowN("test", now, 1))
+	require.False(t, limiter.allowN("test", now, 1))
+}
+
 func TestLimiter_Allow_SingleBucket_MultipleLimits(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
@@ -321,6 +340,134 @@ func TestLimiter_Allow_MultipleBuckets_MultipleLimits_Concurrent(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+func TestLimiter_AllowNWithDetails_SingleBucket(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return input + "-key"
+	}
+	perSecond := NewLimit(9, time.Second)
+	perHour := NewLimit(99, time.Hour)
+	limiter := NewLimiter(keyer, perSecond, perHour)
+
+	now := time.Now()
+
+	// previously consumed, running tally
+	consumed := int64(0)
+
+	{
+		consume := int64(3)
+		allowed, details := limiter.allowNWithDetails("test-allow-with-details", now, consume)
+		require.True(t, allowed)
+		require.Len(t, details, 2, "should have details for both limits")
+
+		d0 := details[0]
+		require.True(t, d0.Allowed())
+		require.Equal(t, d0.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d0.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d0.ExecutionTime(), now)
+		require.Equal(t, d0.TokensRequested(), consume)
+		require.Equal(t, d0.TokensConsumed(), consume)
+		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume)
+
+		d1 := details[1]
+		require.True(t, d1.Allowed())
+		require.Equal(t, d1.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d1.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d1.ExecutionTime(), now)
+		require.Equal(t, d1.TokensRequested(), consume)
+		require.Equal(t, d1.TokensConsumed(), consume)
+		require.Equal(t, d1.TokensRemaining(), perHour.count-consume)
+
+		consumed += consume
+	}
+
+	// should still be ok
+	{
+		consume := int64(6)
+		allowed, details := limiter.allowNWithDetails("test-allow-with-details", now, consume)
+		require.True(t, allowed)
+		require.Len(t, details, 2, "should have details for both limits")
+
+		d0 := details[0]
+		require.True(t, d0.Allowed())
+		require.Equal(t, d0.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d0.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d0.ExecutionTime(), now)
+		require.Equal(t, d0.TokensRequested(), consume)
+		require.Equal(t, d0.TokensConsumed(), consume)
+		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume-consumed)
+
+		d1 := details[1]
+		require.True(t, d1.Allowed())
+		require.Equal(t, d1.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d1.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d1.ExecutionTime(), now)
+		require.Equal(t, d1.TokensRequested(), consume)
+		require.Equal(t, d1.TokensConsumed(), consume)
+		require.Equal(t, d1.TokensRemaining(), perHour.count-consume-consumed)
+
+		consumed += consume
+	}
+
+	// per-second now exhausted, should be denied, no tokens consumed
+	{
+		consume := int64(2)
+		allowed, details := limiter.allowNWithDetails("test-allow-with-details", now, consume)
+		require.False(t, allowed)
+		require.Len(t, details, 2, "should have details for both limits")
+
+		d0 := details[0]
+		require.False(t, d0.Allowed())
+		require.Equal(t, d0.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d0.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d0.ExecutionTime(), now)
+		require.Equal(t, d0.TokensRequested(), consume)
+		require.Equal(t, d0.TokensConsumed(), int64(0))
+		require.Equal(t, d0.TokensRemaining(), perSecond.count-consumed)
+
+		d1 := details[1]
+		require.True(t, d1.Allowed())
+		require.Equal(t, d1.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d1.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d1.ExecutionTime(), now)
+		require.Equal(t, d1.TokensRequested(), consume)
+		require.Equal(t, d1.TokensConsumed(), int64(0))
+		require.Equal(t, d1.TokensRemaining(), perHour.count-consumed)
+
+		consumed += 0
+	}
+
+	refilled := int64(3)
+	now = now.Add(time.Duration(refilled) * perSecond.durationPerToken)
+
+	// per-second refilled
+	{
+		consume := int64(2)
+		allowed, details := limiter.allowNWithDetails("test-allow-with-details", now, consume)
+		require.True(t, allowed)
+		require.Len(t, details, 2, "should have details for both limits")
+
+		d0 := details[0]
+		require.True(t, d0.Allowed())
+		require.Equal(t, d0.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d0.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d0.ExecutionTime(), now)
+		require.Equal(t, d0.TokensRequested(), consume)
+		require.Equal(t, d0.TokensConsumed(), consume)
+		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume-consumed+refilled)
+
+		d1 := details[1]
+		require.True(t, d1.Allowed())
+		require.Equal(t, d1.BucketInput(), "test-allow-with-details")
+		require.Equal(t, d1.BucketKey(), "test-allow-with-details-key")
+		require.Equal(t, d1.ExecutionTime(), now)
+		require.Equal(t, d1.TokensRequested(), consume)
+		require.Equal(t, d1.TokensConsumed(), consume)
+		require.Equal(t, d1.TokensRemaining(), perHour.count-consume-consumed+0) // time passing not enough to refill per-hour
+	}
+}
+
 func TestLimiter_AllowWithDetails_SingleBucket_MultipleLimits(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {

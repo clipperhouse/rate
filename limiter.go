@@ -42,11 +42,27 @@ func NewLimiterFunc[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limi
 	}
 }
 
-// Allow returns true if tokens are available for the given key.
+// Allow returns true if one or more tokens are available for the given key.
 // If true, it will consume a token from the key's bucket. If false,
 // no token will be consumed.
+//
+// If the Limiter has multiple limits, Allow will return true only if
+// all limits allow the request, and one token will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
 func (r *Limiter[TInput, TKey]) Allow(input TInput) bool {
 	return r.allow(input, time.Now())
+}
+
+// AllowN returns true if at least `n` tokens are available for the given key.
+// If true, it will consume `n` tokens. If false, no token will be consumed.
+//
+// If the Limiter has multiple limits, AllowN will return true only if
+// all limits allow the request, and `n` tokens will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
+func (r *Limiter[TInput, TKey]) AllowN(input TInput, n int64) bool {
+	return r.allowN(input, time.Now(), n)
 }
 
 func (r *Limiter[TInput, TKey]) getBucketSpecs(input TInput) []bucketSpec[TKey] {
@@ -124,12 +140,13 @@ func rLockBuckets(buckets []*bucket) (unlock func()) {
 }
 
 func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) bool {
+	return r.allowN(input, executionTime, 1)
+}
+
+func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
-
-	// TODO: n as a parameter
-	const n int64 = 1
 
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, true)
 	unlock := lockBuckets(buckets)
@@ -161,23 +178,42 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 	return allowAll
 }
 
-// AllowWithDetails returns true if tokens are available for the given key,
-// and details about the bucket and the execution time. You might
-// use these details for logging, returning headers, etc.
+// AllowWithDetails returns true if a token is available for the given key,
+// along with details about the bucket(s) and tokens. You might use these details for
+// logging, returning headers, etc.
 //
-// If true, it will consume a token from the key's bucket. If false,
-// no token will be consumed.
+// If true, it will consume one token. If false, no token will be consumed.
+//
+// If the Limiter has multiple limits, AllowWithDetails will return true only if
+// all limits allow the request, and one token will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
 func (r *Limiter[TInput, TKey]) AllowWithDetails(input TInput) (bool, []Details[TInput, TKey]) {
 	return r.allowWithDetails(input, time.Now())
 }
 
+// AllowNWithDetails returns true if at least `n` tokens are available
+// for the given key, along with details about the bucket(s), remaining tokens, etc.
+// You might use these details for logging, returning headers, etc.
+//
+// If true, it will consume `n` tokens. If false, no token will be consumed.
+//
+// If the Limiter has multiple limits, AllowNWithDetails will return true only if
+// all limits allow the request, and `n` tokens will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
+func (r *Limiter[TInput, TKey]) AllowNWithDetails(input TInput, n int64) (bool, []Details[TInput, TKey]) {
+	return r.allowNWithDetails(input, time.Now(), n)
+}
+
 func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
+	return r.allowNWithDetails(input, executionTime, 1)
+}
+
+func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime time.Time, n int64) (bool, []Details[TInput, TKey]) {
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
-
-	// TODO: n as a parameter
-	const n int64 = 1
 
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, true)
 	unlock := lockBuckets(buckets)

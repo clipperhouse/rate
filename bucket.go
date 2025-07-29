@@ -1,7 +1,6 @@
 package rate
 
 import (
-	"context"
 	"sync"
 	"time"
 )
@@ -98,62 +97,4 @@ func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit)
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) nextTokensTime(limit Limit, n int64) time.Time {
 	return b.time.Add(limit.durationPerToken * time.Duration(n))
-}
-
-// wait tries to acquire `n` tokens by polling b.allow(), until the context is cancelled
-// or the allow succeeds.
-//
-// As with [allow], it returns true if a token was acquired, false if not.
-func (b *bucket) wait(ctx context.Context, startTime time.Time, limit Limit, n int64) bool {
-	return b.waitWithCancellation(
-		startTime,
-		limit,
-		n,
-		ctx.Deadline,
-		ctx.Done,
-	)
-}
-
-// waitWithCancellation tries to acquire `n` tokens by polling b.allow(), until the context
-// is cancelled or the allow succeeds.
-func (b *bucket) waitWithCancellation(
-	startTime time.Time,
-	limit Limit,
-	n int64,
-	deadline func() (time.Time, bool),
-	done func() <-chan struct{},
-) bool {
-	// "current" time is meant to be an approximation of the
-	// delta between the start time and the real system clock.
-	currentTime := startTime
-
-	for {
-		b.mu.Lock()
-		if b.allow(currentTime, limit, n) {
-			b.mu.Unlock()
-			return true
-		}
-
-		nextToken := b.nextTokensTime(limit, n)
-		b.mu.Unlock()
-
-		// early return if we can't possibly acquire a token before the context is done
-		if deadline, ok := deadline(); ok {
-			if deadline.Before(nextToken) {
-				return false
-			}
-		}
-
-		untilNext := nextToken.Sub(currentTime)
-
-		// when is the soonest we might get a token?
-		wait := min(untilNext, limit.durationPerToken)
-
-		select {
-		case <-done():
-			return false
-		case <-time.After(wait):
-			currentTime = currentTime.Add(wait)
-		}
-	}
 }

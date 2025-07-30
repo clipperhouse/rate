@@ -2143,3 +2143,196 @@ func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets(t *testing.T) {
 		require.Equal(t, starts, successes, "success order should match start order for bucket %d, proving FIFO", i)
 	}
 }
+
+func TestLimiter_WaitersCleanup_Basic(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(1, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	// Initial waiters count should be 0
+	require.Equal(t, 0, limiter.waiters.Count(), "initial waiters count should be 0")
+
+	executionTime := time.Now()
+
+	// Exhaust tokens for multiple keys
+	require.True(t, limiter.allow("key1", executionTime), "should allow initial token for key1")
+	require.True(t, limiter.allow("key2", executionTime), "should allow initial token for key2")
+
+	// Create deadline that will timeout immediately
+	deadline := func() (time.Time, bool) {
+		return executionTime, true // immediate timeout
+	}
+	done := func() <-chan struct{} {
+		ch := make(chan struct{})
+		close(ch) // immediately cancelled
+		return ch
+	}
+
+	// Try to wait - this should create a waiter entry that gets cleaned up
+	result := limiter.waitWithCancellation("key1", executionTime, deadline, done)
+	require.False(t, result, "should timeout immediately")
+
+	// Check if waiter was cleaned up
+	require.Equal(t, 0, limiter.waiters.Count(), "waiters should be cleaned up after timeout")
+
+	// Try again with a different key
+	result = limiter.waitWithCancellation("key2", executionTime, deadline, done)
+	require.False(t, result, "should timeout immediately")
+
+	// Check waiters count again
+	require.Equal(t, 0, limiter.waiters.Count(), "waiters should be cleaned up after timeout")
+
+	// Try the same key again
+	result = limiter.waitWithCancellation("key1", executionTime, deadline, done)
+	require.False(t, result, "should timeout immediately")
+
+	// Check waiters count
+	require.Equal(t, 0, limiter.waiters.Count(), "waiters should be cleaned up after timeout")
+}
+
+func TestLimiter_WaitersCleanup_MemoryLeak_Prevention(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input int) string {
+		return fmt.Sprintf("key-%d", input)
+	}
+	limit := NewLimit(1, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Create deadline that will timeout immediately
+	deadline := func() (time.Time, bool) {
+		return executionTime, true // immediate timeout
+	}
+	done := func() <-chan struct{} {
+		ch := make(chan struct{})
+		close(ch) // immediately cancelled
+		return ch
+	}
+
+	const numKeys = 1000
+
+	// Simulate many different keys trying to wait
+	for i := 0; i < numKeys; i++ {
+		// First exhaust the token for this key
+		limiter.allow(i, executionTime)
+
+		// Then try to wait (which will timeout immediately)
+		result := limiter.waitWithCancellation(i, executionTime, deadline, done)
+		require.False(t, result, "should timeout immediately for key %d", i)
+	}
+
+	finalCount := limiter.waiters.Count()
+	require.Equal(t, 0, finalCount, "waiters should be cleaned up after use")
+}
+
+func TestLimiter_WaitersCleanup_Concurrent(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input int) string {
+		return fmt.Sprintf("key-%d", input)
+	}
+	limit := NewLimit(1, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Create deadline that will timeout immediately
+	deadline := func() (time.Time, bool) {
+		return executionTime, true // immediate timeout
+	}
+	done := func() <-chan struct{} {
+		ch := make(chan struct{})
+		close(ch) // immediately cancelled
+		return ch
+	}
+
+	const concurrency = 100
+	const keysPerGoroutine = 10
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	for g := 0; g < concurrency; g++ {
+		go func(goroutineID int) {
+			defer wg.Done()
+
+			for k := 0; k < keysPerGoroutine; k++ {
+				keyID := goroutineID*keysPerGoroutine + k
+
+				// First exhaust the token for this key
+				limiter.allow(keyID, executionTime)
+
+				// Then try to wait (which will timeout immediately)
+				limiter.waitWithCancellation(keyID, executionTime, deadline, done)
+			}
+		}(g)
+	}
+
+	wg.Wait()
+
+	actualWaiters := limiter.waiters.Count()
+	require.Equal(t, 0, actualWaiters, "waiters should be cleaned up after use")
+}
+
+func TestLimiter_WaitersCleanup_WithSuccessfulWaits(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(1, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Exhaust the token
+	require.True(t, limiter.allow("key", executionTime), "should allow initial token")
+
+	const concurrency = 5
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	results := make([]bool, concurrency)
+
+	// Create deadline that gives enough time for tokens to be refilled
+	deadline := func() (time.Time, bool) {
+		return executionTime.Add(time.Duration(concurrency) * limit.durationPerToken), true
+	}
+
+	// Done channel that never closes
+	done := func() <-chan struct{} {
+		return make(chan struct{}) // never closes
+	}
+
+	// Start concurrent waiters
+	for i := 0; i < concurrency; i++ {
+		go func(index int) {
+			defer wg.Done()
+			// Add a small delay to stagger the start times
+			time.Sleep(time.Duration(index) * 10 * time.Millisecond)
+			results[index] = limiter.waitWithCancellation("key", executionTime, deadline, done)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// All waiters should have eventually succeeded
+	successCount := 0
+	for _, result := range results {
+		if result {
+			successCount++
+		}
+	}
+
+	require.Equal(t, concurrency, successCount, "all waiters should eventually succeed")
+
+	// After all operations complete, waiters should be cleaned up
+	finalCount := limiter.waiters.Count()
+	require.Equal(t, 0, finalCount, "all waiters should be cleaned up after completion")
+}

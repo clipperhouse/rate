@@ -1991,3 +1991,155 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.Equal(t, expectedRemaining, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens total", successes*tokensPerWait)
 	})
 }
+
+func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return "test-bucket"
+	}
+	// 1 token per 50ms
+	limit := NewLimit(1, 50*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+	executionTime := time.Now()
+
+	// Exhaust the single token
+	require.True(t, limiter.allow("key", executionTime), "should allow initial token")
+	require.False(t, limiter.allow("key", executionTime), "should not allow second token")
+
+	const concurrency = 5
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	startOrder := make(chan int, concurrency)
+	successOrder := make(chan int, concurrency)
+
+	// Deadline that gives enough time for all tokens to be refilled
+	deadline := func() (time.Time, bool) {
+		return executionTime.Add(time.Duration(concurrency) * limit.durationPerToken), true
+	}
+
+	// Done channel that never closes
+	done := func() <-chan struct{} {
+		return make(chan struct{}) // never closes
+	}
+
+	for i := range concurrency {
+		go func(id int) {
+			defer wg.Done()
+
+			// Signal that this goroutine is starting its wait
+			startOrder <- id
+
+			// Wait for a token
+			if limiter.waitWithCancellation("key", executionTime, deadline, done) {
+				// Signal that this goroutine successfully acquired a token
+				successOrder <- id
+			}
+		}(i)
+		// A small, non-deterministic delay to encourage goroutines to queue up in order.
+		// This helps simulate a real-world scenario where requests arrive sequentially.
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	wg.Wait()
+	close(startOrder)
+	close(successOrder)
+
+	var starts []int
+	for id := range startOrder {
+		starts = append(starts, id)
+	}
+
+	var successes []int
+	for id := range successOrder {
+		successes = append(successes, id)
+	}
+
+	require.Equal(t, concurrency, len(successes), "all goroutines should have acquired a token")
+	require.Equal(t, starts, successes, "success order should match start order, proving FIFO")
+}
+
+func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets(t *testing.T) {
+	t.Parallel()
+
+	const buckets = 3
+	const concurrencyPerBucket = 5
+	const concurrency = buckets * concurrencyPerBucket
+
+	keyer := func(input int) string {
+		return fmt.Sprintf("test-bucket-%d", input)
+	}
+	// 1 token per 50ms, to make the test run reasonably fast
+	limit := NewLimit(1, 50*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+	executionTime := time.Now()
+
+	// Exhaust the single token for each bucket
+	for i := range buckets {
+		require.True(t, limiter.allow(i, executionTime), "should allow initial token for bucket %d", i)
+		require.False(t, limiter.allow(i, executionTime), "should not allow second token for bucket %d", i)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	// Create maps to hold order channels for each bucket
+	startOrders := make(map[int]chan int, buckets)
+	successOrders := make(map[int]chan int, buckets)
+	for i := range buckets {
+		startOrders[i] = make(chan int, concurrencyPerBucket)
+		successOrders[i] = make(chan int, concurrencyPerBucket)
+	}
+
+	// Deadline that gives enough time for all tokens to be refilled for all goroutines
+	deadline := func() (time.Time, bool) {
+		return executionTime.Add(time.Duration(concurrencyPerBucket) * limit.durationPerToken), true
+	}
+
+	// Done channel that never closes
+	done := func() <-chan struct{} {
+		return make(chan struct{}) // never closes
+	}
+
+	for i := range concurrency {
+		go func(id int) {
+			defer wg.Done()
+			bucketID := id % buckets
+
+			// Announce that this goroutine is starting its wait for its bucket
+			startOrders[bucketID] <- id
+
+			// Wait for a token
+			if limiter.waitWithCancellation(bucketID, executionTime, deadline, done) {
+				// Announce that this goroutine successfully acquired a token
+				successOrders[bucketID] <- id
+			}
+		}(i)
+		// A small, non-deterministic delay to encourage goroutines to queue up in order.
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	wg.Wait()
+
+	// Close all channels
+	for i := range buckets {
+		close(startOrders[i])
+		close(successOrders[i])
+	}
+
+	// Verify FIFO order for each bucket
+	for i := range buckets {
+		var starts []int
+		for id := range startOrders[i] {
+			starts = append(starts, id)
+		}
+
+		var successes []int
+		for id := range successOrders[i] {
+			successes = append(successes, id)
+		}
+
+		require.Equal(t, concurrencyPerBucket, len(successes), "all goroutines for bucket %d should have acquired a token", i)
+		require.Equal(t, starts, successes, "success order should match start order for bucket %d, proving FIFO", i)
+	}
+}

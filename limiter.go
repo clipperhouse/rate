@@ -2,6 +2,7 @@ package rate
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -11,6 +12,7 @@ type Limiter[TInput any, TKey comparable] struct {
 	limits     []Limit
 	limitFuncs []LimitFunc[TInput]
 	buckets    syncMap[bucketSpec[TKey], *bucket]
+	waitQueues syncMap[TKey, *sync.Mutex]
 }
 
 // Keyer is a function that takes an input and returns a bucket key.
@@ -341,7 +343,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 	return allowAll, details
 }
 
-// Wait will poll the [Limiter.Allow] method for a period of time,
+// Wait will poll [Allow] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
@@ -361,18 +363,22 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 // for one token. For example:
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
+//
+// WaitN offers best-effort ordering of requests, meaning that
+// if multiple requests are waiting for the same bucket, they
+// will likely be granted in the order they were requested.
 func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 	return r.waitN(ctx, input, time.Now(), 1)
 }
 
-// WaitN will poll the [Limiter.Allow] method for a period of time,
+// WaitN will poll [Limiter.AllowN] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
 //
 // WaitN will return true if `n` tokens become available prior to
-// the context cancellation, and will consume a token. It will
-// return false if not, and therefore not consume a token.
+// the context cancellation, and will consume `n` tokens. If not,
+// it will return false, and therefore consume no tokens.
 //
 // Take care to create an appropriate context. You almost certainly
 // want [context.WithTimeout] or [context.WithDeadline].
@@ -385,6 +391,10 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 // for one token. For example:
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
+//
+// WaitN offers best-effort ordering of requests, meaning that
+// if multiple requests are waiting for the same bucket, they
+// will likely be granted in the order they were requested.
 func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
 	return r.waitN(ctx, input, time.Now(), n)
 }
@@ -417,31 +427,46 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
-	// "current" time is meant to be an approximation of the
-	// delta between the start time and the real system clock.
+	if r.allowN(input, startTime, n) {
+		return true
+	}
+
+	// currentTime is an approximation of the real clock moving forward
+	// it's imprecise because it depends on time.After below.
+	// For testing purposes, I want startTime (execution time) to
+	// be a parameter. The alternative is calling time.Now().
 	currentTime := startTime
 
+	key := r.keyer(input)
+	grant := r.waitQueues.loadOrStore(key, &sync.Mutex{})
+
 	for {
+		// The goroutine at the front of the queue gets to try for a token first.
+		grant.Lock()
 		if r.allowN(input, currentTime, n) {
+			grant.Unlock()
 			return true
 		}
-
-		// Optimization: find the best time to try again
+		grant.Unlock()
 
 		buckets, limits := r.getBucketsAndLimits(input, currentTime, true)
-
 		unlock := rLockBuckets(buckets)
-		wait := 100 * time.Millisecond // arbitrary default, is there a better way?
-		for i := range buckets {
-			b := buckets[i]
+
+		var wait time.Duration
+		for i, b := range buckets {
 			limit := limits[i]
-			nextToken := b.nextTokensTime(limit, n)
-			untilNext := nextToken.Sub(currentTime)
-			wait = min(wait, untilNext)
+			nextTokenTime := b.nextTokensTime(limit, n)
+			untilNext := nextTokenTime.Sub(currentTime)
+			if i == 0 || untilNext > wait {
+				wait = untilNext
+			}
 		}
 		unlock()
 
-		// early return if we can't possibly acquire a token before the context is done
+		if wait < 0 {
+			wait = 0
+		}
+
 		if deadline, ok := deadline(); ok {
 			if deadline.Before(currentTime.Add(wait)) {
 				return false

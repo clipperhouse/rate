@@ -41,7 +41,7 @@ func TestLimiter_Allow_AlwaysPersists(t *testing.T) {
 	}
 
 	expected := buckets * len(limiter.limits)
-	require.Equal(t, limiter.buckets.Count(), expected, "buckets should have persisted after allow")
+	require.Equal(t, limiter.buckets.count(), expected, "buckets should have persisted after allow")
 }
 
 func TestLimiter_Allow_SingleBucket(t *testing.T) {
@@ -704,7 +704,7 @@ func TestLimiter_Peek_NeverPersists(t *testing.T) {
 	}
 
 	// no buckets should have been stored
-	require.Equal(t, limiter.buckets.Count(), 0, "buckets should not persist after peeking")
+	require.Equal(t, limiter.buckets.count(), 0, "buckets should not persist after peeking")
 }
 
 func TestLimiter_Peek_SingleBucket(t *testing.T) {

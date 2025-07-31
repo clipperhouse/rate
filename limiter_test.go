@@ -1799,3 +1799,195 @@ func TestDetails_TokensRequestedAndConsumed(t *testing.T) {
 		require.Equal(t, int64(0), d.TokensRemaining(), "should have 0 tokens remaining")
 	})
 }
+
+func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(10, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Test 1: Wait should consume exactly 1 token
+	t.Run("Wait_Consumes_One_Token", func(t *testing.T) {
+		// Verify initial state
+		_, initialDetails := limiter.peekWithDetails("test-wait-1", executionTime)
+		require.Equal(t, limit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
+
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(time.Second), true
+		}
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		// Wait should succeed and consume exactly 1 token
+		allowed := limiter.waitWithCancellation("test-wait-1", executionTime, deadline, done)
+		require.True(t, allowed, "wait should succeed")
+
+		// Verify exactly 1 token was consumed
+		_, finalDetails := limiter.peekWithDetails("test-wait-1", executionTime)
+		require.Equal(t, limit.count-1, finalDetails[0].TokensRemaining(), "should have consumed exactly 1 token")
+	})
+
+	// Test 2: WaitN should consume exactly n tokens
+	t.Run("WaitN_Consumes_N_Tokens", func(t *testing.T) {
+		const tokensToWait = 3
+
+		// Verify initial state
+		_, initialDetails := limiter.peekWithDetails("test-waitn-3", executionTime)
+		require.Equal(t, limit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
+
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(time.Second), true
+		}
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		// WaitN should succeed and consume exactly tokensToWait tokens
+		allowed := limiter.waitNWithCancellation("test-waitn-3", executionTime, tokensToWait, deadline, done)
+		require.True(t, allowed, "waitN should succeed")
+
+		// Verify exactly tokensToWait tokens were consumed
+		_, finalDetails := limiter.peekWithDetails("test-waitn-3", executionTime)
+		require.Equal(t, limit.count-tokensToWait, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
+	})
+
+	// Test 3: WaitN with multiple limits should consume n tokens from all buckets
+	t.Run("WaitN_MultipleLimits_Consumes_N_From_All", func(t *testing.T) {
+		perSecond := NewLimit(5, time.Second)
+		perMinute := NewLimit(20, time.Minute)
+		multiLimiter := NewLimiter(keyer, perSecond, perMinute)
+		const tokensToWait = 2
+
+		// Verify initial state
+		_, initialDetails := multiLimiter.peekWithDetails("test-multi-waitn", executionTime)
+		require.Len(t, initialDetails, 2, "should have details for both limits")
+		require.Equal(t, perSecond.count, initialDetails[0].TokensRemaining(), "per-second should start with all tokens")
+		require.Equal(t, perMinute.count, initialDetails[1].TokensRemaining(), "per-minute should start with all tokens")
+
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(time.Second), true
+		}
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		// WaitN should succeed and consume exactly tokensToWait tokens from both limits
+		allowed := multiLimiter.waitNWithCancellation("test-multi-waitn", executionTime, tokensToWait, deadline, done)
+		require.True(t, allowed, "waitN should succeed with multiple limits")
+
+		// Verify exactly tokensToWait tokens were consumed from both buckets
+		_, finalDetails := multiLimiter.peekWithDetails("test-multi-waitn", executionTime)
+		require.Len(t, finalDetails, 2, "should have details for both limits")
+		require.Equal(t, perSecond.count-tokensToWait, finalDetails[0].TokensRemaining(), "per-second should have consumed exactly %d tokens", tokensToWait)
+		require.Equal(t, perMinute.count-tokensToWait, finalDetails[1].TokensRemaining(), "per-minute should have consumed exactly %d tokens", tokensToWait)
+	})
+
+	// Test 4: WaitN that fails should consume zero tokens
+	t.Run("WaitN_Fails_Consumes_Zero_Tokens", func(t *testing.T) {
+		// First, exhaust the bucket
+		for range limit.count {
+			limiter.allow("test-fail-waitn", executionTime)
+		}
+
+		// Verify bucket is exhausted
+		_, exhaustedDetails := limiter.peekWithDetails("test-fail-waitn", executionTime)
+		require.Equal(t, int64(0), exhaustedDetails[0].TokensRemaining(), "bucket should be exhausted")
+
+		// Deadline that expires immediately (no time to refill)
+		deadline := func() (time.Time, bool) {
+			return executionTime, true // expires immediately
+		}
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		// WaitN should fail and consume zero tokens
+		allowed := limiter.waitNWithCancellation("test-fail-waitn", executionTime, 1, deadline, done)
+		require.False(t, allowed, "waitN should fail when deadline expires before tokens available")
+
+		// Verify no tokens were consumed
+		_, finalDetails := limiter.peekWithDetails("test-fail-waitn", executionTime)
+		require.Equal(t, int64(0), finalDetails[0].TokensRemaining(), "should still have 0 tokens after failed wait")
+	})
+
+	// Test 5: Verify WaitN with high token count
+	t.Run("WaitN_High_Token_Count", func(t *testing.T) {
+		bigLimit := NewLimit(50, time.Second)
+		bigLimiter := NewLimiter(keyer, bigLimit)
+		const tokensToWait = 25
+
+		// Verify initial state
+		_, initialDetails := bigLimiter.peekWithDetails("test-big-waitn", executionTime)
+		require.Equal(t, bigLimit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
+
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(time.Second), true
+		}
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		// WaitN should succeed and consume exactly tokensToWait tokens
+		allowed := bigLimiter.waitNWithCancellation("test-big-waitn", executionTime, tokensToWait, deadline, done)
+		require.True(t, allowed, "waitN should succeed with high token count")
+
+		// Verify exactly tokensToWait tokens were consumed
+		_, finalDetails := bigLimiter.peekWithDetails("test-big-waitn", executionTime)
+		require.Equal(t, bigLimit.count-tokensToWait, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
+	})
+
+	// Test 6: Concurrent WaitN should consume correct total tokens
+	t.Run("WaitN_Concurrent_Token_Consumption", func(t *testing.T) {
+		concurrentLimit := NewLimit(20, time.Second)
+		concurrentLimiter := NewLimiter(keyer, concurrentLimit)
+		const tokensPerWait = 2
+		const numGoroutines = 5             // Will try to consume 10 total tokens
+		const expectedSuccesses = int64(10) // 20 / 2 = 10 successful waits possible
+
+		results := make([]bool, numGoroutines)
+		var wg sync.WaitGroup
+
+		// Deadline that gives enough time
+		deadline := func() (time.Time, bool) {
+			return executionTime.Add(time.Second), true
+		}
+		done := func() <-chan struct{} {
+			return make(chan struct{}) // never closes
+		}
+
+		// Start concurrent waits
+		for i := range numGoroutines {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				results[i] = concurrentLimiter.waitNWithCancellation("test-concurrent-waitn", executionTime, tokensPerWait, deadline, done)
+			}(i)
+		}
+
+		wg.Wait()
+
+		// Count successes
+		var successes int64
+		for _, result := range results {
+			if result {
+				successes++
+			}
+		}
+
+		require.Equal(t, expectedSuccesses/tokensPerWait, successes, "expected exactly %d successful waits", expectedSuccesses/tokensPerWait)
+
+		// Verify total tokens consumed
+		_, finalDetails := concurrentLimiter.peekWithDetails("test-concurrent-waitn", executionTime)
+		expectedRemaining := concurrentLimit.count - (successes * tokensPerWait)
+		require.Equal(t, expectedRemaining, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens total", successes*tokensPerWait)
+	})
+}

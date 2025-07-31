@@ -422,7 +422,7 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	currentTime := startTime
 
 	for {
-		if r.allow(input, currentTime) {
+		if r.allowN(input, currentTime, n) {
 			return true
 		}
 

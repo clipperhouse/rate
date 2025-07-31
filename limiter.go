@@ -473,7 +473,8 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 
 	// Ensure cleanup happens when this waiter exits
 	defer func() {
-		// If no more waiters for this key, remove the entry to prevent memory leak
+		// If no more waiters for this key, remove the entry to prevent memory leak,
+		// reference-counted
 		if waiter.decrement() == 0 {
 			r.waiters.delete(key)
 		}
@@ -482,12 +483,14 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	for {
 		// The goroutine at the front of the queue gets to try for a token first.
 		waiter.mu.Lock()
+
+		// Try to get tokens while holding the waiter lock to prevent races
 		if r.allowN(input, currentTime, n) {
 			waiter.mu.Unlock()
 			return true
 		}
-		waiter.mu.Unlock()
 
+		// Calculate wait time while still holding waiter lock to maintain atomicity
 		buckets, limits := r.getBucketsAndLimits(input, currentTime, true)
 		unlock := rLockBuckets(buckets)
 
@@ -504,6 +507,9 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 			}
 		}
 		unlock()
+
+		// Release waiter lock after calculating wait time
+		waiter.mu.Unlock()
 
 		// guardrail, not sure if this is possible, but we don't want it.
 		if wait < 0 {

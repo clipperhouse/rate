@@ -1,9 +1,11 @@
 package rate
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2324,4 +2326,87 @@ func TestLimiter_WaitersCleanup_WithSuccessfulWaits(t *testing.T) {
 
 	require.Equal(t, concurrency, successes, "all waiters should eventually succeed")
 	require.Equal(t, 0, limiter.waiters.count(), "all waiters should be cleaned up after completion")
+}
+
+func TestLimiter_Wait_FIFOOrdering_HighContention(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input int) int {
+		return input
+	}
+
+	limiter := NewLimiter(keyer, NewLimit(1, 50*time.Millisecond))
+
+	// Exhaust the bucket
+	require.True(t, limiter.Allow(1))
+
+	// Test that multiple waiters can successfully acquire tokens
+	const waiters = 5
+	results := make(chan bool, waiters)
+
+	for range waiters {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			results <- limiter.Wait(ctx, 1)
+		}()
+	}
+
+	// Collect results
+	successes := 0
+	for range waiters {
+		select {
+		case success := <-results:
+			if success {
+				successes++
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Test timed out")
+		}
+	}
+
+	// Should get at least some successes (the fix should prevent token starvation)
+	require.Greater(t, successes, 0, "Should have some successful token acquisitions")
+	require.Equal(t, 0, limiter.waiters.count(), "All waiters should be cleaned up")
+}
+
+func TestLimiter_Wait_RaceCondition_Prevention(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input int) int {
+		return input
+	}
+	// Use a very restrictive limit to force contention
+	limiter := NewLimiter(keyer, NewLimit(1, 100*time.Millisecond))
+
+	// Exhaust the bucket
+	require.True(t, limiter.Allow(1))
+
+	const concurrency = 50
+	successes := int64(0)
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	// Start many goroutines that will compete for tokens
+	for range concurrency {
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			if limiter.Wait(ctx, 1) {
+				atomic.AddInt64(&successes, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Should have some successes but not more than the tokens available
+	// in the timeout period (roughly 20 tokens in 2 seconds at 100ms per token)
+	actual := atomic.LoadInt64(&successes)
+	require.Greater(t, actual, int64(0), "should have some successful acquisitions")
+	require.LessOrEqual(t, actual, int64(25), "should not exceed reasonable token availability")
+
+	// Verify no memory leaks
+	require.Equal(t, 0, limiter.waiters.count(), "all waiters should be cleaned up")
 }

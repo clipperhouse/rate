@@ -6,6 +6,8 @@ import "time"
 type Details[TInput any, TKey comparable] struct {
 	allowed         bool
 	limit           Limit
+	tokensRequested int64
+	tokensConsumed  int64
 	executionTime   time.Time
 	remainingTokens int64
 	bucketInput     TInput
@@ -37,7 +39,17 @@ func (d Details[TInput, TKey]) BucketKey() TKey {
 	return d.bucketKey
 }
 
-// RemainingTokens returns the number of remaining tokens in the bucket
-func (d Details[TInput, TKey]) RemainingTokens() int64 {
+// TokensRequested returns the number of tokens that were requested for the request.
+func (d Details[TInput, TKey]) TokensRequested() int64 {
+	return d.tokensRequested
+}
+
+// TokensConsumed returns the number of tokens that were consumed for the request.
+func (d Details[TInput, TKey]) TokensConsumed() int64 {
+	return d.tokensConsumed
+}
+
+// TokensRemaining returns the number of remaining tokens in the bucket
+func (d Details[TInput, TKey]) TokensRemaining() int64 {
 	return d.remainingTokens
 }

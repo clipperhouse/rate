@@ -1,7 +1,6 @@
 package rate
 
 import (
-	"context"
 	"sync"
 	"time"
 )
@@ -29,31 +28,39 @@ func newBucket(executionTime time.Time, limit Limit) *bucket {
 	}
 }
 
-// allow returns true if there are available tokens in the bucket, and consumes a token if so.
+// allow returns true if there are at least `n` tokens available in the bucket,
+// and consumes `n` tokens if so.
+//
 // If false, no tokens were consumed.
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) allow(executionTime time.Time, limit Limit) bool {
-	if b.hasToken(executionTime, limit) {
-		b.consumeToken(executionTime, limit)
+func (b *bucket) allow(executionTime time.Time, limit Limit, n int64) bool {
+	if b.hasTokens(executionTime, limit, n) {
+		b.consumeTokens(executionTime, limit, n)
 		return true
 	}
 	return false
 }
 
-// hasToken checks if any tokens are available in the bucket
+// hasTokens checks if there are at least `n` tokens in the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) hasToken(executionTime time.Time, limit Limit) bool {
-	return !b.time.After(executionTime.Add(-limit.durationPerToken))
+func (b *bucket) hasTokens(executionTime time.Time, limit Limit, n int64) bool {
+	// "not after" is "before or equal"
+	return !b.time.After(executionTime.Add(-limit.durationPerToken * time.Duration(n)))
 }
 
-// consumeToken removes one token from the bucket
+// consumeTokens removes `n` tokens from the bucket
+//
+// consumeTokens does not check if there are enough tokens in the bucket;
+// therefore, you can go into "debt" by consuming more tokens than are available.
+//
+// n can be negative, which has the effect of adding tokens to the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) consumeToken(executionTime time.Time, limit Limit) {
+func (b *bucket) consumeTokens(executionTime time.Time, limit Limit, n int64) {
 	b.checkCutoff(executionTime, limit)
-	b.time = b.time.Add(limit.durationPerToken)
+	b.time = b.time.Add(limit.durationPerToken * time.Duration(n))
 }
 
 func (b *bucket) checkCutoff(executionTime time.Time, limit Limit) (updated bool) {
@@ -81,67 +88,13 @@ func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit)
 	return int64(executionTime.Sub(bucketTime) / limit.durationPerToken)
 }
 
-// nextTokenTime returns the time when the next token might be available
-// Note that concurrent access by other goroutines might consume tokens;
-// treat nextTokenTime as a prediction, not a guarantee.
+// nextTokensTime returns the earliest time when `n` tokens might be available,
+// due to the passage of time.
+//
+// Note: concurrent access by other goroutines might consume (or add!) tokens;
+// treat nextTokensTime as a prediction, not a guarantee.
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) nextTokenTime(limit Limit) time.Time {
-	return b.time.Add(limit.durationPerToken)
-}
-
-// wait tries to acquire a token by polling b.allow(), until the context is cancelled
-// or the allow succeeds.
-//
-// As with [allow], it returns true if a token was acquired, false if not.
-func (b *bucket) wait(ctx context.Context, startTime time.Time, limit Limit) bool {
-	return b.waitWithCancellation(
-		startTime,
-		limit,
-		ctx.Deadline,
-		ctx.Done,
-	)
-}
-
-// waitWithCancellation is a more testable version of wait that accepts
-// deadline and done functions instead of a context, allowing for deterministic testing.
-func (b *bucket) waitWithCancellation(
-	startTime time.Time,
-	limit Limit,
-	deadline func() (time.Time, bool),
-	done func() <-chan struct{},
-) bool {
-	// "current" time is meant to be an approximation of the
-	// delta between the start time and the real system clock.
-	currentTime := startTime
-
-	for {
-		b.mu.Lock()
-		if b.allow(currentTime, limit) {
-			b.mu.Unlock()
-			return true
-		}
-
-		nextToken := b.nextTokenTime(limit)
-		b.mu.Unlock()
-
-		// early return if we can't possibly acquire a token before the context is done
-		if deadline, ok := deadline(); ok {
-			if deadline.Before(nextToken) {
-				return false
-			}
-		}
-
-		untilNext := nextToken.Sub(currentTime)
-
-		// when is the soonest we might get a token?
-		wait := min(untilNext, limit.durationPerToken)
-
-		select {
-		case <-done():
-			return false
-		case <-time.After(wait):
-			currentTime = currentTime.Add(wait)
-		}
-	}
+func (b *bucket) nextTokensTime(limit Limit, n int64) time.Time {
+	return b.time.Add(limit.durationPerToken * time.Duration(n))
 }

@@ -42,11 +42,27 @@ func NewLimiterFunc[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limi
 	}
 }
 
-// Allow returns true if tokens are available for the given key.
+// Allow returns true if one or more tokens are available for the given key.
 // If true, it will consume a token from the key's bucket. If false,
 // no token will be consumed.
+//
+// If the Limiter has multiple limits, Allow will return true only if
+// all limits allow the request, and one token will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
 func (r *Limiter[TInput, TKey]) Allow(input TInput) bool {
 	return r.allow(input, time.Now())
+}
+
+// AllowN returns true if at least `n` tokens are available for the given key.
+// If true, it will consume `n` tokens. If false, no token will be consumed.
+//
+// If the Limiter has multiple limits, AllowN will return true only if
+// all limits allow the request, and `n` tokens will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
+func (r *Limiter[TInput, TKey]) AllowN(input TInput, n int64) bool {
+	return r.allowN(input, time.Now(), n)
 }
 
 func (r *Limiter[TInput, TKey]) getBucketSpecs(input TInput) []bucketSpec[TKey] {
@@ -124,6 +140,10 @@ func rLockBuckets(buckets []*bucket) (unlock func()) {
 }
 
 func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) bool {
+	return r.allowN(input, executionTime, 1)
+}
+
+func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
@@ -140,7 +160,7 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
-		if !b.hasToken(executionTime, limit) {
+		if !b.hasTokens(executionTime, limit, n) {
 			allowAll = false
 			break
 		}
@@ -151,24 +171,46 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			b.consumeToken(executionTime, limit)
+			b.consumeTokens(executionTime, limit, n)
 		}
 	}
 
 	return allowAll
 }
 
-// AllowWithDetails returns true if tokens are available for the given key,
-// and details about the bucket and the execution time. You might
-// use these details for logging, returning headers, etc.
+// AllowWithDetails returns true if a token is available for the given key,
+// along with details about the bucket(s) and tokens. You might use these details for
+// logging, returning headers, etc.
 //
-// If true, it will consume a token from the key's bucket. If false,
-// no token will be consumed.
+// If true, it will consume one token. If false, no token will be consumed.
+//
+// If the Limiter has multiple limits, AllowWithDetails will return true only if
+// all limits allow the request, and one token will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
 func (r *Limiter[TInput, TKey]) AllowWithDetails(input TInput) (bool, []Details[TInput, TKey]) {
 	return r.allowWithDetails(input, time.Now())
 }
 
+// AllowNWithDetails returns true if at least `n` tokens are available
+// for the given key, along with details about the bucket(s), remaining tokens, etc.
+// You might use these details for logging, returning headers, etc.
+//
+// If true, it will consume `n` tokens. If false, no token will be consumed.
+//
+// If the Limiter has multiple limits, AllowNWithDetails will return true only if
+// all limits allow the request, and `n` tokens will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
+func (r *Limiter[TInput, TKey]) AllowNWithDetails(input TInput, n int64) (bool, []Details[TInput, TKey]) {
+	return r.allowNWithDetails(input, time.Now(), n)
+}
+
 func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
+	return r.allowNWithDetails(input, executionTime, 1)
+}
+
+func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime time.Time, n int64) (bool, []Details[TInput, TKey]) {
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
@@ -183,12 +225,13 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
-		allow := b.hasToken(executionTime, limit)
+		allow := b.hasTokens(executionTime, limit, n)
 		allowAll = allowAll && allow
 		details[i] = Details[TInput, TKey]{
 			allowed:         allow,
 			executionTime:   executionTime,
 			limit:           limit,
+			tokensRequested: n,
 			remainingTokens: b.remainingTokens(executionTime, limit),
 			bucketInput:     input,
 			bucketKey:       r.keyer(input),
@@ -200,8 +243,9 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			b.consumeToken(executionTime, limit)
+			b.consumeTokens(executionTime, limit, n)
 			details[i].remainingTokens = b.remainingTokens(executionTime, limit)
+			details[i].tokensConsumed = n
 		}
 	}
 
@@ -214,9 +258,21 @@ func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
 	return r.peek(input, time.Now())
 }
 
+// PeekN returns true if tokens are available for the given key,
+// but without consuming any tokens.
+func (r *Limiter[TInput, TKey]) PeekN(input TInput, n int64) bool {
+	return r.peekN(input, time.Now(), n)
+}
+
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
+	return r.peekN(input, executionTime, 1)
+}
+
+// peek returns true if tokens are available for the given key,
+// but without consuming any tokens.
+func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n int64) bool {
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
 	unlock := rLockBuckets(buckets)
@@ -224,7 +280,7 @@ func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
-		if !b.hasToken(executionTime, limit) {
+		if !b.hasTokens(executionTime, limit, n) {
 			return false
 		}
 	}
@@ -242,6 +298,19 @@ func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, []Details[T
 }
 
 func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
+	return r.peekNWithDetails(input, executionTime, 1)
+}
+
+// PeekNWithDetails returns true if `n` tokens are available for the given key,
+// along with details about the bucket and remaining tokens. You might
+// use these details for logging, returning headers, etc.
+//
+// No tokens are consumed.
+func (r *Limiter[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool, []Details[TInput, TKey]) {
+	return r.peekNWithDetails(input, time.Now(), n)
+}
+
+func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, []Details[TInput, TKey]) {
 	buckets, limits := r.getBucketsAndLimits(input, executionTime, false)
 
 	details := make([]Details[TInput, TKey], len(buckets))
@@ -254,13 +323,15 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 		b := buckets[i]
 		limit := limits[i]
 
-		allow := b.hasToken(executionTime, limit)
+		allow := b.hasTokens(executionTime, limit, n)
 		allowAll = allowAll && allow
 
 		details[i] = Details[TInput, TKey]{
 			allowed:         allow,
 			executionTime:   executionTime,
 			limit:           limit,
+			tokensRequested: n,
+			tokensConsumed:  0, // Never consume tokens in peek
 			remainingTokens: b.remainingTokens(executionTime, limit),
 			bucketInput:     input,
 			bucketKey:       r.keyer(input),
@@ -291,23 +362,58 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
 func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
-	return r.wait(ctx, input, time.Now())
+	return r.waitN(ctx, input, time.Now(), 1)
 }
 
-func (r *Limiter[TInput, TKey]) wait(ctx context.Context, input TInput, executionTime time.Time) bool {
-	return r.waitWithCancellation(
+// WaitN will poll the [Limiter.Allow] method for a period of time,
+// until it is cancelled by the passed context. It has the
+// effect of adding latency to requests instead of refusing
+// them immediately. Consider it graceful degradation.
+//
+// WaitN will return true if `n` tokens become available prior to
+// the context cancellation, and will consume a token. It will
+// return false if not, and therefore not consume a token.
+//
+// Take care to create an appropriate context. You almost certainly
+// want [context.WithTimeout] or [context.WithDeadline].
+//
+// You should be conservative, as Wait will introduce
+// backpressure on your upstream systems -- connections
+// may be held open longer, requests may queue in memory.
+//
+// A good starting place will be to timeout after waiting
+// for one token. For example:
+//
+//	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
+func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
+	return r.waitN(ctx, input, time.Now(), n)
+}
+
+func (r *Limiter[TInput, TKey]) waitN(ctx context.Context, input TInput, executionTime time.Time, n int64) bool {
+	return r.waitNWithCancellation(
 		input,
 		executionTime,
+		n,
 		ctx.Deadline,
 		ctx.Done,
 	)
 }
 
-// waitWithCancellation is a more testable version of wait that accepts
-// deadline and done functions instead of a context, allowing for deterministic testing.
 func (r *Limiter[TInput, TKey]) waitWithCancellation(
 	input TInput,
 	startTime time.Time,
+	deadline func() (time.Time, bool),
+	done func() <-chan struct{},
+) bool {
+	return r.waitNWithCancellation(input, startTime, 1, deadline, done)
+}
+
+// waitWithCancellation is a more testable version of wait that accepts
+// deadline and done functions instead of a context, allowing for deterministic testing.
+func (r *Limiter[TInput, TKey]) waitNWithCancellation(
+	input TInput,
+	startTime time.Time,
+	n int64,
 	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
@@ -316,7 +422,7 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 	currentTime := startTime
 
 	for {
-		if r.allow(input, currentTime) {
+		if r.allowN(input, currentTime, n) {
 			return true
 		}
 
@@ -329,7 +435,7 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 		for i := range buckets {
 			b := buckets[i]
 			limit := limits[i]
-			nextToken := b.nextTokenTime(limit)
+			nextToken := b.nextTokensTime(limit, n)
 			untilNext := nextToken.Sub(currentTime)
 			wait = min(wait, untilNext)
 		}

@@ -1,13 +1,55 @@
 package rate
 
 import (
-	"context"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestBucket_HasEnoughTokens(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	// One token at a time
+	{
+		limit := NewLimit(9, time.Second)
+		bucket := newBucket(now, limit)
+
+		for range limit.count {
+			actual := bucket.hasTokens(now, limit, 1)
+			require.True(t, actual, "expected to have enough tokens initially")
+		}
+
+		// Consume all tokens
+		for range limit.count {
+			bucket.consumeTokens(now, limit, 1)
+		}
+
+		actual := bucket.hasTokens(now, limit, 1)
+		require.False(t, actual, "expected to have no tokens after consuming all")
+	}
+
+	// Multiple tokens
+	{
+		limit := NewLimit(9, time.Second)
+		bucket := newBucket(now, limit)
+
+		bucket.consumeTokens(now, limit, 3)
+		require.True(t, bucket.hasTokens(now, limit, 1), "expected to have at least 1 token after consuming 3")
+		require.True(t, bucket.hasTokens(now, limit, 6), "expected to have 6 tokens after consuming 3")
+		require.False(t, bucket.hasTokens(now, limit, 7), "expected not to have 7 tokens after consuming 3")
+
+		bucket.consumeTokens(now, limit, 5)
+		require.True(t, bucket.hasTokens(now, limit, 1), "expected to have at least 1 token after consuming 5")
+		require.False(t, bucket.hasTokens(now, limit, 2), "expected not to have 2 tokens after consuming 5")
+		require.False(t, bucket.hasTokens(now, limit, 7), "expected not to have 7 tokens after consuming 5")
+
+		bucket.consumeTokens(now, limit, 5)
+		require.False(t, bucket.hasTokens(now, limit, 1), "expected to have no tokens after consuming 5")
+		require.False(t, bucket.hasTokens(now, limit, 2), "expected not to have 2 tokens after consuming 5")
+	}
+}
 
 func TestBucket_RemainingTokens(t *testing.T) {
 	t.Parallel()
@@ -34,7 +76,7 @@ func TestBucket_RemainingTokens(t *testing.T) {
 func TestBucket_ConsumeToken(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	limit := NewLimit(9, time.Second)
+	limit := NewLimit(11, time.Second)
 	bucket := newBucket(now, limit)
 
 	for i := range limit.count {
@@ -43,12 +85,28 @@ func TestBucket_ConsumeToken(t *testing.T) {
 			expected := limit.count - i
 			require.Equal(t, expected, actual, "remaining tokens expected consumption")
 		}
-		bucket.consumeToken(now, limit)
+		bucket.consumeTokens(now, limit, 1)
 		{
 			actual := bucket.remainingTokens(now, limit)
 			expected := limit.count - i - 1
 			require.Equal(t, expected, actual, "remaining tokens should be one less after consumption")
 		}
+	}
+}
+
+func TestBucket_ConsumeTokens(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	limit := NewLimit(11, time.Second)
+	bucket := newBucket(now, limit)
+
+	for n := range int64(3) {
+		before := bucket.remainingTokens(now, limit)
+		bucket.consumeTokens(now, limit, n)
+		after := bucket.remainingTokens(now, limit)
+		actual := before - after
+		expected := n
+		require.Equal(t, expected, actual, "remaining tokens should be decremented by the number of consumed tokens")
 	}
 }
 
@@ -63,18 +121,18 @@ func TestBucket_ConsumeToken_OldBucket(t *testing.T) {
 
 	// exhaust the bucket
 	for range limit.count {
-		bucket.consumeToken(executionTime, limit)
+		bucket.consumeTokens(executionTime, limit, 1)
 	}
-	require.False(t, bucket.hasToken(executionTime, limit), "expected to have no tokens after exhausting the bucket")
+	require.False(t, bucket.hasTokens(executionTime, limit, 1), "expected to have no tokens after exhausting the bucket")
 
 	// age the bucket
 	executionTime = executionTime.Add(time.Hour)
 
 	// exhaust it quickly again
 	for range limit.count {
-		bucket.consumeToken(executionTime, limit)
+		bucket.consumeTokens(executionTime, limit, 1)
 	}
-	require.False(t, bucket.hasToken(executionTime, limit), "expected to have no tokens after exhausting the old bucket")
+	require.False(t, bucket.hasTokens(executionTime, limit, 1), "expected to have no tokens after exhausting the old bucket")
 }
 
 func TestBucket_CheckCutoff(t *testing.T) {
@@ -85,7 +143,7 @@ func TestBucket_CheckCutoff(t *testing.T) {
 
 	require.False(t, bucket.checkCutoff(now, limit), "expected no cutoff update on fresh bucket")
 
-	bucket.consumeToken(now, limit)
+	bucket.consumeTokens(now, limit, 1)
 	require.False(t, bucket.checkCutoff(now, limit), "expected no cutoff update bucket after consumption")
 
 	now = now.Add(time.Hour)
@@ -101,39 +159,39 @@ func TestBucket_Allow(t *testing.T) {
 	bucket := newBucket(now, limit)
 
 	for range limit.count {
-		actual := bucket.allow(now, limit)
+		actual := bucket.allow(now, limit, 1)
 		require.True(t, actual, "expected to allow request when tokens are available")
 	}
 
 	// Tokens should be gone now
 	{
-		actual := bucket.allow(now, limit)
+		actual := bucket.allow(now, limit, 1)
 		require.False(t, actual, "expected to deny request after tokens are exhausted")
 	}
 
 	// Refill with one token and consume it
 	{
 		now = now.Add(limit.durationPerToken)
-		actual := bucket.allow(now, limit)
+		actual := bucket.allow(now, limit, 1)
 		require.True(t, actual, "expected to allow request after waiting for refill")
 	}
 
 	// Token should be gone now
 	{
-		actual := bucket.allow(now, limit)
+		actual := bucket.allow(now, limit, 1)
 		require.False(t, actual, "expected to deny request after one refilled token is consumed")
 	}
 
 	// If the bucket is old, it should not mistakenly be interpreted as having too many tokens
 	now = now.Add(time.Hour)
 	for range limit.count {
-		actual := bucket.allow(now, limit)
+		actual := bucket.allow(now, limit, 1)
 		require.True(t, actual, "expected to allow requests with old bucket")
 	}
 
 	// Tokens should be gone now
 	{
-		actual := bucket.allow(now, limit)
+		actual := bucket.allow(now, limit, 1)
 		require.False(t, actual, "expected to deny request after old bucket's tokens are exhausted")
 	}
 }
@@ -148,334 +206,25 @@ func TestBucket_HasToken(t *testing.T) {
 
 	for range limit.count * 2 {
 		// any number of hasToken should return true, not mutate the bucket
-		actual := bucket.hasToken(now, limit)
+		actual := bucket.hasTokens(now, limit, 1)
 		require.True(t, actual, "expected to allow request with any number of hasToken calls")
 	}
 
 	// Consume all the tokens
 	for range limit.count {
-		actual := bucket.allow(now, limit)
+		actual := bucket.allow(now, limit, 1)
 		require.True(t, actual, "expected to allow requests as normal when hasToken previously called")
 	}
 
-	require.False(t, bucket.allow(now, limit), "should have exhausted tokens")
+	require.False(t, bucket.allow(now, limit, 1), "should have exhausted tokens")
 
 	for range limit.count * 2 {
 		// any number of hasToken should return false with no remaining tokens
-		actual := bucket.hasToken(now, limit)
+		actual := bucket.hasTokens(now, limit, 1)
 		require.False(t, actual, "expected all tokens to be gone")
 	}
 
 	// Refill one token
 	now = now.Add(limit.durationPerToken)
-	require.True(t, bucket.hasToken(now, limit), "hasToken should return true after token refill")
-}
-
-func TestBucket_Wait_Concurrent(t *testing.T) {
-	t.Parallel()
-	now := time.Now()
-	limit := NewLimit(5, 100*time.Millisecond)
-	bucket := newBucket(now, limit)
-
-	// Consume all initial tokens
-	for range limit.count {
-		ok := bucket.allow(now, limit)
-		require.True(t, ok, "should allow initial tokens")
-	}
-
-	// All tokens should be exhausted
-	require.False(t, bucket.allow(now, limit), "should not allow when tokens exhausted")
-
-	ctx := context.Background()
-
-	// These waits should queue up and execute as tokens become available
-	var wg sync.WaitGroup
-	for processID := range limit.count {
-		wg.Add(1)
-		go func(processID int64) {
-			defer wg.Done()
-			allow := bucket.wait(ctx, now, limit)
-			require.True(t, allow, "should acquire token after waiting (goroutine %d)", processID)
-		}(processID)
-	}
-	wg.Wait()
-
-	// All tokens should be exhausted again
-	require.False(t, bucket.allow(now.Add(limit.period), limit), "should not allow after all waits have completed")
-}
-
-func TestBucket_WaitWithCancellation(t *testing.T) {
-	t.Parallel()
-	executionTime := time.Now()
-	limit := NewLimit(2, 100*time.Millisecond)
-	bucket := newBucket(executionTime, limit)
-
-	// Consume all tokens
-	for range limit.count {
-		ok := bucket.allow(executionTime, limit)
-		require.True(t, ok, "should allow initial tokens")
-	}
-
-	// Should not allow immediately
-	{
-		allow := bucket.allow(executionTime, limit)
-		require.False(t, allow, "should not allow when tokens exhausted")
-	}
-
-	// Test 1: Wait with enough time to acquire a token
-	{
-		// Deadline that gives enough time
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken), true
-		}
-
-		// Done channel that never closes (no cancellation)
-		done := func() <-chan struct{} {
-			return make(chan struct{})
-		}
-
-		allow := bucket.waitWithCancellation(executionTime, limit, deadline, done)
-		require.True(t, allow, "should acquire token after waiting")
-
-		// We waited
-		executionTime = executionTime.Add(limit.durationPerToken)
-
-		// Should not allow again immediately
-		ok := bucket.allow(executionTime, limit)
-		require.False(t, ok, "should not allow again immediately after wait")
-	}
-
-	// Test 2: Wait with deadline that expires before token is available
-	{
-		// Deadline that expires too soon
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken / 2), true
-		}
-
-		// Done channel that never closes
-		done := func() <-chan struct{} {
-			return make(chan struct{})
-		}
-
-		allow := bucket.waitWithCancellation(executionTime, limit, deadline, done)
-		require.False(t, allow, "should not acquire token if deadline expires before token is available")
-	}
-
-	// Test 3: Wait with immediate cancellation
-	{
-		// Deadline that gives enough time
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken), true
-		}
-
-		// Done channel that closes immediately
-		done := func() <-chan struct{} {
-			ch := make(chan struct{})
-			close(ch)
-			return ch
-		}
-
-		allow := bucket.waitWithCancellation(executionTime, limit, deadline, done)
-		require.False(t, allow, "should not acquire token if context is cancelled immediately")
-	}
-
-	// Test 4: Wait with no deadline
-	{
-		// Deadline that returns no deadline
-		deadline := func() (time.Time, bool) {
-			return time.Time{}, false
-		}
-
-		// Done channel that never closes
-		done := func() <-chan struct{} {
-			return make(chan struct{})
-		}
-
-		{
-			allow := bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			require.True(t, allow, "should acquire token when no deadline is set")
-		}
-
-		// We waited
-		executionTime = executionTime.Add(limit.durationPerToken)
-
-		// Should not allow again immediately
-		{
-			allow := bucket.allow(executionTime, limit)
-			require.False(t, allow, "should not allow again immediately after wait")
-		}
-	}
-}
-
-func TestBucket_WaitWithCancellation_Concurrent(t *testing.T) {
-	t.Parallel()
-	executionTime := time.Now()
-	limit := NewLimit(5, 100*time.Millisecond) // 5 tokens per 100ms (1 every 20ms)
-	bucket := newBucket(executionTime, limit)
-
-	// Consume all initial tokens
-	for range limit.count {
-		allow := bucket.allow(executionTime, limit)
-		require.True(t, allow, "should allow initial tokens")
-	}
-
-	// All tokens should be exhausted
-	require.False(t, bucket.allow(executionTime, limit), "should not allow when tokens exhausted")
-
-	// Test 1: Multiple goroutines competing for tokens with enough time
-	{
-		// More goroutines than available tokens
-		concurrency := limit.count * 3
-		results := make([]bool, concurrency)
-
-		// Deadline that gives enough time for all tokens to be refilled
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.period), true
-		}
-
-		// Done channel that never closes
-		done := func() <-chan struct{} {
-			return make(chan struct{})
-		}
-
-		var wg sync.WaitGroup
-		for processID := range concurrency {
-			wg.Add(1)
-			go func(processID int64) {
-				defer wg.Done()
-				results[processID] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			}(processID)
-		}
-		wg.Wait()
-
-		// We waited
-		executionTime = executionTime.Add(limit.period)
-
-		// Count successes and failures
-		var sucesses, failures int64
-		for _, result := range results {
-			if result {
-				sucesses++
-			} else {
-				failures++
-			}
-		}
-
-		// Exactly limit.count goroutines should have acquired a token
-		require.Equal(t, limit.count, sucesses, "expected exactly %d goroutines to acquire a token", limit.count)
-		// The rest should have been denied
-		require.Equal(t, concurrency-limit.count, failures, "expected %d goroutines to fail", concurrency-limit.count)
-
-		// All tokens should be exhausted again
-		allow := bucket.allow(executionTime, limit)
-		require.False(t, allow, "should not allow after all waits have completed")
-	}
-
-	// Test 2: Multiple goroutines with deadline that expires before tokens are available
-	{
-		// More goroutines than available tokens
-		concurrency := limit.count * 3
-		results := make([]bool, concurrency)
-
-		// Deadline that expires too soon
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken / 2), true
-		}
-
-		// Done channel that never closes
-		done := func() <-chan struct{} {
-			return make(chan struct{})
-		}
-
-		var wg sync.WaitGroup
-		for processID := range concurrency {
-			wg.Add(1)
-			go func(processID int64) {
-				defer wg.Done()
-				results[processID] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			}(processID)
-		}
-		wg.Wait()
-
-		// All should fail because deadline expires before tokens are available
-		for processID, result := range results {
-			require.False(t, result, "goroutine %d should not acquire token due to early deadline", processID)
-		}
-	}
-
-	// Test 3: Multiple goroutines with immediate cancellation
-	{
-		concurrency := limit.count
-		results := make([]bool, concurrency)
-
-		// Deadline that gives enough time
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.period), true
-		}
-
-		// Done channel that closes (cancels) immediately
-		done := func() <-chan struct{} {
-			ch := make(chan struct{})
-			close(ch)
-			return ch
-		}
-
-		// Start concurrent waits
-		var wg sync.WaitGroup
-		for processID := range concurrency {
-			wg.Add(1)
-			go func(processID int64) {
-				defer wg.Done()
-				results[processID] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			}(processID)
-		}
-		wg.Wait()
-
-		// All should fail because context is cancelled immediately
-		for processID, result := range results {
-			require.False(t, result, "goroutine %d should not acquire token due to immediate cancellation", processID)
-		}
-	}
-
-	// Test 4: Multiple goroutines with staggered deadlines
-	{
-		concurrency := limit.count * 3
-		results := make([]bool, concurrency)
-
-		var wg sync.WaitGroup
-		for processID := range concurrency {
-			wg.Add(1)
-			go func(processID int64) {
-				defer wg.Done()
-
-				// Each goroutine gets a different deadline
-				deadlineOffset := time.Duration(processID) * limit.durationPerToken
-				deadline := func() (time.Time, bool) {
-					return executionTime.Add(deadlineOffset + limit.durationPerToken), true
-				}
-
-				// never cancels
-				done := func() <-chan struct{} {
-					return make(chan struct{})
-				}
-
-				results[processID] = bucket.waitWithCancellation(executionTime, limit, deadline, done)
-			}(processID)
-		}
-
-		wg.Wait()
-
-		// Count successes
-		var successes int64
-		for _, result := range results {
-			if result {
-				successes++
-			}
-		}
-
-		// Some should succeed (those with deadlines after tokens become available)
-		// and some should fail (those with deadlines before tokens become available)
-		require.Greater(t, successes, int64(0), "expected some goroutines to succeed")
-		require.Less(t, successes, concurrency, "expected some goroutines to fail")
-	}
+	require.True(t, bucket.hasTokens(now, limit, 1), "hasToken should return true after token refill")
 }

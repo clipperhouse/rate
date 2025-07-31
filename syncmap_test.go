@@ -60,6 +60,6 @@ func TestSyncMap_Count(t *testing.T) {
 	}
 
 	expected := 101
-	actual := sm.Count()
+	actual := sm.count()
 	require.Equal(t, expected, actual, "expected Count() to be accurate")
 }

@@ -500,8 +500,8 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 		var wait time.Duration
 		for i, b := range buckets {
 			limit := limits[i]
-			nextTokenTime := b.nextTokensTime(limit, n)
-			untilNext := nextTokenTime.Sub(currentTime)
+			nextTokensTime := b.nextTokensTime(limit, n)
+			untilNext := nextTokensTime.Sub(currentTime)
 			if i == 0 || untilNext > wait {
 				wait = untilNext
 			}

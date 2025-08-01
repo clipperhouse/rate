@@ -1856,19 +1856,19 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.True(t, allowed, "waitN should succeed")
 
 		// Verify exactly tokensToWait tokens were consumed
-		_, finalDetails := limiter.peekWithDetails("test-waitn-3", executionTime)
-		require.Equal(t, limit.count-tokensToWait, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
+		_, details := limiter.peekWithDetails("test-waitn-3", executionTime)
+		require.Equal(t, limit.count-tokensToWait, details[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
 	})
 
 	// Test 3: WaitN with multiple limits should consume n tokens from all buckets
 	t.Run("WaitN_MultipleLimits_Consumes_N_From_All", func(t *testing.T) {
 		perSecond := NewLimit(5, time.Second)
 		perMinute := NewLimit(20, time.Minute)
-		multiLimiter := NewLimiter(keyer, perSecond, perMinute)
+		limiter := NewLimiter(keyer, perSecond, perMinute)
 		const tokensToWait = 2
 
 		// Verify initial state
-		_, initialDetails := multiLimiter.peekWithDetails("test-multi-waitn", executionTime)
+		_, initialDetails := limiter.peekWithDetails("test-multi-waitn", executionTime)
 		require.Len(t, initialDetails, 2, "should have details for both limits")
 		require.Equal(t, perSecond.count, initialDetails[0].TokensRemaining(), "per-second should start with all tokens")
 		require.Equal(t, perMinute.count, initialDetails[1].TokensRemaining(), "per-minute should start with all tokens")
@@ -1882,11 +1882,11 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		}
 
 		// WaitN should succeed and consume exactly tokensToWait tokens from both limits
-		allowed := multiLimiter.waitNWithCancellation("test-multi-waitn", executionTime, tokensToWait, deadline, done)
+		allowed := limiter.waitNWithCancellation("test-multi-waitn", executionTime, tokensToWait, deadline, done)
 		require.True(t, allowed, "waitN should succeed with multiple limits")
 
 		// Verify exactly tokensToWait tokens were consumed from both buckets
-		_, finalDetails := multiLimiter.peekWithDetails("test-multi-waitn", executionTime)
+		_, finalDetails := limiter.peekWithDetails("test-multi-waitn", executionTime)
 		require.Len(t, finalDetails, 2, "should have details for both limits")
 		require.Equal(t, perSecond.count-tokensToWait, finalDetails[0].TokensRemaining(), "per-second should have consumed exactly %d tokens", tokensToWait)
 		require.Equal(t, perMinute.count-tokensToWait, finalDetails[1].TokensRemaining(), "per-minute should have consumed exactly %d tokens", tokensToWait)

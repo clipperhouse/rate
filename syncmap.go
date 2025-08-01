@@ -12,7 +12,7 @@ type syncMap[K comparable, V any] struct {
 // loadOrStore returns the existing value for the key if present.
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
-func (sm *syncMap[K, V]) loadOrCreate(key K, getter func() V) V {
+func (sm *syncMap[K, V]) loadOrGet(key K, getter func() V) V {
 	loaded, ok := sm.m.Load(key)
 	if ok {
 		return loaded.(V)

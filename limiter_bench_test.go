@@ -65,7 +65,7 @@ func BenchmarkLimiter_SingleVsMultiLimit(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			for j := range buckets {
 				limiter.allowN(j, now, 1)
 			}
@@ -86,7 +86,7 @@ func BenchmarkLimiter_SingleVsMultiLimit(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			for j := range buckets {
 				limiter.allowN(j, now, 1)
 			}
@@ -103,10 +103,9 @@ func BenchmarkLimiter_SingleBucket(b *testing.B) {
 	limiter := NewLimiter(keyer, limit)
 	now := time.Now()
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		limiter.allowN(0, now, 1)
 	}
 }

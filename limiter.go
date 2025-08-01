@@ -62,7 +62,6 @@ func NewLimiterFunc[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limi
 }
 
 func getWaiter() *waiter {
-	// Create a new waiter with an initial count of 1
 	return &waiter{}
 }
 
@@ -160,7 +159,7 @@ func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, userKey TKey, 
 		if persist {
 			b = r.buckets.loadOrStore(spec, newBucket)
 		} else {
-			b = r.buckets.loadOrCreate(spec, newBucket)
+			b = r.buckets.loadOrGet(spec, newBucket)
 		}
 
 		// Return slices with single elements - this still allocates but less than before
@@ -183,7 +182,7 @@ func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, userKey TKey, 
 		if persist {
 			b = r.buckets.loadOrStore(spec, newBucket)
 		} else {
-			b = r.buckets.loadOrCreate(spec, newBucket)
+			b = r.buckets.loadOrGet(spec, newBucket)
 		}
 		buckets[i] = b
 		limits[i] = spec.limit
@@ -224,6 +223,33 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	// no token is consumed from any bucket.
 
 	userKey := r.keyer(input)
+
+	// Fast path for single static limit - avoid slice allocations and optimize locking
+	if len(r.limits) == 1 && len(r.limitFuncs) == 0 {
+		spec := bucketSpec[TKey]{
+			limit:   r.limits[0],
+			userKey: userKey,
+		}
+
+		newBucket := func() *bucket {
+			return newBucket(executionTime, r.limits[0])
+		}
+
+		b := r.buckets.loadOrStore(spec, newBucket)
+
+		// Optimized locking for single bucket
+		b.mu.Lock()
+		defer b.mu.Unlock()
+
+		// Check and consume tokens in single operation
+		if b.hasTokens(executionTime, r.limits[0], n) {
+			b.consumeTokens(executionTime, r.limits[0], n)
+			return true
+		}
+		return false
+	}
+
+	// Fallback to multi-bucket path
 	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, true)
 	unlock := lockBuckets(buckets)
 	defer unlock()

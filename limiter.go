@@ -3,6 +3,7 @@ package rate
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,18 +24,12 @@ type waiter struct {
 
 // increment atomically increments the waiter count and returns the new count
 func (w *waiter) increment() int64 {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.count++
-	return w.count
+	return atomic.AddInt64(&w.count, 1)
 }
 
 // decrement atomically decrements the waiter count and returns the new count
 func (w *waiter) decrement() int64 {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.count--
-	return w.count
+	return atomic.AddInt64(&w.count, -1)
 }
 
 // Keyer is a function that takes an input and returns a bucket key.

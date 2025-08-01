@@ -1,0 +1,142 @@
+package rate
+
+import (
+	"strconv"
+	"testing"
+	"time"
+)
+
+// BenchmarkLimiter_AllowN_MultipleBuckets_SingleLimit benchmarks allowN with multiple buckets and single limit (happy path)
+func BenchmarkLimiter_AllowN_MultipleBuckets_SingleLimit(b *testing.B) {
+	// Pre-compute bucket keys to avoid string allocation overhead during benchmark
+	const buckets = 10000
+	keys := make([]string, buckets)
+	for i := range buckets {
+		keys[i] = "bucket-" + strconv.Itoa(i)
+	}
+
+	keyer := func(id int) string {
+		return keys[id]
+	}
+	limit := NewLimit(1000000, time.Second) // Large limit to ensure all requests succeed
+	limiter := NewLimiter(keyer, limit)
+	now := time.Now()
+
+	// Create all the buckets, this is a read test
+	for i := range buckets {
+		limiter.allowN(i, now, 1)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		for i := range buckets {
+			// Each bucket should allow the request
+			if !limiter.allowN(i, now, 1) {
+				b.Fatalf("Expected allowN to succeed for bucket %d", i)
+			}
+		}
+	}
+}
+
+// BenchmarkLimiter_SingleVsMultiLimit compares performance between single and multi-limit scenarios
+func BenchmarkLimiter_SingleVsMultiLimit(b *testing.B) {
+	const buckets = 1000
+	keys := make([]string, buckets)
+	for i := range buckets {
+		keys[i] = "bucket-" + strconv.Itoa(i)
+	}
+
+	keyer := func(id int) string {
+		return keys[id]
+	}
+
+	b.Run("SingleLimit", func(b *testing.B) {
+		limit := NewLimit(1000000, time.Second)
+		limiter := NewLimiter(keyer, limit)
+		now := time.Now()
+
+		// Warm up buckets
+		for i := range buckets {
+			limiter.allowN(i, now, 1)
+		}
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			for j := range buckets {
+				limiter.allowN(j, now, 1)
+			}
+		}
+	})
+
+	b.Run("MultiLimit", func(b *testing.B) {
+		limit1 := NewLimit(1000000, time.Second)
+		limit2 := NewLimit(500000, time.Second/2)
+		limiter := NewLimiter(keyer, limit1, limit2)
+		now := time.Now()
+
+		// Warm up buckets
+		for i := range buckets {
+			limiter.allowN(i, now, 1)
+		}
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			for j := range buckets {
+				limiter.allowN(j, now, 1)
+			}
+		}
+	})
+}
+
+// BenchmarkLimiter_SingleBucket tests single bucket access patterns (common for per-endpoint rate limiting)
+func BenchmarkLimiter_SingleBucket(b *testing.B) {
+	keyer := func(id int) string {
+		return "single-bucket"
+	}
+	limit := NewLimit(1000000, time.Second)
+	limiter := NewLimiter(keyer, limit)
+	now := time.Now()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		limiter.allowN(0, now, 1)
+	}
+}
+
+// BenchmarkLimiter_LargeBucketCount tests behavior with many buckets (realistic for production)
+func BenchmarkLimiter_LargeBucketCount(b *testing.B) {
+	const buckets = 100000 // Large bucket count simulating many users/IPs
+	keys := make([]string, buckets)
+	for i := range buckets {
+		keys[i] = "bucket-" + strconv.Itoa(i)
+	}
+
+	keyer := func(id int) string {
+		return keys[id]
+	}
+	limit := NewLimit(1000000, time.Second)
+	limiter := NewLimiter(keyer, limit)
+	now := time.Now()
+
+	// Only warm up first 1000 buckets to test mixed hot/cold access
+	for i := 0; i < 1000; i++ {
+		limiter.allowN(i, now, 1)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		// Access pattern: mostly hot buckets with occasional cold ones
+		bucketID := i % buckets
+		limiter.allowN(bucketID, now, 1)
+	}
+}

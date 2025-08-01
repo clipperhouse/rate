@@ -2,6 +2,7 @@ package rate
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -11,6 +12,29 @@ type Limiter[TInput any, TKey comparable] struct {
 	limits     []Limit
 	limitFuncs []LimitFunc[TInput]
 	buckets    syncMap[bucketSpec[TKey], *bucket]
+	waiters    syncMap[TKey, *waiter]
+}
+
+// waiter represents a reservation queue for a specific key with reference counting
+type waiter struct {
+	mu    sync.Mutex
+	count int64 // number of active waiters for this key
+}
+
+// increment atomically increments the waiter count and returns the new count
+func (w *waiter) increment() int64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.count++
+	return w.count
+}
+
+// decrement atomically decrements the waiter count and returns the new count
+func (w *waiter) decrement() int64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.count--
+	return w.count
 }
 
 // Keyer is a function that takes an input and returns a bucket key.
@@ -40,6 +64,13 @@ func NewLimiterFunc[TInput any, TKey comparable](keyer Keyer[TInput, TKey], limi
 		keyer:      keyer,
 		limitFuncs: limitFuncs,
 	}
+}
+
+// getWaiter atomically gets or creates a waiter entry and increments its reference count
+func (r *Limiter[TInput, TKey]) getWaiter(key TKey) *waiter {
+	waiter := r.waiters.loadOrStore(key, &waiter{})
+	waiter.increment()
+	return waiter
 }
 
 // Allow returns true if one or more tokens are available for the given key.
@@ -341,7 +372,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 	return allowAll, details
 }
 
-// Wait will poll the [Limiter.Allow] method for a period of time,
+// Wait will poll [Allow] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
@@ -361,18 +392,23 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 // for one token. For example:
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
+//
+// Wait offers best-effort FIFO ordering of requests. Under sustained
+// contention (when multiple requests wait longer than ~1ms), the Go runtime's
+// mutex starvation mode ensures strict FIFO ordering. Under light load,
+// ordering may be less strict but performance is optimized.
 func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 	return r.waitN(ctx, input, time.Now(), 1)
 }
 
-// WaitN will poll the [Limiter.Allow] method for a period of time,
+// WaitN will poll [Limiter.AllowN] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
 //
 // WaitN will return true if `n` tokens become available prior to
-// the context cancellation, and will consume a token. It will
-// return false if not, and therefore not consume a token.
+// the context cancellation, and will consume `n` tokens. If not,
+// it will return false, and therefore consume no tokens.
 //
 // Take care to create an appropriate context. You almost certainly
 // want [context.WithTimeout] or [context.WithDeadline].
@@ -385,6 +421,11 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 // for one token. For example:
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
+//
+// WaitN offers best-effort FIFO ordering of requests. Under sustained
+// contention (when multiple requests wait longer than ~1ms), the Go runtime's
+// mutex starvation mode ensures strict FIFO ordering. Under light load,
+// ordering may be less strict but performance is optimized.
 func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
 	return r.waitN(ctx, input, time.Now(), n)
 }
@@ -417,31 +458,65 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
-	// "current" time is meant to be an approximation of the
-	// delta between the start time and the real system clock.
+	if r.allowN(input, startTime, n) {
+		return true
+	}
+
+	// currentTime is an approximation of the real clock moving forward
+	// it's imprecise because it depends on time.After below.
+	// For testing purposes, I want startTime (execution time) to
+	// be a parameter. The alternative is calling time.Now().
 	currentTime := startTime
 
+	key := r.keyer(input)
+	waiter := r.getWaiter(key)
+
+	// Ensure cleanup happens when this waiter exits
+	defer func() {
+		// If no more waiters for this key, remove the entry to prevent memory leak,
+		// reference-counted
+		if waiter.decrement() == 0 {
+			r.waiters.delete(key)
+		}
+	}()
+
 	for {
+		// The goroutine at the front of the queue gets to try for a token first.
+		waiter.mu.Lock()
+
+		// Try to get tokens while holding the waiter lock to prevent races
 		if r.allowN(input, currentTime, n) {
+			waiter.mu.Unlock()
 			return true
 		}
 
-		// Optimization: find the best time to try again
-
+		// Calculate wait time while still holding waiter lock to maintain atomicity
 		buckets, limits := r.getBucketsAndLimits(input, currentTime, true)
-
 		unlock := rLockBuckets(buckets)
-		wait := 100 * time.Millisecond // arbitrary default, is there a better way?
-		for i := range buckets {
-			b := buckets[i]
+
+		// Find the earliest time that all buckets might have `n` tokens.
+		// The bucket with the longest wait time will determine how long we wait,
+		// because `allow` requires all buckets to have `n` tokens.
+		var wait time.Duration
+		for i, b := range buckets {
 			limit := limits[i]
-			nextToken := b.nextTokensTime(limit, n)
-			untilNext := nextToken.Sub(currentTime)
-			wait = min(wait, untilNext)
+			nextTokensTime := b.nextTokensTime(limit, n)
+			untilNext := nextTokensTime.Sub(currentTime)
+			if i == 0 || untilNext > wait {
+				wait = untilNext
+			}
 		}
 		unlock()
 
-		// early return if we can't possibly acquire a token before the context is done
+		// Release waiter lock after calculating wait time
+		waiter.mu.Unlock()
+
+		// guardrail, not sure if this is possible, but we don't want it.
+		if wait < 0 {
+			wait = 0
+		}
+
+		// if we can't possibly get a token, fail fast
 		if deadline, ok := deadline(); ok {
 			if deadline.Before(currentTime.Add(wait)) {
 				return false

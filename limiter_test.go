@@ -1,9 +1,11 @@
 package rate
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1854,19 +1856,19 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.True(t, allowed, "waitN should succeed")
 
 		// Verify exactly tokensToWait tokens were consumed
-		_, finalDetails := limiter.peekWithDetails("test-waitn-3", executionTime)
-		require.Equal(t, limit.count-tokensToWait, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
+		_, details := limiter.peekWithDetails("test-waitn-3", executionTime)
+		require.Equal(t, limit.count-tokensToWait, details[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
 	})
 
 	// Test 3: WaitN with multiple limits should consume n tokens from all buckets
 	t.Run("WaitN_MultipleLimits_Consumes_N_From_All", func(t *testing.T) {
 		perSecond := NewLimit(5, time.Second)
 		perMinute := NewLimit(20, time.Minute)
-		multiLimiter := NewLimiter(keyer, perSecond, perMinute)
+		limiter := NewLimiter(keyer, perSecond, perMinute)
 		const tokensToWait = 2
 
 		// Verify initial state
-		_, initialDetails := multiLimiter.peekWithDetails("test-multi-waitn", executionTime)
+		_, initialDetails := limiter.peekWithDetails("test-multi-waitn", executionTime)
 		require.Len(t, initialDetails, 2, "should have details for both limits")
 		require.Equal(t, perSecond.count, initialDetails[0].TokensRemaining(), "per-second should start with all tokens")
 		require.Equal(t, perMinute.count, initialDetails[1].TokensRemaining(), "per-minute should start with all tokens")
@@ -1880,11 +1882,11 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		}
 
 		// WaitN should succeed and consume exactly tokensToWait tokens from both limits
-		allowed := multiLimiter.waitNWithCancellation("test-multi-waitn", executionTime, tokensToWait, deadline, done)
+		allowed := limiter.waitNWithCancellation("test-multi-waitn", executionTime, tokensToWait, deadline, done)
 		require.True(t, allowed, "waitN should succeed with multiple limits")
 
 		// Verify exactly tokensToWait tokens were consumed from both buckets
-		_, finalDetails := multiLimiter.peekWithDetails("test-multi-waitn", executionTime)
+		_, finalDetails := limiter.peekWithDetails("test-multi-waitn", executionTime)
 		require.Len(t, finalDetails, 2, "should have details for both limits")
 		require.Equal(t, perSecond.count-tokensToWait, finalDetails[0].TokensRemaining(), "per-second should have consumed exactly %d tokens", tokensToWait)
 		require.Equal(t, perMinute.count-tokensToWait, finalDetails[1].TokensRemaining(), "per-minute should have consumed exactly %d tokens", tokensToWait)
@@ -1990,4 +1992,421 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		expectedRemaining := concurrentLimit.count - (successes * tokensPerWait)
 		require.Equal(t, expectedRemaining, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens total", successes*tokensPerWait)
 	})
+}
+
+func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return "test-bucket"
+	}
+	// 1 token per 50ms
+	limit := NewLimit(1, 50*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+	executionTime := time.Now()
+
+	// Exhaust the single token
+	require.True(t, limiter.allow("key", executionTime), "should allow initial token")
+	require.False(t, limiter.allow("key", executionTime), "should not allow second token")
+
+	const concurrency = 5
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	startOrder := make(chan int, concurrency)
+	successOrder := make(chan int, concurrency)
+
+	// Deadline that gives enough time for all tokens to be refilled
+	deadline := func() (time.Time, bool) {
+		return executionTime.Add(time.Duration(concurrency) * limit.durationPerToken), true
+	}
+
+	// Done channel that never closes
+	done := func() <-chan struct{} {
+		return make(chan struct{}) // never closes
+	}
+
+	for i := range concurrency {
+		go func(id int) {
+			defer wg.Done()
+
+			// Signal that this goroutine is starting its wait
+			startOrder <- id
+
+			// Wait for a token
+			if limiter.waitWithCancellation("key", executionTime, deadline, done) {
+				// Signal that this goroutine successfully acquired a token
+				successOrder <- id
+			}
+		}(i)
+		// A small, non-deterministic delay to encourage goroutines to queue up in order.
+		// This helps simulate a real-world scenario where requests arrive sequentially.
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	wg.Wait()
+	close(startOrder)
+	close(successOrder)
+
+	var starts []int
+	for id := range startOrder {
+		starts = append(starts, id)
+	}
+
+	var successes []int
+	for id := range successOrder {
+		successes = append(successes, id)
+	}
+
+	require.Equal(t, concurrency, len(successes), "all goroutines should have acquired a token")
+	require.Equal(t, starts, successes, "success order should match start order, proving FIFO")
+}
+
+func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets(t *testing.T) {
+	t.Parallel()
+
+	const buckets = 3
+	const concurrencyPerBucket = 5
+	const concurrency = buckets * concurrencyPerBucket
+
+	keyer := func(input int) string {
+		return fmt.Sprintf("test-bucket-%d", input)
+	}
+	// 1 token per 50ms, to make the test run reasonably fast
+	limit := NewLimit(1, 50*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+	executionTime := time.Now()
+
+	// Exhaust the single token for each bucket
+	for i := range buckets {
+		require.True(t, limiter.allow(i, executionTime), "should allow initial token for bucket %d", i)
+		require.False(t, limiter.allow(i, executionTime), "should not allow second token for bucket %d", i)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	// Create maps to hold order channels for each bucket
+	startOrders := make(map[int]chan int, buckets)
+	successOrders := make(map[int]chan int, buckets)
+	for i := range buckets {
+		startOrders[i] = make(chan int, concurrencyPerBucket)
+		successOrders[i] = make(chan int, concurrencyPerBucket)
+	}
+
+	// Deadline that gives enough time for all tokens to be refilled for all goroutines
+	deadline := func() (time.Time, bool) {
+		return executionTime.Add(time.Duration(concurrencyPerBucket) * limit.durationPerToken), true
+	}
+
+	// Done channel that never closes
+	done := func() <-chan struct{} {
+		return make(chan struct{}) // never closes
+	}
+
+	for i := range concurrency {
+		go func(id int) {
+			defer wg.Done()
+			bucketID := id % buckets
+
+			// Announce that this goroutine is starting its wait for its bucket
+			startOrders[bucketID] <- id
+
+			// Wait for a token
+			if limiter.waitWithCancellation(bucketID, executionTime, deadline, done) {
+				// Announce that this goroutine successfully acquired a token
+				successOrders[bucketID] <- id
+			}
+		}(i)
+		// A small, non-deterministic delay to encourage goroutines to queue up in order.
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	wg.Wait()
+
+	// Close all channels
+	for bucketID := range buckets {
+		close(startOrders[bucketID])
+		close(successOrders[bucketID])
+	}
+
+	// Verify FIFO order for each bucket
+	for bucketID := range buckets {
+		var starts []int
+		for id := range startOrders[bucketID] {
+			starts = append(starts, id)
+		}
+
+		var successes []int
+		for id := range successOrders[bucketID] {
+			successes = append(successes, id)
+		}
+
+		require.Equal(t, concurrencyPerBucket, len(successes), "all goroutines for bucket %d should have acquired a token", bucketID)
+		require.Equal(t, starts, successes, "success order should match start order for bucket %d, proving FIFO", bucketID)
+	}
+}
+
+func TestLimiter_WaitersCleanup_Basic(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(1, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	// Initial waiters count should be 0
+	require.Equal(t, 0, limiter.waiters.count(), "initial waiters count should be 0")
+
+	executionTime := time.Now()
+
+	// Exhaust tokens for multiple keys
+	require.True(t, limiter.allow("key1", executionTime), "should allow initial token for key1")
+	require.True(t, limiter.allow("key2", executionTime), "should allow initial token for key2")
+
+	// Create deadline that will timeout immediately
+	deadline := func() (time.Time, bool) {
+		return executionTime, true // immediate timeout
+	}
+	done := func() <-chan struct{} {
+		ch := make(chan struct{})
+		close(ch) // immediately cancelled
+		return ch
+	}
+
+	// Try to wait - this should create a waiter entry that gets cleaned up
+	allow := limiter.waitWithCancellation("key1", executionTime, deadline, done)
+	require.False(t, allow, "should timeout immediately")
+
+	// Check if waiter was cleaned up
+	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+
+	// Try again with a different key
+	allow = limiter.waitWithCancellation("key2", executionTime, deadline, done)
+	require.False(t, allow, "should timeout immediately")
+
+	// Check waiters count again
+	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+
+	// Try the same key again
+	allow = limiter.waitWithCancellation("key1", executionTime, deadline, done)
+	require.False(t, allow, "should timeout immediately")
+
+	// Check waiters count
+	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+}
+
+func TestLimiter_WaitersCleanup_MemoryLeak_Prevention(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input int) string {
+		return fmt.Sprintf("key-%d", input)
+	}
+	limit := NewLimit(1, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Create deadline that will timeout immediately
+	deadline := func() (time.Time, bool) {
+		return executionTime, true // immediate timeout
+	}
+	done := func() <-chan struct{} {
+		ch := make(chan struct{})
+		close(ch) // immediately cancelled
+		return ch
+	}
+
+	const numKeys = 1000
+
+	// Simulate many different keys trying to wait
+	for i := range numKeys {
+		// First exhaust the token for this key
+		limiter.allow(i, executionTime)
+
+		// Then try to wait (which will timeout immediately)
+		result := limiter.waitWithCancellation(i, executionTime, deadline, done)
+		require.False(t, result, "should timeout immediately for key %d", i)
+	}
+
+	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after use")
+}
+
+func TestLimiter_WaitersCleanup_Concurrent(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input int) string {
+		return fmt.Sprintf("key-%d", input)
+	}
+	limit := NewLimit(1, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Create deadline that will timeout immediately
+	deadline := func() (time.Time, bool) {
+		return executionTime, true // immediate timeout
+	}
+	done := func() <-chan struct{} {
+		ch := make(chan struct{})
+		close(ch) // immediately cancelled
+		return ch
+	}
+
+	const concurrency = 100
+	const keysPerGoroutine = 10
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := range concurrency {
+		go func(i int) {
+			defer wg.Done()
+
+			for k := range keysPerGoroutine {
+				keyID := i*keysPerGoroutine + k
+
+				// First exhaust the token for this key
+				limiter.allow(keyID, executionTime)
+
+				// Then try to wait (which will timeout immediately)
+				limiter.waitWithCancellation(keyID, executionTime, deadline, done)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after use")
+}
+
+func TestLimiter_WaitersCleanup_WithSuccessfulWaits(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input string) string {
+		return input
+	}
+	limit := NewLimit(1, 100*time.Millisecond)
+	limiter := NewLimiter(keyer, limit)
+
+	executionTime := time.Now()
+
+	// Exhaust the token
+	require.True(t, limiter.allow("key", executionTime), "should allow initial token")
+
+	const concurrency = 20
+	results := make([]bool, concurrency)
+
+	// Create deadline that gives enough time for tokens to be refilled
+	deadline := func() (time.Time, bool) {
+		return executionTime.Add(time.Duration(concurrency) * limit.durationPerToken), true
+	}
+
+	done := func() <-chan struct{} {
+		return make(chan struct{}) // never closes
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := range concurrency {
+		go func(i int) {
+			defer wg.Done()
+			// stagger the start times
+			time.Sleep(time.Duration(i) * time.Millisecond)
+			results[i] = limiter.waitWithCancellation("key", executionTime, deadline, done)
+		}(i)
+	}
+	wg.Wait()
+
+	// All waiters should have eventually succeeded
+	successes := 0
+	for _, result := range results {
+		if result {
+			successes++
+		}
+	}
+
+	require.Equal(t, concurrency, successes, "all waiters should eventually succeed")
+	require.Equal(t, 0, limiter.waiters.count(), "all waiters should be cleaned up after completion")
+}
+
+func TestLimiter_Wait_FIFOOrdering_HighContention(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input int) int {
+		return input
+	}
+
+	limiter := NewLimiter(keyer, NewLimit(1, 50*time.Millisecond))
+
+	// Exhaust the bucket
+	require.True(t, limiter.Allow(1))
+
+	// Test that multiple waiters can successfully acquire tokens
+	const waiters = 5
+	results := make(chan bool, waiters)
+
+	for range waiters {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			results <- limiter.Wait(ctx, 1)
+		}()
+	}
+
+	// Collect results
+	successes := 0
+	for range waiters {
+		select {
+		case success := <-results:
+			if success {
+				successes++
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Test timed out")
+		}
+	}
+
+	// Should get at least some successes (the fix should prevent token starvation)
+	require.Greater(t, successes, 0, "Should have some successful token acquisitions")
+	require.Equal(t, 0, limiter.waiters.count(), "All waiters should be cleaned up")
+}
+
+func TestLimiter_Wait_RaceCondition_Prevention(t *testing.T) {
+	t.Parallel()
+
+	keyer := func(input int) int {
+		return input
+	}
+	// Use a very restrictive limit to force contention
+	limiter := NewLimiter(keyer, NewLimit(1, 100*time.Millisecond))
+
+	// Exhaust the bucket
+	require.True(t, limiter.Allow(1))
+
+	const concurrency = 50
+	successes := int64(0)
+
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	// Start many goroutines that will compete for tokens
+	for range concurrency {
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			if limiter.Wait(ctx, 1) {
+				atomic.AddInt64(&successes, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Should have some successes but not more than the tokens available
+	// in the timeout period (roughly 20 tokens in 2 seconds at 100ms per token)
+	actual := atomic.LoadInt64(&successes)
+	require.Greater(t, actual, int64(0), "should have some successful acquisitions")
+	require.LessOrEqual(t, actual, int64(25), "should not exceed reasonable token availability")
+
+	// Verify no memory leaks
+	require.Equal(t, 0, limiter.waiters.count(), "all waiters should be cleaned up")
 }

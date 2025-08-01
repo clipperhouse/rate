@@ -1,10 +1,21 @@
 # Go Rate Limiter Library - Coding Instructions
 
+## Design goals
+
+### Composability
+- This library is intended to allow users to create complex rate limiting policies by composing elements
+- Users should be able to mix and match different limiters, keyers, and strategies to create the desired behavior.
+- The library should behave predictably given the user's configuration. It should be easy to reason about by users.
+- We wish to be like Go's standard library: simple, composable, and predictable.
+- The library will abstract away the difficult or tedious parts of rate limiting, such as concurrency and timing issues, so users can focus on their application logic. Make easy things easy, and hard things possible.
+
 ## Testing Conventions
 
 ### Race Detection
 - Always run Go tests with the `-race` flag to catch race conditions and ensure clean concurrency
 - Essential for this codebase since it heavily uses concurrent operations
+- Use 10 second timeout for tests to prevent hanging
+- The agent should run tests directly if possible, instead of asking me to do it
 
 ### Test Structure Patterns
 - Every test function must start with `t.Parallel()` to enable concurrent test execution

@@ -36,3 +36,8 @@ func (sm *syncMap[K, V]) count() int {
 	})
 	return count
 }
+
+// delete removes a key from the map
+func (sm *syncMap[K, V]) delete(key K) {
+	sm.m.Delete(key)
+}

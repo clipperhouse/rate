@@ -104,6 +104,15 @@ func (r *Limiter[TInput, TKey]) AllowN(input TInput, n int64) bool {
 func (r *Limiter[TInput, TKey]) getBucketSpecs(input TInput, userKey TKey) []bucketSpec[TKey] {
 	// limits and limitFuncs are mutually exclusive.
 	if len(r.limitFuncs) > 0 {
+		// Fast path for single limit function - avoid slice allocation
+		if len(r.limitFuncs) == 1 {
+			spec := bucketSpec[TKey]{
+				limit:   r.limitFuncs[0](input),
+				userKey: userKey,
+			}
+			return []bucketSpec[TKey]{spec}
+		}
+
 		specs := make([]bucketSpec[TKey], len(r.limitFuncs))
 		for i, limitFunc := range r.limitFuncs {
 			specs[i] = bucketSpec[TKey]{
@@ -115,6 +124,15 @@ func (r *Limiter[TInput, TKey]) getBucketSpecs(input TInput, userKey TKey) []buc
 	}
 
 	if len(r.limits) > 0 {
+		// Fast path for single limit - avoid slice allocation
+		if len(r.limits) == 1 {
+			spec := bucketSpec[TKey]{
+				limit:   r.limits[0],
+				userKey: userKey,
+			}
+			return []bucketSpec[TKey]{spec}
+		}
+
 		specs := make([]bucketSpec[TKey], len(r.limits))
 		for i, limit := range r.limits {
 			specs[i] = bucketSpec[TKey]{
@@ -132,6 +150,28 @@ func (r *Limiter[TInput, TKey]) getBucketSpecs(input TInput, userKey TKey) []buc
 // It returns "parallel" slices of buckets and limits; the i'th element in each slice corresponds
 // to the same limit/bucket pair.
 func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, userKey TKey, executionTime time.Time, persist bool) ([]*bucket, []Limit) {
+	// Fast path for single static limit - avoid slice allocations
+	if len(r.limits) == 1 && len(r.limitFuncs) == 0 {
+		spec := bucketSpec[TKey]{
+			limit:   r.limits[0],
+			userKey: userKey,
+		}
+
+		newBucket := func() *bucket {
+			return newBucket(executionTime, spec.limit)
+		}
+
+		var b *bucket
+		if persist {
+			b = r.buckets.loadOrStore(spec, newBucket)
+		} else {
+			b = r.buckets.loadOrCreate(spec, newBucket)
+		}
+
+		// Return slices with single elements - this still allocates but less than before
+		return []*bucket{b}, []Limit{r.limits[0]}
+	}
+
 	specs := r.getBucketSpecs(input, userKey)
 	buckets := make([]*bucket, len(specs))
 	limits := make([]Limit, len(specs))

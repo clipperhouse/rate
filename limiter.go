@@ -226,13 +226,14 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 
 	// Fast path for single static limit - avoid slice allocations and optimize locking
 	if len(r.limits) == 1 && len(r.limitFuncs) == 0 {
+		limit := r.limits[0]
 		spec := bucketSpec[TKey]{
-			limit:   r.limits[0],
+			limit:   limit,
 			userKey: userKey,
 		}
 
 		newBucket := func() *bucket {
-			return newBucket(executionTime, r.limits[0])
+			return newBucket(executionTime, limit)
 		}
 
 		b := r.buckets.loadOrStore(spec, newBucket)
@@ -242,8 +243,8 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 		defer b.mu.Unlock()
 
 		// Check and consume tokens in single operation
-		if b.hasTokens(executionTime, r.limits[0], n) {
-			b.consumeTokens(executionTime, r.limits[0], n)
+		if b.hasTokens(executionTime, limit, n) {
+			b.consumeTokens(executionTime, limit, n)
 			return true
 		}
 		return false

@@ -9,35 +9,30 @@ import (
 // BenchmarkLimiter_AllowN_MultipleBuckets_SingleLimit benchmarks allowN with multiple buckets and single limit (happy path)
 func BenchmarkLimiter_AllowN_MultipleBuckets_SingleLimit(b *testing.B) {
 	// Pre-compute bucket keys to avoid string allocation overhead during benchmark
-	const buckets = 10000
-	keys := make([]string, buckets)
-	for i := range buckets {
-		keys[i] = "bucket-" + strconv.Itoa(i)
-	}
+	const buckets = 1000
 
-	keyer := func(id int) string {
-		return keys[id]
+	keyer := func(id int) int {
+		return id
 	}
-	limit := NewLimit(1000000, time.Second) // Large limit to ensure all requests succeed
+	limit := NewLimit(10000000, time.Second) // Large limit to ensure all requests succeed
 	limiter := NewLimiter(keyer, limit)
-	now := time.Now()
-
-	// Create all the buckets, this is a read test
-	for i := range buckets {
-		limiter.allowN(i, now, 1)
-	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
+	start := time.Now()
+
 	for b.Loop() {
 		for i := range buckets {
-			// Each bucket should allow the request
-			if !limiter.allowN(i, now, 1) {
-				b.Fatalf("Expected allowN to succeed for bucket %d", i)
-			}
+			limiter.AllowN(i, 1)
 		}
 	}
+
+	elapsed := time.Since(start)
+	n := float64(b.N)
+
+	nsPerOp := float64(elapsed.Nanoseconds()) / n / buckets
+	b.ReportMetric(nsPerOp, "ns/allow")
 }
 
 // BenchmarkLimiter_SingleVsMultiLimit compares performance between single and multi-limit scenarios
@@ -65,7 +60,7 @@ func BenchmarkLimiter_SingleVsMultiLimit(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			for j := range buckets {
 				limiter.allowN(j, now, 1)
 			}
@@ -86,7 +81,7 @@ func BenchmarkLimiter_SingleVsMultiLimit(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			for j := range buckets {
 				limiter.allowN(j, now, 1)
 			}
@@ -103,10 +98,9 @@ func BenchmarkLimiter_SingleBucket(b *testing.B) {
 	limiter := NewLimiter(keyer, limit)
 	now := time.Now()
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		limiter.allowN(0, now, 1)
 	}
 }

@@ -1739,6 +1739,7 @@ func TestLimiter_GetBucketsAndLimits(t *testing.T) {
 		return input
 	}
 	executionTime := time.Now()
+	userKey := keyer("test")
 
 	perSecond := NewLimit(rand.Int63n(10)+1, time.Second)
 	perMinute := NewLimit(rand.Int63n(100)+1, time.Minute)
@@ -1746,7 +1747,7 @@ func TestLimiter_GetBucketsAndLimits(t *testing.T) {
 	allow := limiter.allow("test", executionTime)
 	require.True(t, allow, "should allow initial token")
 
-	buckets, limits := limiter.getBucketsAndLimits("test", executionTime, false)
+	buckets, limits := limiter.getBucketsAndLimits("test", userKey, executionTime, false)
 	require.Len(t, buckets, 2, "should have two buckets")
 	require.Len(t, limits, 2, "should have two limits")
 	require.Equal(t, perSecond, limits[0], "first limit should match")

@@ -44,7 +44,33 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	// If we get here without panic or race conditions, the test passes
-	t.Log("Concurrent access test completed successfully")
+}
+
+func TestSyncMap_LoadOrStoreFunc(t *testing.T) {
+	t.Parallel()
+
+	sm := &syncMap[string, int]{}
+
+	factoryCalls := 0
+	factory := func() int {
+		factoryCalls++
+		return 42
+	}
+
+	// First call should call factory and store the value
+	result1 := sm.loadOrStore("key1", factory)
+	require.Equal(t, 42, result1, "should return factory value")
+	require.Equal(t, 1, factoryCalls, "factory should be called once")
+
+	// Second call with same key should NOT call factory
+	result2 := sm.loadOrStore("key1", factory)
+	require.Equal(t, 42, result2, "should return existing value")
+	require.Equal(t, 1, factoryCalls, "factory should not be called again for existing key")
+
+	// Third call with different key should call factory again
+	result3 := sm.loadOrStore("key2", factory)
+	require.Equal(t, 42, result3, "should return factory value for new key")
+	require.Equal(t, 2, factoryCalls, "factory should be called for new key")
 }
 
 func TestSyncMap_Count(t *testing.T) {
@@ -55,7 +81,9 @@ func TestSyncMap_Count(t *testing.T) {
 	for range 2 {
 		// should only be stored once despite multiple calls
 		for key := range 101 {
-			sm.loadOrStore(fmt.Sprint(key), key)
+			sm.loadOrStore(fmt.Sprint(key), func() int {
+				return key
+			})
 		}
 	}
 

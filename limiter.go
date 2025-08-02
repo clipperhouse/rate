@@ -191,6 +191,135 @@ func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, userKey TKey, 
 	return buckets, limits
 }
 
+type op byte
+
+const (
+	allow op = iota
+	peek
+)
+
+// getBucketsAndLimits retrieves the buckets and limits for the given input and execution time.
+// It returns "parallel" slices of buckets and limits; the i'th element in each slice corresponds
+// to the same limit/bucket pair.
+func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTime time.Time, n int64, op op) bool {
+	userKey := r.keyer(input)
+	// Fast path for single limit - avoid allocations
+	if len(r.limits) == 1 || len(r.limitFuncs) == 1 {
+		var limit Limit
+		if len(r.limitFuncs) > 0 {
+			limit = r.limitFuncs[0](input)
+		} else {
+			limit = r.limits[0]
+		}
+		spec := bucketSpec[TKey]{
+			limit:   limit,
+			userKey: userKey,
+		}
+
+		newBucket := func() *bucket {
+			return newBucket(executionTime, limit)
+		}
+
+		var b *bucket
+		if op == allow {
+			b = r.buckets.loadOrStore(spec, newBucket)
+		} else {
+			b = r.buckets.loadOrGet(spec, newBucket)
+		}
+
+		// Optimized locking for single bucket
+		b.mu.Lock()
+		defer b.mu.Unlock()
+
+		// Check and consume tokens in single operation
+		if b.hasTokens(executionTime, limit, n) {
+			if op == allow {
+				b.consumeTokens(executionTime, limit, n)
+			}
+			return true
+		}
+		return false
+	}
+
+	// Slower path for multiple limits or dynamic limits
+
+	// Collect the limits
+	var limits []Limit
+
+	// limits and limitFuncs are mutually exclusive.
+	if len(r.limitFuncs) > 0 {
+		limits = make([]Limit, 0, len(r.limitFuncs))
+		for _, limitFunc := range r.limitFuncs {
+			limits = append(limits, limitFunc(input))
+		}
+	}
+	if len(r.limits) > 0 {
+		limits = make([]Limit, 0, len(r.limits))
+		limits = append(limits, r.limits...)
+	}
+
+	if len(limits) == 0 {
+		// No limits defined, so we allow everything
+		return true
+	}
+
+	// Collect the buckets
+	buckets := make([]*bucket, 0, len(limits))
+	for _, limit := range limits {
+		spec := bucketSpec[TKey]{
+			limit:   limit,
+			userKey: userKey,
+		}
+
+		newBucket := func() *bucket {
+			return newBucket(executionTime, limit)
+		}
+
+		var b *bucket
+		switch op {
+		case allow:
+			b = r.buckets.loadOrStore(spec, newBucket)
+		case peek:
+			b = r.buckets.loadOrGet(spec, newBucket)
+		default:
+			panic("unknown op")
+		}
+		buckets = append(buckets, b)
+	}
+
+	// Lock all buckets
+	for _, b := range buckets {
+		b.mu.Lock()
+	}
+	//... and unlock
+	defer func() {
+		for _, b := range buckets {
+			b.mu.Unlock()
+		}
+	}()
+
+	// Check if all buckets allowAll the token
+	allowAll := true
+	for i, b := range buckets {
+		limit := limits[i]
+		if !b.hasTokens(executionTime, limit, n) {
+			allowAll = false
+			break
+		}
+	}
+
+	// Consume tokens only when all buckets allow
+	if allowAll && op == allow {
+		for i := range buckets {
+			b := buckets[i]
+			limit := limits[i]
+			b.consumeTokens(executionTime, limit, n)
+		}
+	}
+
+	return allowAll
+}
+
 func lockBuckets(buckets []*bucket) (unlock func()) {
 	for _, b := range buckets {
 		b.mu.Lock()
@@ -222,63 +351,7 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
-	userKey := r.keyer(input)
-
-	// Fast path for single static limit - avoid slice allocations and optimize locking
-	if len(r.limits) == 1 && len(r.limitFuncs) == 0 {
-		limit := r.limits[0]
-		spec := bucketSpec[TKey]{
-			limit:   limit,
-			userKey: userKey,
-		}
-
-		newBucket := func() *bucket {
-			return newBucket(executionTime, limit)
-		}
-
-		b := r.buckets.loadOrStore(spec, newBucket)
-
-		// Optimized locking for single bucket
-		b.mu.Lock()
-		defer b.mu.Unlock()
-
-		// Check and consume tokens in single operation
-		if b.hasTokens(executionTime, limit, n) {
-			b.consumeTokens(executionTime, limit, n)
-			return true
-		}
-		return false
-	}
-
-	// Fallback to multi-bucket path
-	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, true)
-	unlock := lockBuckets(buckets)
-	defer unlock()
-
-	// specs and buckets must be the same length and ordering,
-	// so the right limit is applied to the right bucket.
-
-	// Check if all buckets allowAll the token
-	allowAll := true
-	for i := range buckets {
-		b := buckets[i]
-		limit := limits[i]
-		if !b.hasTokens(executionTime, limit, n) {
-			allowAll = false
-			break
-		}
-	}
-
-	// Consume tokens only when all buckets allow
-	if allowAll {
-		for i := range buckets {
-			b := buckets[i]
-			limit := limits[i]
-			b.consumeTokens(executionTime, limit, n)
-		}
-	}
-
-	return allowAll
+	return r.checkBucketsAndLimits(input, executionTime, n, allow) // Return true if all buckets allowed
 }
 
 // AllowWithDetails returns true if a token is available for the given key,
@@ -377,20 +450,7 @@ func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n int64) bool {
-	userKey := r.keyer(input)
-	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, false)
-
-	unlock := rLockBuckets(buckets)
-	defer unlock()
-	for i := range buckets {
-		b := buckets[i]
-		limit := limits[i]
-		if !b.hasTokens(executionTime, limit, n) {
-			return false
-		}
-	}
-
-	return true
+	return r.checkBucketsAndLimits(input, executionTime, n, peek) // Return true if all buckets allowed
 }
 
 // PeekWithDetails returns true if tokens are available for the given key,

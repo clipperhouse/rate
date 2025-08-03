@@ -337,39 +337,45 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	return r.checkBucketsAndLimits(input, executionTime, n, allow) // Return true if all buckets allowed
 }
 
-// AllowWithDetails returns true if a token is available for the given key,
-// along with details about the bucket(s) and tokens. You might use these details for
-// logging, returning headers, etc.
+// AllowWithDebug returns true if a token is available for the given key,
+// along with detailed debugging information about all bucket(s) and tokens. 
+// You might use these details for logging, debugging, etc.
+//
+// Note: This method allocates and may be expensive for performance-critical paths.
+// For setting response headers, consider using AllowWithDetails instead.
 //
 // If true, it will consume one token. If false, no token will be consumed.
 //
-// If the Limiter has multiple limits, AllowWithDetails will return true only if
+// If the Limiter has multiple limits, AllowWithDebug will return true only if
 // all limits allow the request, and one token will be consumed against
 // each limit. If any limit would be exceeded, no token will be consumed
 // against any limit.
-func (r *Limiter[TInput, TKey]) AllowWithDetails(input TInput) (bool, []Details[TInput, TKey]) {
-	return r.allowWithDetails(input, time.Now())
+func (r *Limiter[TInput, TKey]) AllowWithDebug(input TInput) (bool, []Details[TInput, TKey]) {
+	return r.allowWithDebug(input, time.Now())
 }
 
-// AllowNWithDetails returns true if at least `n` tokens are available
-// for the given key, along with details about the bucket(s), remaining tokens, etc.
-// You might use these details for logging, returning headers, etc.
+// AllowNWithDebug returns true if at least `n` tokens are available
+// for the given key, along with detailed debugging information about all bucket(s), 
+// remaining tokens, etc. You might use these details for logging, debugging, etc.
+//
+// Note: This method allocates and may be expensive for performance-critical paths.
+// For setting response headers, consider using AllowNWithDetails instead.
 //
 // If true, it will consume `n` tokens. If false, no token will be consumed.
 //
-// If the Limiter has multiple limits, AllowNWithDetails will return true only if
+// If the Limiter has multiple limits, AllowNWithDebug will return true only if
 // all limits allow the request, and `n` tokens will be consumed against
 // each limit. If any limit would be exceeded, no token will be consumed
 // against any limit.
-func (r *Limiter[TInput, TKey]) AllowNWithDetails(input TInput, n int64) (bool, []Details[TInput, TKey]) {
-	return r.allowNWithDetails(input, time.Now(), n)
+func (r *Limiter[TInput, TKey]) AllowNWithDebug(input TInput, n int64) (bool, []Details[TInput, TKey]) {
+	return r.allowNWithDebug(input, time.Now(), n)
 }
 
-func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
-	return r.allowNWithDetails(input, executionTime, 1)
+func (r *Limiter[TInput, TKey]) allowWithDebug(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
+	return r.allowNWithDebug(input, executionTime, 1)
 }
 
-func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime time.Time, n int64) (bool, []Details[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Details[TInput, TKey]) {
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
@@ -412,6 +418,121 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 	return allowAll, details
 }
 
+// AllowWithDetails returns true if a token is available for the given key,
+// along with aggregated details optimized for setting response headers.
+// This method avoids allocations and is suitable for performance-critical paths.
+//
+// If true, it will consume one token. If false, no token will be consumed.
+//
+// If the Limiter has multiple limits, AllowWithDetails will return true only if
+// all limits allow the request, and one token will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
+func (r *Limiter[TInput, TKey]) AllowWithDetails(input TInput) (bool, DetailsAggregated[TInput, TKey]) {
+	return r.allowWithDetails(input, time.Now())
+}
+
+// AllowNWithDetails returns true if at least `n` tokens are available
+// for the given key, along with aggregated details optimized for setting response headers.
+// This method avoids allocations and is suitable for performance-critical paths.
+//
+// If true, it will consume `n` tokens. If false, no token will be consumed.
+//
+// If the Limiter has multiple limits, AllowNWithDetails will return true only if
+// all limits allow the request, and `n` tokens will be consumed against
+// each limit. If any limit would be exceeded, no token will be consumed
+// against any limit.
+func (r *Limiter[TInput, TKey]) AllowNWithDetails(input TInput, n int64) (bool, DetailsAggregated[TInput, TKey]) {
+	return r.allowNWithDetails(input, time.Now(), n)
+}
+
+func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime time.Time) (bool, DetailsAggregated[TInput, TKey]) {
+	return r.allowNWithDetails(input, executionTime, 1)
+}
+
+func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime time.Time, n int64) (bool, DetailsAggregated[TInput, TKey]) {
+	// Allow must be true for all limits, a strict AND operation.
+	// If any limit is not allowed, the overall allow is false and
+	// no token is consumed from any bucket.
+
+	userKey := r.keyer(input)
+	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, true)
+	unlock := lockBuckets(buckets)
+	defer unlock()
+
+	allowAll := true
+	minRemainingTokens := int64(-1) // Use -1 to indicate unset
+	maxRetryAfter := time.Duration(0)
+
+	// Check all buckets first
+	for i := range buckets {
+		b := buckets[i]
+		limit := limits[i]
+		allow := b.hasTokens(executionTime, limit, n)
+		allowAll = allowAll && allow
+
+		// Calculate aggregated values
+		remaining := b.remainingTokens(executionTime, limit)
+		if minRemainingTokens == -1 || remaining < minRemainingTokens {
+			minRemainingTokens = remaining
+		}
+
+		// Calculate retry-after from this bucket's next tokens time
+		nextTokensTime := b.nextTokensTime(limit, n)
+		retryAfter := nextTokensTime.Sub(executionTime)
+		if retryAfter > maxRetryAfter {
+			maxRetryAfter = retryAfter
+		}
+	}
+
+	// Ensure minRemainingTokens is at least 0 if no buckets found
+	if minRemainingTokens == -1 {
+		minRemainingTokens = 0
+	}
+
+	// Consume tokens only when all buckets allow
+	var tokensConsumed int64
+	if allowAll {
+		for i := range buckets {
+			b := buckets[i]
+			limit := limits[i]
+			b.consumeTokens(executionTime, limit, n)
+		}
+		tokensConsumed = n
+		// Recalculate remaining tokens after consumption
+		minRemainingTokens = int64(-1)
+		for i := range buckets {
+			b := buckets[i]
+			limit := limits[i]
+			remaining := b.remainingTokens(executionTime, limit)
+			if minRemainingTokens == -1 || remaining < minRemainingTokens {
+				minRemainingTokens = remaining
+			}
+		}
+		if minRemainingTokens == -1 {
+			minRemainingTokens = 0
+		}
+	}
+
+	// Ensure retry-after is not negative
+	if maxRetryAfter < 0 {
+		maxRetryAfter = 0
+	}
+
+	details := DetailsAggregated[TInput, TKey]{
+		allowed:         allowAll,
+		tokensRequested: n,
+		tokensConsumed:  tokensConsumed,
+		executionTime:   executionTime,
+		remainingTokens: minRemainingTokens,
+		retryAfter:      maxRetryAfter,
+		bucketInput:     input,
+		bucketKey:       userKey,
+	}
+
+	return allowAll, details
+}
+
 // Peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
@@ -436,29 +557,35 @@ func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n i
 	return r.checkBucketsAndLimits(input, executionTime, n, peek) // Return true if all buckets allowed
 }
 
-// PeekWithDetails returns true if tokens are available for the given key,
-// and details about the bucket and the execution time. You might
-// use these details for logging, returning headers, etc.
+// PeekWithDebug returns true if tokens are available for the given key,
+// and detailed debugging information about all bucket(s) and the execution time. 
+// You might use these details for logging, debugging, etc.
+//
+// Note: This method allocates and may be expensive for performance-critical paths.
+// For setting response headers, consider using PeekWithDetails instead.
 //
 // No tokens are consumed.
-func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, []Details[TInput, TKey]) {
-	return r.peekWithDetails(input, time.Now())
+func (r *Limiter[TInput, TKey]) PeekWithDebug(input TInput) (bool, []Details[TInput, TKey]) {
+	return r.peekWithDebug(input, time.Now())
 }
 
-func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
-	return r.peekNWithDetails(input, executionTime, 1)
+func (r *Limiter[TInput, TKey]) peekWithDebug(input TInput, executionTime time.Time) (bool, []Details[TInput, TKey]) {
+	return r.peekNWithDebug(input, executionTime, 1)
 }
 
-// PeekNWithDetails returns true if `n` tokens are available for the given key,
-// along with details about the bucket and remaining tokens. You might
-// use these details for logging, returning headers, etc.
+// PeekNWithDebug returns true if `n` tokens are available for the given key,
+// along with detailed debugging information about all bucket(s) and remaining tokens. 
+// You might use these details for logging, debugging, etc.
+//
+// Note: This method allocates and may be expensive for performance-critical paths.
+// For setting response headers, consider using PeekNWithDetails instead.
 //
 // No tokens are consumed.
-func (r *Limiter[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool, []Details[TInput, TKey]) {
-	return r.peekNWithDetails(input, time.Now(), n)
+func (r *Limiter[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, []Details[TInput, TKey]) {
+	return r.peekNWithDebug(input, time.Now(), n)
 }
 
-func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, []Details[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Details[TInput, TKey]) {
 	userKey := r.keyer(input)
 	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, false)
 
@@ -485,6 +612,84 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 			bucketInput:     input,
 			bucketKey:       r.keyer(input),
 		}
+	}
+
+	return allowAll, details
+}
+
+// PeekWithDetails returns true if tokens are available for the given key,
+// along with aggregated details optimized for setting response headers.
+// This method avoids allocations and is suitable for performance-critical paths.
+//
+// No tokens are consumed.
+func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, DetailsAggregated[TInput, TKey]) {
+	return r.peekWithDetails(input, time.Now())
+}
+
+// PeekNWithDetails returns true if `n` tokens are available for the given key,
+// along with aggregated details optimized for setting response headers.
+// This method avoids allocations and is suitable for performance-critical paths.
+//
+// No tokens are consumed.
+func (r *Limiter[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool, DetailsAggregated[TInput, TKey]) {
+	return r.peekNWithDetails(input, time.Now(), n)
+}
+
+func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time.Time) (bool, DetailsAggregated[TInput, TKey]) {
+	return r.peekNWithDetails(input, executionTime, 1)
+}
+
+func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, DetailsAggregated[TInput, TKey]) {
+	userKey := r.keyer(input)
+	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, false)
+
+	allowAll := true
+	minRemainingTokens := int64(-1) // Use -1 to indicate unset
+	maxRetryAfter := time.Duration(0)
+
+	unlock := rLockBuckets(buckets)
+	defer unlock()
+
+	for i := range buckets {
+		b := buckets[i]
+		limit := limits[i]
+
+		allow := b.hasTokens(executionTime, limit, n)
+		allowAll = allowAll && allow
+
+		// Calculate aggregated values
+		remaining := b.remainingTokens(executionTime, limit)
+		if minRemainingTokens == -1 || remaining < minRemainingTokens {
+			minRemainingTokens = remaining
+		}
+
+		// Calculate retry-after from this bucket's next tokens time
+		nextTokensTime := b.nextTokensTime(limit, n)
+		retryAfter := nextTokensTime.Sub(executionTime)
+		if retryAfter > maxRetryAfter {
+			maxRetryAfter = retryAfter
+		}
+	}
+
+	// Ensure minRemainingTokens is at least 0 if no buckets found
+	if minRemainingTokens == -1 {
+		minRemainingTokens = 0
+	}
+
+	// Ensure retry-after is not negative
+	if maxRetryAfter < 0 {
+		maxRetryAfter = 0
+	}
+
+	details := DetailsAggregated[TInput, TKey]{
+		allowed:         allowAll,
+		tokensRequested: n,
+		tokensConsumed:  0, // Never consume tokens in peek
+		executionTime:   executionTime,
+		remainingTokens: minRemainingTokens,
+		retryAfter:      maxRetryAfter,
+		bucketInput:     input,
+		bucketKey:       userKey,
 	}
 
 	return allowAll, details

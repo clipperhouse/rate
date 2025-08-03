@@ -535,7 +535,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 
 	// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
 	{
-		results := make([][]Details[int, string], buckets*int(perSecond.count))
+		results := make([][]DetailsDebug[int, string], buckets*int(perSecond.count))
 		resultIndex := 0
 
 		var wg sync.WaitGroup
@@ -569,7 +569,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Verify that additional requests are rejected, all buckets should be exhausted on per-second limit
 	{
 		var wg sync.WaitGroup
-		results := make([][]Details[int, string], buckets)
+		results := make([][]DetailsDebug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
@@ -603,7 +603,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Per-second bucket should now have 1 more token available
 	{
 		var wg sync.WaitGroup
-		results := make([][]Details[int, string], buckets)
+		results := make([][]DetailsDebug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
@@ -630,7 +630,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Now all buckets should be exhausted on per-minute limit
 	{
 		var wg sync.WaitGroup
-		results := make([][]Details[int, string], buckets)
+		results := make([][]DetailsDebug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
@@ -662,7 +662,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Test concurrent access after full refill
 	{
 		var wg sync.WaitGroup
-		results := make([][]Details[int, string], buckets*int(perSecond.count))
+		results := make([][]DetailsDebug[int, string], buckets*int(perSecond.count))
 		resultIndex := 0
 
 		for bucketID := range buckets {

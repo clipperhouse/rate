@@ -231,13 +231,10 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimitsWithDetails(input TInput, e
 
 		allowed := b.hasTokens(executionTime, limit, n)
 		remainingTokens := b.remainingTokens(executionTime, limit)
-		
+
 		// Calculate retry-after
 		nextTokensTime := b.nextTokensTime(limit, n)
-		retryAfter := nextTokensTime.Sub(executionTime)
-		if retryAfter < 0 {
-			retryAfter = 0
-		}
+		retryAfter := max(nextTokensTime.Sub(executionTime), 0)
 
 		var tokensConsumed int64
 		if allowed && op == allow {
@@ -290,8 +287,15 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimitsWithDetails(input TInput, e
 		return true, details
 	}
 
-	// Collect the buckets
-	buckets := make([]*bucket, 0, len(limits))
+	// Collect the buckets - use stack allocation for small numbers of limits
+	var bucketsArray [4]*bucket // Stack-allocated array for common case
+	var buckets []*bucket
+	if len(limits) <= len(bucketsArray) {
+		buckets = bucketsArray[:0] // Use stack-allocated array
+	} else {
+		buckets = make([]*bucket, 0, len(limits)) // Fall back to heap for large cases
+	}
+
 	for _, limit := range limits {
 		spec := bucketSpec[TKey]{
 			limit:   limit,
@@ -464,8 +468,15 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTim
 		return true
 	}
 
-	// Collect the buckets
-	buckets := make([]*bucket, 0, len(limits))
+	// Collect the buckets - use stack allocation for small numbers of limits
+	var bucketsArray [4]*bucket // Stack-allocated array for common case
+	var buckets []*bucket
+	if len(limits) <= len(bucketsArray) {
+		buckets = bucketsArray[:0] // Use stack-allocated array
+	} else {
+		buckets = make([]*bucket, 0, len(limits)) // Fall back to heap for large cases
+	}
+
 	for _, limit := range limits {
 		spec := bucketSpec[TKey]{
 			limit:   limit,
@@ -552,7 +563,7 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 }
 
 // AllowWithDebug returns true if a token is available for the given key,
-// along with detailed debugging information about all bucket(s) and tokens. 
+// along with detailed debugging information about all bucket(s) and tokens.
 // You might use these details for logging, debugging, etc.
 //
 // Note: This method allocates and may be expensive for performance-critical paths.
@@ -569,7 +580,7 @@ func (r *Limiter[TInput, TKey]) AllowWithDebug(input TInput) (bool, []DetailsDeb
 }
 
 // AllowNWithDebug returns true if at least `n` tokens are available
-// for the given key, along with detailed debugging information about all bucket(s), 
+// for the given key, along with detailed debugging information about all bucket(s),
 // remaining tokens, etc. You might use these details for logging, debugging, etc.
 //
 // Note: This method allocates and may be expensive for performance-critical paths.
@@ -697,7 +708,7 @@ func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n i
 }
 
 // PeekWithDebug returns true if tokens are available for the given key,
-// and detailed debugging information about all bucket(s) and the execution time. 
+// and detailed debugging information about all bucket(s) and the execution time.
 // You might use these details for logging, debugging, etc.
 //
 // Note: This method allocates and may be expensive for performance-critical paths.
@@ -713,7 +724,7 @@ func (r *Limiter[TInput, TKey]) peekWithDebug(input TInput, executionTime time.T
 }
 
 // PeekNWithDebug returns true if `n` tokens are available for the given key,
-// along with detailed debugging information about all bucket(s) and remaining tokens. 
+// along with detailed debugging information about all bucket(s) and remaining tokens.
 // You might use these details for logging, debugging, etc.
 //
 // Note: This method allocates and may be expensive for performance-critical paths.

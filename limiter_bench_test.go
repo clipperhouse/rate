@@ -125,10 +125,9 @@ func BenchmarkLimiter_LargeBucketCount(b *testing.B) {
 		limiter.allowN(i, now, 1)
 	}
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		// Access pattern: mostly hot buckets with occasional cold ones
 		bucketID := i % buckets
 		limiter.allowN(bucketID, now, 1)
@@ -136,44 +135,44 @@ func BenchmarkLimiter_LargeBucketCount(b *testing.B) {
 }
 
 // BenchmarkLimiter_AllowWithDetails_Fast compares the new fast API vs debug API
-func BenchmarkLimiter_AllowWithDetails_Fast(b *testing.B) {
+func BenchmarkLimiter_AllowWithDetailsAndDebug(b *testing.B) {
 	keyer := func(input string) string { return input }
 	perSecond := NewLimit(10000000, time.Second) // Large limit to avoid denials
 	perMinute := NewLimit(10000000, time.Minute)
 	limiter := NewLimiter(keyer, perSecond, perMinute)
 
-	b.Run("FastAPI", func(b *testing.B) {
+	b.Run("AllowWithDetails", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			limiter.AllowWithDetails("benchmark-key")
 		}
 	})
 
-	b.Run("DebugAPI", func(b *testing.B) {
+	b.Run("AllowWithDebug", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			limiter.AllowWithDebug("benchmark-key")
 		}
 	})
 }
 
 // BenchmarkLimiter_PeekWithDetails_Fast compares the new fast peek API vs debug API
-func BenchmarkLimiter_PeekWithDetails_Fast(b *testing.B) {
+func BenchmarkLimiter_PeekWithDetailsAndDebug(b *testing.B) {
 	keyer := func(input string) string { return input }
 	perSecond := NewLimit(10000000, time.Second)
 	perMinute := NewLimit(10000000, time.Minute)
 	limiter := NewLimiter(keyer, perSecond, perMinute)
 
-	b.Run("FastAPI", func(b *testing.B) {
+	b.Run("PeekWithDetails", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			limiter.PeekWithDetails("benchmark-key")
 		}
 	})
 
-	b.Run("DebugAPI", func(b *testing.B) {
+	b.Run("PeekWithDebug", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			limiter.PeekWithDebug("benchmark-key")
 		}
 	})

@@ -134,3 +134,47 @@ func BenchmarkLimiter_LargeBucketCount(b *testing.B) {
 		limiter.allowN(bucketID, now, 1)
 	}
 }
+
+// BenchmarkLimiter_AllowWithDetails_Fast compares the new fast API vs debug API
+func BenchmarkLimiter_AllowWithDetails_Fast(b *testing.B) {
+	keyer := func(input string) string { return input }
+	perSecond := NewLimit(10000000, time.Second) // Large limit to avoid denials
+	perMinute := NewLimit(10000000, time.Minute)
+	limiter := NewLimiter(keyer, perSecond, perMinute)
+
+	b.Run("FastAPI", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			limiter.AllowWithDetails("benchmark-key")
+		}
+	})
+
+	b.Run("DebugAPI", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			limiter.AllowWithDebug("benchmark-key")
+		}
+	})
+}
+
+// BenchmarkLimiter_PeekWithDetails_Fast compares the new fast peek API vs debug API
+func BenchmarkLimiter_PeekWithDetails_Fast(b *testing.B) {
+	keyer := func(input string) string { return input }
+	perSecond := NewLimit(10000000, time.Second)
+	perMinute := NewLimit(10000000, time.Minute)
+	limiter := NewLimiter(keyer, perSecond, perMinute)
+
+	b.Run("FastAPI", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			limiter.PeekWithDetails("benchmark-key")
+		}
+	})
+
+	b.Run("DebugAPI", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			limiter.PeekWithDebug("benchmark-key")
+		}
+	})
+}

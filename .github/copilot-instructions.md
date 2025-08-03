@@ -7,7 +7,8 @@
 - Users should be able to mix and match different limiters, keyers, and strategies to create the desired behavior.
 - The library should behave predictably given the user's configuration. It should be easy to reason about by users.
 - We wish to be like Go's standard library: simple, composable, and predictable.
-- The library will abstract away the difficult or tedious parts of rate limiting, such as concurrency and timing issues, so users can focus on their application logic. Make easy things easy, and hard things possible.
+- The library will abstract away the difficult or tedious parts of rate limiting, such as concurrency, transactions and timing issues, so users can focus on their application logic.
+- Make easy things easy, and hard things possible.
 
 ## Testing Conventions
 
@@ -22,7 +23,7 @@
 - Use comprehensive test naming: `TestType_Method_Scenario` (e.g., `TestLimiter_Allow_MultipleBuckets_Concurrent`)
 - Create test variations covering: single/multiple buckets, single/multiple limits, serial/concurrent access
 - When you assert that something has been fixed or improved, run tests.
-- Do not ask me to run tests or benchmarks, just run them yourself.
+- Do not ask me to run tests, benchmarks and pprof, just run them yourself.
 
 ### Concurrent Testing Requirements
 - Always test both serial and concurrent versions of functionality
@@ -35,6 +36,11 @@
 - Format error messages with variable interpolation: `"bucket %d should allow request", bucketID`
 - Test both success and failure paths for all rate limiting operations
 - Always verify state after operations (remaining tokens, bucket exhaustion, etc.)
+
+### Performance
+- We would like good performance, but not at the expense of readability, maintainability, or correctness.
+- Look for allocations as the primary focus of performance
+- Use `go test -bench` to measure performance of critical paths, and include memory profiling. Use `go tool pprof` to analyze the results.
 
 ## Code Structure
 
@@ -56,7 +62,7 @@
 - Verify thread-safety with tools like `go test -race`
 
 ## API Design Patterns
-- Provide both simple (`Allow`, `Peek`) and detailed (`AllowWithDetails`, `PeekWithDetails`) API variants
+- Provide both simple (`Allow`, `Peek`), detailed (`AllowWithDetails`, `PeekWithDetails`), and debug (`AllowWithDebug`, `PeekWithDebug`) API variants
 - Use time-based parameters for deterministic testing
 - Return structured details including remaining tokens, execution time, and bucket keys
-- Implement `Wait` functionality with proper context handling and cancellation
+- Implement `Wait` functionality with proper context handling, best-effort ordering, and cancellation

@@ -33,11 +33,11 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 				// Test Peek method
 				limiter.Peek("test-key")
 
-				// Test AllowWithDetails method
-				limiter.AllowWithDetails("test-key")
+				// Test AllowWithDebug method
+				limiter.AllowWithDebug("test-key")
 
-				// Test PeekWithDetails method
-				limiter.PeekWithDetails("test-key")
+				// Test PeekWithDebug method
+				limiter.PeekWithDebug("test-key")
 			}
 		}()
 	}

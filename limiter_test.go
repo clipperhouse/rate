@@ -15,7 +15,7 @@ import (
 /*
 Trying to cover all the combinatorial use cases:
 
-For each method: Allow, Peek, Wait, Details
+For each method: Allow, Peek, Wait, Details, Debug
 - Single & multiple buckets
 - Single & multiple limits
 - Serial & concurrent
@@ -113,7 +113,7 @@ func TestLimiter_Allow_SingleBucket_MultipleLimits(t *testing.T) {
 	//...leaving 0 in the per-second bucket and 1 in the per-minute bucket
 
 	// 2 tokens should have been consumed from both buckets
-	_, details1 := limiter.peekWithDetails("test", now)
+	_, details1 := limiter.peekWithDebug("test", now)
 	require.Equal(t, perSecond.Count()-calls, details1[0].TokensRemaining(), "per-second bucket should be exhausted")
 	require.Equal(t, perMinute.Count()-calls, details1[1].TokensRemaining(), "per-minute bucket should have 1 token remaining")
 
@@ -124,7 +124,7 @@ func TestLimiter_Allow_SingleBucket_MultipleLimits(t *testing.T) {
 
 	// Verify that no tokens were consumed from any bucket,
 	// because the above request was denied
-	_, details2 := limiter.peekWithDetails("test", now)
+	_, details2 := limiter.peekWithDebug("test", now)
 	require.Equal(t, details1, details2, "details should be the same before and after the failed request")
 
 	// Refill per-second bucket (to 2), by forwarding time; per-minute still has 1
@@ -140,7 +140,7 @@ func TestLimiter_Allow_SingleBucket_MultipleLimits(t *testing.T) {
 	require.False(t, allowed, "should not allow when per-minute limit is exhausted")
 
 	// Verify per-second bucket was not affected by the failed request
-	_, details3 := limiter.peekWithDetails("test", now)
+	_, details3 := limiter.peekWithDebug("test", now)
 	require.Equal(t, int64(1), details3[0].TokensRemaining(), "per-second bucket should be unchanged after denial")
 	require.Equal(t, int64(0), details3[1].TokensRemaining(), "per-minute bucket should remain exhausted")
 
@@ -343,7 +343,7 @@ func TestLimiter_Allow_MultipleBuckets_MultipleLimits_Concurrent(t *testing.T) {
 	}
 }
 
-func TestLimiter_AllowNWithDetails_SingleBucket(t *testing.T) {
+func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input + "-key"
@@ -359,7 +359,7 @@ func TestLimiter_AllowNWithDetails_SingleBucket(t *testing.T) {
 
 	{
 		consume := int64(3)
-		allowed, details := limiter.allowNWithDetails("test-allow-with-details", now, consume)
+		allowed, details := limiter.allowNWithDebug("test-allow-with-details", now, consume)
 		require.True(t, allowed)
 		require.Len(t, details, 2, "should have details for both limits")
 
@@ -387,7 +387,7 @@ func TestLimiter_AllowNWithDetails_SingleBucket(t *testing.T) {
 	// should still be ok
 	{
 		consume := int64(6)
-		allowed, details := limiter.allowNWithDetails("test-allow-with-details", now, consume)
+		allowed, details := limiter.allowNWithDebug("test-allow-with-details", now, consume)
 		require.True(t, allowed)
 		require.Len(t, details, 2, "should have details for both limits")
 
@@ -415,7 +415,7 @@ func TestLimiter_AllowNWithDetails_SingleBucket(t *testing.T) {
 	// per-second now exhausted, should be denied, no tokens consumed
 	{
 		consume := int64(2)
-		allowed, details := limiter.allowNWithDetails("test-allow-with-details", now, consume)
+		allowed, details := limiter.allowNWithDebug("test-allow-with-details", now, consume)
 		require.False(t, allowed)
 		require.Len(t, details, 2, "should have details for both limits")
 
@@ -446,7 +446,7 @@ func TestLimiter_AllowNWithDetails_SingleBucket(t *testing.T) {
 	// per-second refilled
 	{
 		consume := int64(2)
-		allowed, details := limiter.allowNWithDetails("test-allow-with-details", now, consume)
+		allowed, details := limiter.allowNWithDebug("test-allow-with-details", now, consume)
 		require.True(t, allowed)
 		require.Len(t, details, 2, "should have details for both limits")
 
@@ -470,7 +470,7 @@ func TestLimiter_AllowNWithDetails_SingleBucket(t *testing.T) {
 	}
 }
 
-func TestLimiter_AllowWithDetails_SingleBucket_MultipleLimits(t *testing.T) {
+func TestLimiter_AllowWithDebug_SingleBucket_MultipleLimits(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input
@@ -483,7 +483,7 @@ func TestLimiter_AllowWithDetails_SingleBucket_MultipleLimits(t *testing.T) {
 	{
 		// exhaust the per-second limit, but per-minute should still have 1 token
 		for i := range perSecond.Count() {
-			allowed, details := limiter.allowWithDetails("test-allow-with-details", executionTime)
+			allowed, details := limiter.allowWithDebug("test-allow-with-details", executionTime)
 			require.True(t, allowed)
 			require.Len(t, details, 2, "should have details for both limits")
 
@@ -502,7 +502,7 @@ func TestLimiter_AllowWithDetails_SingleBucket_MultipleLimits(t *testing.T) {
 	}
 
 	{
-		allowed, details := limiter.allowWithDetails("test-allow-with-details", executionTime)
+		allowed, details := limiter.allowWithDebug("test-allow-with-details", executionTime)
 		require.False(t, allowed)
 		require.Len(t, details, 2, "should have details for both limits")
 
@@ -522,7 +522,7 @@ func TestLimiter_AllowWithDetails_SingleBucket_MultipleLimits(t *testing.T) {
 	}
 }
 
-func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *testing.T) {
+func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *testing.T) {
 	t.Parallel()
 	keyer := func(bucketID int) string {
 		return fmt.Sprintf("test-bucket-%d", bucketID)
@@ -535,7 +535,7 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 
 	// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
 	{
-		results := make([][]Details[int, string], buckets*int(perSecond.count))
+		results := make([][]Debug[int, string], buckets*int(perSecond.count))
 		resultIndex := 0
 
 		var wg sync.WaitGroup
@@ -544,7 +544,7 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 				wg.Add(1)
 				go func(bucketID int, processID int64, index int) {
 					defer wg.Done()
-					allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+					allowed, details := limiter.allowWithDebug(bucketID, executionTime)
 					require.True(t, allowed, "process %d for bucket %d should be allowed", processID, bucketID)
 					require.Len(t, details, 2, "should have details for both limits")
 					results[index] = details
@@ -569,13 +569,13 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 	// Verify that additional requests are rejected, all buckets should be exhausted on per-second limit
 	{
 		var wg sync.WaitGroup
-		results := make([][]Details[int, string], buckets)
+		results := make([][]Debug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
 			go func(bucketID int) {
 				defer wg.Done()
-				allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+				allowed, details := limiter.allowWithDebug(bucketID, executionTime)
 				require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, perSecond.count)
 				require.Len(t, details, 2, "should have details for both limits")
 				results[bucketID] = details
@@ -603,13 +603,13 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 	// Per-second bucket should now have 1 more token available
 	{
 		var wg sync.WaitGroup
-		results := make([][]Details[int, string], buckets)
+		results := make([][]Debug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
 			go func(bucketID int) {
 				defer wg.Done()
-				allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+				allowed, details := limiter.allowWithDebug(bucketID, executionTime)
 				require.True(t, allowed, "bucket %d should allow request after per-second refill", bucketID)
 				require.Len(t, details, 2, "should have details for both limits")
 				results[bucketID] = details
@@ -630,13 +630,13 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 	// Now all buckets should be exhausted on per-minute limit
 	{
 		var wg sync.WaitGroup
-		results := make([][]Details[int, string], buckets)
+		results := make([][]Debug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
 			go func(bucketID int) {
 				defer wg.Done()
-				allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+				allowed, details := limiter.allowWithDebug(bucketID, executionTime)
 				require.False(t, allowed, "bucket %d should be exhausted on per-minute limit", bucketID)
 				require.Len(t, details, 2, "should have details for both limits")
 				results[bucketID] = details
@@ -662,7 +662,7 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 	// Test concurrent access after full refill
 	{
 		var wg sync.WaitGroup
-		results := make([][]Details[int, string], buckets*int(perSecond.count))
+		results := make([][]Debug[int, string], buckets*int(perSecond.count))
 		resultIndex := 0
 
 		for bucketID := range buckets {
@@ -670,7 +670,7 @@ func TestLimiter_AllowWithDetails_MultipleBuckets_MultipleLimits_Concurrent(t *t
 				wg.Add(1)
 				go func(bucketID int, processID int64, index int) {
 					defer wg.Done()
-					allowed, details := limiter.allowWithDetails(bucketID, executionTime)
+					allowed, details := limiter.allowWithDebug(bucketID, executionTime)
 					require.True(t, allowed, "process %d for bucket %d should be allowed after refill", processID, bucketID)
 					require.Len(t, details, 2, "should have details for both limits")
 					results[index] = details
@@ -917,7 +917,7 @@ func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 	}
 }
 
-func TestLimiter_PeekWithDetails(t *testing.T) {
+func TestLimiter_PeekWithDebug(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input
@@ -930,7 +930,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 
 	// any number of peeks should be true
 	for range 101 {
-		allowed, details := limiter.peekWithDetails("test-details", executionTime)
+		allowed, details := limiter.peekWithDebug("test-details", executionTime)
 		require.True(t, allowed)
 		require.Len(t, details, 2, "should have details for both limits")
 
@@ -1049,7 +1049,7 @@ func TestLimiter_Allow_MultipleBuckets_Concurrent_Func(t *testing.T) {
 	}
 }
 
-func TestLimiter_AllowWithDetails_Func(t *testing.T) {
+func TestLimiter_AllowWithDebug_Func(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input
@@ -1060,7 +1060,7 @@ func TestLimiter_AllowWithDetails_Func(t *testing.T) {
 
 	now := time.Now()
 
-	allow, details := limiter.allowWithDetails("test-details", now)
+	allow, details := limiter.allowWithDebug("test-details", now)
 	require.True(t, allow)
 	d := details[0]
 	require.Equal(t, limit, d.Limit())
@@ -1211,7 +1211,7 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 	}
 }
 
-func TestLimiter_PeekNWithDetails_SingleBucket(t *testing.T) {
+func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input + "-key"
@@ -1224,7 +1224,7 @@ func TestLimiter_PeekNWithDetails_SingleBucket(t *testing.T) {
 
 	{
 		request := int64(10)
-		allowed, details := limiter.peekNWithDetails("test-allow-with-details", now, request)
+		allowed, details := limiter.peekNWithDebug("test-allow-with-details", now, request)
 		require.False(t, allowed)
 		require.Len(t, details, 2, "should have details for both limits")
 
@@ -1249,7 +1249,7 @@ func TestLimiter_PeekNWithDetails_SingleBucket(t *testing.T) {
 
 	{
 		request := int64(9)
-		allowed, details := limiter.peekNWithDetails("test-allow-with-details", now, request)
+		allowed, details := limiter.peekNWithDebug("test-allow-with-details", now, request)
 		require.True(t, allowed)
 		require.Len(t, details, 2, "should have details for both limits")
 
@@ -1273,7 +1273,7 @@ func TestLimiter_PeekNWithDetails_SingleBucket(t *testing.T) {
 	}
 }
 
-func TestLimiter_PeekWithDetails_Func(t *testing.T) {
+func TestLimiter_PeekWithDebug_Func(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string {
 		return input
@@ -1284,7 +1284,7 @@ func TestLimiter_PeekWithDetails_Func(t *testing.T) {
 
 	now := time.Now()
 
-	allowed, details := limiter.peekWithDetails("test-details", now)
+	allowed, details := limiter.peekWithDebug("test-details", now)
 	require.True(t, allowed)
 	d := details[0]
 	require.Equal(t, limit, d.Limit())
@@ -1305,7 +1305,7 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 		limiter := NewLimiterFunc(keyer, limitFunc)
 
 		for i := range 3 {
-			allow, details := limiter.allowWithDetails(i+1, time.Now())
+			allow, details := limiter.allowWithDebug(i+1, time.Now())
 			require.True(t, allow)
 			d := details[0]
 			require.Equal(t, limitFunc(i+1), d.Limit())
@@ -1316,7 +1316,7 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 		limiter := NewLimiter(keyer, limit)
 
 		for i := range 3 {
-			allow, details := limiter.allowWithDetails(i+1, time.Now())
+			allow, details := limiter.allowWithDebug(i+1, time.Now())
 			require.True(t, allow)
 			d := details[0]
 			require.Equal(t, limit, d.Limit())
@@ -1761,9 +1761,9 @@ func TestDetails_TokensRequestedAndConsumed(t *testing.T) {
 	limit := NewLimit(5, time.Second)
 	limiter := NewLimiter(keyer, limit)
 
-	// Test AllowWithDetails when request is allowed
-	t.Run("AllowWithDetails_Allowed", func(t *testing.T) {
-		allowed, details := limiter.AllowWithDetails("test-key1")
+	// Test AllowWithDebug when request is allowed
+	t.Run("AllowWithDebug_Allowed", func(t *testing.T) {
+		allowed, details := limiter.AllowWithDebug("test-key1")
 		require.True(t, allowed, "request should be allowed")
 		require.Len(t, details, 1, "should have one detail")
 
@@ -1773,9 +1773,9 @@ func TestDetails_TokensRequestedAndConsumed(t *testing.T) {
 		require.Equal(t, int64(4), d.TokensRemaining(), "should have 4 tokens remaining")
 	})
 
-	// Test PeekWithDetails (no consumption)
-	t.Run("PeekWithDetails", func(t *testing.T) {
-		allowed, details := limiter.PeekWithDetails("test-key2")
+	// Test PeekWithDebug (no consumption)
+	t.Run("PeekWithDebug", func(t *testing.T) {
+		allowed, details := limiter.PeekWithDebug("test-key2")
 		require.True(t, allowed, "peek should show available tokens")
 		require.Len(t, details, 1, "should have one detail")
 
@@ -1785,14 +1785,14 @@ func TestDetails_TokensRequestedAndConsumed(t *testing.T) {
 		require.Equal(t, int64(5), d.TokensRemaining(), "should have all 5 tokens remaining")
 	})
 
-	// Test AllowWithDetails when request is denied
-	t.Run("AllowWithDetails_Denied", func(t *testing.T) {
+	// Test AllowWithDebug when request is denied
+	t.Run("AllowWithDebug_Denied", func(t *testing.T) {
 		// Exhaust the bucket
 		for range limit.count {
 			limiter.Allow("test-key3")
 		}
 
-		allowed, details := limiter.AllowWithDetails("test-key3")
+		allowed, details := limiter.AllowWithDebug("test-key3")
 		require.False(t, allowed, "request should be denied")
 		require.Len(t, details, 1, "should have one detail")
 
@@ -1816,7 +1816,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	// Test 1: Wait should consume exactly 1 token
 	t.Run("Wait_Consumes_One_Token", func(t *testing.T) {
 		// Verify initial state
-		_, initialDetails := limiter.peekWithDetails("test-wait-1", executionTime)
+		_, initialDetails := limiter.peekWithDebug("test-wait-1", executionTime)
 		require.Equal(t, limit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
 
 		// Deadline that gives enough time
@@ -1832,7 +1832,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.True(t, allowed, "wait should succeed")
 
 		// Verify exactly 1 token was consumed
-		_, finalDetails := limiter.peekWithDetails("test-wait-1", executionTime)
+		_, finalDetails := limiter.peekWithDebug("test-wait-1", executionTime)
 		require.Equal(t, limit.count-1, finalDetails[0].TokensRemaining(), "should have consumed exactly 1 token")
 	})
 
@@ -1841,7 +1841,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		const tokensToWait = 3
 
 		// Verify initial state
-		_, initialDetails := limiter.peekWithDetails("test-waitn-3", executionTime)
+		_, initialDetails := limiter.peekWithDebug("test-waitn-3", executionTime)
 		require.Equal(t, limit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
 
 		// Deadline that gives enough time
@@ -1857,7 +1857,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.True(t, allowed, "waitN should succeed")
 
 		// Verify exactly tokensToWait tokens were consumed
-		_, details := limiter.peekWithDetails("test-waitn-3", executionTime)
+		_, details := limiter.peekWithDebug("test-waitn-3", executionTime)
 		require.Equal(t, limit.count-tokensToWait, details[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
 	})
 
@@ -1869,7 +1869,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		const tokensToWait = 2
 
 		// Verify initial state
-		_, initialDetails := limiter.peekWithDetails("test-multi-waitn", executionTime)
+		_, initialDetails := limiter.peekWithDebug("test-multi-waitn", executionTime)
 		require.Len(t, initialDetails, 2, "should have details for both limits")
 		require.Equal(t, perSecond.count, initialDetails[0].TokensRemaining(), "per-second should start with all tokens")
 		require.Equal(t, perMinute.count, initialDetails[1].TokensRemaining(), "per-minute should start with all tokens")
@@ -1887,7 +1887,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.True(t, allowed, "waitN should succeed with multiple limits")
 
 		// Verify exactly tokensToWait tokens were consumed from both buckets
-		_, finalDetails := limiter.peekWithDetails("test-multi-waitn", executionTime)
+		_, finalDetails := limiter.peekWithDebug("test-multi-waitn", executionTime)
 		require.Len(t, finalDetails, 2, "should have details for both limits")
 		require.Equal(t, perSecond.count-tokensToWait, finalDetails[0].TokensRemaining(), "per-second should have consumed exactly %d tokens", tokensToWait)
 		require.Equal(t, perMinute.count-tokensToWait, finalDetails[1].TokensRemaining(), "per-minute should have consumed exactly %d tokens", tokensToWait)
@@ -1901,7 +1901,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		}
 
 		// Verify bucket is exhausted
-		_, exhaustedDetails := limiter.peekWithDetails("test-fail-waitn", executionTime)
+		_, exhaustedDetails := limiter.peekWithDebug("test-fail-waitn", executionTime)
 		require.Equal(t, int64(0), exhaustedDetails[0].TokensRemaining(), "bucket should be exhausted")
 
 		// Deadline that expires immediately (no time to refill)
@@ -1917,7 +1917,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.False(t, allowed, "waitN should fail when deadline expires before tokens available")
 
 		// Verify no tokens were consumed
-		_, finalDetails := limiter.peekWithDetails("test-fail-waitn", executionTime)
+		_, finalDetails := limiter.peekWithDebug("test-fail-waitn", executionTime)
 		require.Equal(t, int64(0), finalDetails[0].TokensRemaining(), "should still have 0 tokens after failed wait")
 	})
 
@@ -1928,7 +1928,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		const tokensToWait = 25
 
 		// Verify initial state
-		_, initialDetails := bigLimiter.peekWithDetails("test-big-waitn", executionTime)
+		_, initialDetails := bigLimiter.peekWithDebug("test-big-waitn", executionTime)
 		require.Equal(t, bigLimit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
 
 		// Deadline that gives enough time
@@ -1944,7 +1944,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.True(t, allowed, "waitN should succeed with high token count")
 
 		// Verify exactly tokensToWait tokens were consumed
-		_, finalDetails := bigLimiter.peekWithDetails("test-big-waitn", executionTime)
+		_, finalDetails := bigLimiter.peekWithDebug("test-big-waitn", executionTime)
 		require.Equal(t, bigLimit.count-tokensToWait, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
 	})
 
@@ -1989,7 +1989,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		require.Equal(t, expectedSuccesses/tokensPerWait, successes, "expected exactly %d successful waits", expectedSuccesses/tokensPerWait)
 
 		// Verify total tokens consumed
-		_, finalDetails := concurrentLimiter.peekWithDetails("test-concurrent-waitn", executionTime)
+		_, finalDetails := concurrentLimiter.peekWithDebug("test-concurrent-waitn", executionTime)
 		expectedRemaining := concurrentLimit.count - (successes * tokensPerWait)
 		require.Equal(t, expectedRemaining, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens total", successes*tokensPerWait)
 	})

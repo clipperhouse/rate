@@ -191,6 +191,220 @@ const (
 	peek
 )
 
+// checkBucketsAndLimitsWithDetails determines whether all buckets & limits have tokens
+// and calculates aggregated details. If the op is `allow`, it will consume tokens if available.
+func (r *Limiter[TInput, TKey]) checkBucketsAndLimitsWithDetails(input TInput, executionTime time.Time, n int64, op op) (bool, DetailsAggregated[TInput, TKey]) {
+	userKey := r.keyer(input)
+
+	if len(r.limits) == 1 || len(r.limitFuncs) == 1 { // limits and limitFuncs are mutually exclusive
+		// Fast path for single limit - avoid allocations
+		var limit Limit
+		if len(r.limitFuncs) > 0 {
+			limit = r.limitFuncs[0](input)
+		} else {
+			limit = r.limits[0]
+		}
+		spec := bucketSpec[TKey]{
+			limit:   limit,
+			userKey: userKey,
+		}
+
+		var b *bucket
+		switch op {
+		case allow:
+			b = r.buckets.loadOrStore(spec, executionTime, limit)
+		case peek:
+			b = r.buckets.loadOrGet(spec, executionTime, limit)
+		default:
+			panic("unknown op")
+		}
+
+		// Use appropriate lock based on operation
+		switch op {
+		case allow:
+			b.mu.Lock()
+			defer b.mu.Unlock()
+		case peek:
+			b.mu.RLock()
+			defer b.mu.RUnlock()
+		}
+
+		allowed := b.hasTokens(executionTime, limit, n)
+		remainingTokens := b.remainingTokens(executionTime, limit)
+		
+		// Calculate retry-after
+		nextTokensTime := b.nextTokensTime(limit, n)
+		retryAfter := nextTokensTime.Sub(executionTime)
+		if retryAfter < 0 {
+			retryAfter = 0
+		}
+
+		var tokensConsumed int64
+		if allowed && op == allow {
+			b.consumeTokens(executionTime, limit, n)
+			tokensConsumed = n
+			// Recalculate remaining tokens after consumption
+			remainingTokens = b.remainingTokens(executionTime, limit)
+		}
+
+		details := DetailsAggregated[TInput, TKey]{
+			allowed:         allowed,
+			tokensRequested: n,
+			tokensConsumed:  tokensConsumed,
+			executionTime:   executionTime,
+			remainingTokens: remainingTokens,
+			retryAfter:      retryAfter,
+			bucketInput:     input,
+			bucketKey:       userKey,
+		}
+
+		return allowed, details
+	}
+
+	// Otherwise, multiple limits
+
+	// Collect the limits
+	var limits []Limit
+
+	// limits and limitFuncs are mutually exclusive.
+	if len(r.limits) > 0 {
+		limits = r.limits
+	} else if len(r.limitFuncs) > 0 {
+		limits = make([]Limit, 0, len(r.limitFuncs))
+		for _, limitFunc := range r.limitFuncs {
+			limits = append(limits, limitFunc(input))
+		}
+	}
+	if len(limits) == 0 {
+		// No limits defined, so we allow everything
+		details := DetailsAggregated[TInput, TKey]{
+			allowed:         true,
+			tokensRequested: n,
+			tokensConsumed:  0,
+			executionTime:   executionTime,
+			remainingTokens: 0,
+			retryAfter:      0,
+			bucketInput:     input,
+			bucketKey:       userKey,
+		}
+		return true, details
+	}
+
+	// Collect the buckets
+	buckets := make([]*bucket, 0, len(limits))
+	for _, limit := range limits {
+		spec := bucketSpec[TKey]{
+			limit:   limit,
+			userKey: userKey,
+		}
+
+		var b *bucket
+		switch op {
+		case allow:
+			b = r.buckets.loadOrStore(spec, executionTime, limit)
+		case peek:
+			b = r.buckets.loadOrGet(spec, executionTime, limit)
+		default:
+			panic("unknown op")
+		}
+		buckets = append(buckets, b)
+	}
+
+	// Lock all buckets with appropriate lock type
+	switch op {
+	case allow:
+		for _, b := range buckets {
+			b.mu.Lock()
+		}
+		defer func() {
+			for _, b := range buckets {
+				b.mu.Unlock()
+			}
+		}()
+	case peek:
+		for _, b := range buckets {
+			b.mu.RLock()
+		}
+		defer func() {
+			for _, b := range buckets {
+				b.mu.RUnlock()
+			}
+		}()
+	}
+
+	// Check if all buckets allow the token and calculate aggregated details
+	allowAll := true
+	minRemainingTokens := int64(-1) // Use -1 to indicate unset
+	maxRetryAfter := time.Duration(0)
+
+	for i, b := range buckets {
+		limit := limits[i]
+		if !b.hasTokens(executionTime, limit, n) {
+			allowAll = false
+		}
+
+		// Calculate aggregated values
+		remaining := b.remainingTokens(executionTime, limit)
+		if minRemainingTokens == -1 || remaining < minRemainingTokens {
+			minRemainingTokens = remaining
+		}
+
+		// Calculate retry-after from this bucket's next tokens time
+		nextTokensTime := b.nextTokensTime(limit, n)
+		retryAfter := nextTokensTime.Sub(executionTime)
+		if retryAfter > maxRetryAfter {
+			maxRetryAfter = retryAfter
+		}
+	}
+
+	// Ensure minRemainingTokens is at least 0 if no buckets found
+	if minRemainingTokens == -1 {
+		minRemainingTokens = 0
+	}
+
+	// Consume tokens only when all buckets allow
+	var tokensConsumed int64
+	if allowAll && op == allow {
+		for i := range buckets {
+			b := buckets[i]
+			limit := limits[i]
+			b.consumeTokens(executionTime, limit, n)
+		}
+		tokensConsumed = n
+		// Recalculate remaining tokens after consumption
+		minRemainingTokens = int64(-1)
+		for i := range buckets {
+			b := buckets[i]
+			limit := limits[i]
+			remaining := b.remainingTokens(executionTime, limit)
+			if minRemainingTokens == -1 || remaining < minRemainingTokens {
+				minRemainingTokens = remaining
+			}
+		}
+		if minRemainingTokens == -1 {
+			minRemainingTokens = 0
+		}
+	}
+
+	// Ensure retry-after is not negative
+	if maxRetryAfter < 0 {
+		maxRetryAfter = 0
+	}
+
+	details := DetailsAggregated[TInput, TKey]{
+		allowed:         allowAll,
+		tokensRequested: n,
+		tokensConsumed:  tokensConsumed,
+		executionTime:   executionTime,
+		remainingTokens: minRemainingTokens,
+		retryAfter:      maxRetryAfter,
+		bucketInput:     input,
+		bucketKey:       userKey,
+	}
+
+	return allowAll, details
+}
+
 // checkBucketsAndLimits determines whether all buckets & limits have tokens.
 // If the op is `allow`, it will consume tokens if available.
 func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTime time.Time, n int64, op op) bool {
@@ -455,82 +669,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
-	userKey := r.keyer(input)
-	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, true)
-	unlock := lockBuckets(buckets)
-	defer unlock()
-
-	allowAll := true
-	minRemainingTokens := int64(-1) // Use -1 to indicate unset
-	maxRetryAfter := time.Duration(0)
-
-	// Check all buckets first
-	for i := range buckets {
-		b := buckets[i]
-		limit := limits[i]
-		allow := b.hasTokens(executionTime, limit, n)
-		allowAll = allowAll && allow
-
-		// Calculate aggregated values
-		remaining := b.remainingTokens(executionTime, limit)
-		if minRemainingTokens == -1 || remaining < minRemainingTokens {
-			minRemainingTokens = remaining
-		}
-
-		// Calculate retry-after from this bucket's next tokens time
-		nextTokensTime := b.nextTokensTime(limit, n)
-		retryAfter := nextTokensTime.Sub(executionTime)
-		if retryAfter > maxRetryAfter {
-			maxRetryAfter = retryAfter
-		}
-	}
-
-	// Ensure minRemainingTokens is at least 0 if no buckets found
-	if minRemainingTokens == -1 {
-		minRemainingTokens = 0
-	}
-
-	// Consume tokens only when all buckets allow
-	var tokensConsumed int64
-	if allowAll {
-		for i := range buckets {
-			b := buckets[i]
-			limit := limits[i]
-			b.consumeTokens(executionTime, limit, n)
-		}
-		tokensConsumed = n
-		// Recalculate remaining tokens after consumption
-		minRemainingTokens = int64(-1)
-		for i := range buckets {
-			b := buckets[i]
-			limit := limits[i]
-			remaining := b.remainingTokens(executionTime, limit)
-			if minRemainingTokens == -1 || remaining < minRemainingTokens {
-				minRemainingTokens = remaining
-			}
-		}
-		if minRemainingTokens == -1 {
-			minRemainingTokens = 0
-		}
-	}
-
-	// Ensure retry-after is not negative
-	if maxRetryAfter < 0 {
-		maxRetryAfter = 0
-	}
-
-	details := DetailsAggregated[TInput, TKey]{
-		allowed:         allowAll,
-		tokensRequested: n,
-		tokensConsumed:  tokensConsumed,
-		executionTime:   executionTime,
-		remainingTokens: minRemainingTokens,
-		retryAfter:      maxRetryAfter,
-		bucketInput:     input,
-		bucketKey:       userKey,
-	}
-
-	return allowAll, details
+	return r.checkBucketsAndLimitsWithDetails(input, executionTime, n, allow)
 }
 
 // Peek returns true if tokens are available for the given key,
@@ -640,59 +779,7 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 }
 
 func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, DetailsAggregated[TInput, TKey]) {
-	userKey := r.keyer(input)
-	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, false)
-
-	allowAll := true
-	minRemainingTokens := int64(-1) // Use -1 to indicate unset
-	maxRetryAfter := time.Duration(0)
-
-	unlock := rLockBuckets(buckets)
-	defer unlock()
-
-	for i := range buckets {
-		b := buckets[i]
-		limit := limits[i]
-
-		allow := b.hasTokens(executionTime, limit, n)
-		allowAll = allowAll && allow
-
-		// Calculate aggregated values
-		remaining := b.remainingTokens(executionTime, limit)
-		if minRemainingTokens == -1 || remaining < minRemainingTokens {
-			minRemainingTokens = remaining
-		}
-
-		// Calculate retry-after from this bucket's next tokens time
-		nextTokensTime := b.nextTokensTime(limit, n)
-		retryAfter := nextTokensTime.Sub(executionTime)
-		if retryAfter > maxRetryAfter {
-			maxRetryAfter = retryAfter
-		}
-	}
-
-	// Ensure minRemainingTokens is at least 0 if no buckets found
-	if minRemainingTokens == -1 {
-		minRemainingTokens = 0
-	}
-
-	// Ensure retry-after is not negative
-	if maxRetryAfter < 0 {
-		maxRetryAfter = 0
-	}
-
-	details := DetailsAggregated[TInput, TKey]{
-		allowed:         allowAll,
-		tokensRequested: n,
-		tokensConsumed:  0, // Never consume tokens in peek
-		executionTime:   executionTime,
-		remainingTokens: minRemainingTokens,
-		retryAfter:      maxRetryAfter,
-		bucketInput:     input,
-		bucketKey:       userKey,
-	}
-
-	return allowAll, details
+	return r.checkBucketsAndLimitsWithDetails(input, executionTime, n, peek)
 }
 
 // Wait will poll [Allow] for a period of time,

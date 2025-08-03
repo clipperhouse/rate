@@ -210,11 +210,41 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimitsWithDetails(input TInput, e
 		}
 
 		var b *bucket
+
 		switch op {
 		case allow:
 			b = r.buckets.loadOrStore(spec, executionTime, limit)
 		case peek:
-			b = r.buckets.loadOrGet(spec, executionTime, limit)
+			if b2, ok := r.buckets.load(spec); ok {
+				b = b2
+			} else {
+				// use stack-allocated bucket
+				b := bucket{
+					time: executionTime.Add(-limit.period),
+				}
+				allowed := b.hasTokens(executionTime, limit, n)
+				remainingTokens := remainingTokens(executionTime, b.time, limit)
+
+				var retryAfter time.Duration
+				if !allowed {
+					retryAfter = b.nextTokensTime(limit, n).Sub(executionTime)
+				}
+				if retryAfter < 0 {
+					retryAfter = 0
+				}
+
+				details := Details[TInput, TKey]{
+					allowed:         allowed,
+					tokensRequested: n,
+					tokensConsumed:  0, // peek never consumes
+					executionTime:   executionTime,
+					remainingTokens: remainingTokens,
+					retryAfter:      retryAfter,
+					bucketInput:     input,
+					bucketKey:       userKey,
+				}
+				return allowed, details
+			}
 		default:
 			panic("unknown op")
 		}
@@ -415,7 +445,7 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTim
 	userKey := r.keyer(input)
 
 	if len(r.limits) == 1 || len(r.limitFuncs) == 1 { // limits and limitFuncs are mutually exclusive
-		// Fast path for single limit - avoid allocations
+		// Fast path for single limit, avoid allocations
 		var limit Limit
 		if len(r.limitFuncs) > 0 {
 			limit = r.limitFuncs[0](input)
@@ -428,11 +458,21 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTim
 		}
 
 		var b *bucket
+
 		switch op {
 		case allow:
 			b = r.buckets.loadOrStore(spec, executionTime, limit)
 		case peek:
-			b = r.buckets.loadOrGet(spec, executionTime, limit)
+			b2, ok := r.buckets.load(spec)
+			if ok {
+				b = b2
+			} else {
+				// stack-allocated bucket
+				b := bucket{
+					time: executionTime.Add(-limit.period),
+				}
+				return b.hasTokens(executionTime, limit, n)
+			}
 		default:
 			panic("unknown op")
 		}
@@ -468,13 +508,17 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTim
 		return true
 	}
 
-	// Collect the buckets - use stack allocation for small numbers of limits
-	var bucketsArray [4]*bucket // Stack-allocated array for common case
+	// Collect the buckets
+
+	// use a stack allocation for small numbers of limits,
+	// should be the common case
+	var stackBuckets [4]*bucket
 	var buckets []*bucket
-	if len(limits) <= len(bucketsArray) {
-		buckets = bucketsArray[:0] // Use stack-allocated array
+	if len(limits) <= len(stackBuckets) {
+		buckets = stackBuckets[:0]
 	} else {
-		buckets = make([]*bucket, 0, len(limits)) // Fall back to heap for large cases
+		// Fall back to heap for large cases
+		buckets = make([]*bucket, 0, len(limits))
 	}
 
 	for _, limit := range limits {

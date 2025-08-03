@@ -65,6 +65,13 @@ func (bm *bucketMap[TKey]) loadOrGet(key bucketSpec[TKey], executionTime time.Ti
 	return newBucket(executionTime, limit)
 }
 
+func (bm *bucketMap[TKey]) load(key bucketSpec[TKey]) (*bucket, bool) {
+	if loaded, ok := bm.m.Load(key); ok {
+		return loaded.(*bucket), true
+	}
+	return nil, false
+}
+
 func (bm *bucketMap[TKey]) count() int {
 	count := 0
 	bm.m.Range(func(_, _ any) bool {

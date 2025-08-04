@@ -345,9 +345,36 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimitsWithDetails(input TInput, e
 	return allowAll, details
 }
 
-// checkBucketsAndLimits determines whether all buckets & limits have tokens.
-// If the op is `allow`, it will consume tokens if available.
-func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTime time.Time, n int64, op op) bool {
+func lockBuckets(buckets []*bucket) (unlock func()) {
+	for _, b := range buckets {
+		b.mu.Lock()
+	}
+	return func() {
+		for _, b := range buckets {
+			b.mu.Unlock()
+		}
+	}
+}
+
+func rLockBuckets(buckets []*bucket) (unlock func()) {
+	for _, b := range buckets {
+		b.mu.RLock()
+	}
+	return func() {
+		for _, b := range buckets {
+			b.mu.RUnlock()
+		}
+	}
+}
+
+func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) bool {
+	return r.allowN(input, executionTime, 1)
+}
+
+func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
+	// Allow must be true for all limits, a strict AND operation.
+	// If any limit is not allowed, the overall allow is false and
+	// no token is consumed from any bucket.
 
 	// Collect the limits
 	var limits []Limit
@@ -382,36 +409,7 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTim
 
 	userKey := r.keyer(input)
 
-	// For peek operation, we can check each bucket individually
-	// without needing to collect and lock them all together
-	if op == peek {
-		for _, limit := range limits {
-			spec := bucketSpec[TKey]{
-				limit:   limit,
-				userKey: userKey,
-			}
-
-			if b, ok := r.buckets.load(spec); ok {
-				b.mu.RLock()
-				allowed := b.hasTokens(executionTime, limit, n)
-				b.mu.RUnlock()
-				if !allowed {
-					return false
-				}
-			} else {
-				// Use stack-allocated bucket for missing buckets
-				b := bucket{
-					time: executionTime.Add(-limit.period),
-				}
-				if !b.hasTokens(executionTime, limit, n) {
-					return false
-				}
-			}
-		}
-		return true
-	}
-
-	// For allow operation, we need to collect all buckets and lock them together
+	// We need to collect all buckets and lock them together
 	for _, limit := range limits {
 		spec := bucketSpec[TKey]{
 			limit:   limit,
@@ -426,7 +424,7 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTim
 	for _, b := range buckets {
 		b.mu.Lock()
 	}
-	// ...and unlock
+	// ...and defer unlock
 	defer func() {
 		for _, b := range buckets {
 			b.mu.Unlock()
@@ -453,40 +451,6 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTim
 	}
 
 	return allowAll
-}
-
-func lockBuckets(buckets []*bucket) (unlock func()) {
-	for _, b := range buckets {
-		b.mu.Lock()
-	}
-	return func() {
-		for _, b := range buckets {
-			b.mu.Unlock()
-		}
-	}
-}
-
-func rLockBuckets(buckets []*bucket) (unlock func()) {
-	for _, b := range buckets {
-		b.mu.RLock()
-	}
-	return func() {
-		for _, b := range buckets {
-			b.mu.RUnlock()
-		}
-	}
-}
-
-func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) bool {
-	return r.allowN(input, executionTime, 1)
-}
-
-func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
-	// Allow must be true for all limits, a strict AND operation.
-	// If any limit is not allowed, the overall allow is false and
-	// no token is consumed from any bucket.
-
-	return r.checkBucketsAndLimits(input, executionTime, n, allow) // Return true if all buckets allowed
 }
 
 // AllowWithDebug returns true if a token is available for the given key,
@@ -631,7 +595,56 @@ func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n int64) bool {
-	return r.checkBucketsAndLimits(input, executionTime, n, peek) // Return true if all buckets allowed
+	// Collect the limits
+	var limits []Limit
+
+	// limits and limitFuncs are mutually exclusive.
+	if len(r.limits) > 0 {
+		limits = r.limits
+	} else if len(r.limitFuncs) > 0 {
+		limits = make([]Limit, 0, len(r.limitFuncs))
+		for _, limitFunc := range r.limitFuncs {
+			limits = append(limits, limitFunc(input))
+		}
+	}
+	if len(limits) == 0 {
+		// No limits defined, so we allow everything
+		return true
+	}
+
+	userKey := r.keyer(input)
+
+	// For peek operation, we can check each bucket individually
+	// without needing to collect and lock them all together
+	for _, limit := range limits {
+		spec := bucketSpec[TKey]{
+			limit:   limit,
+			userKey: userKey,
+		}
+
+		if b, ok := r.buckets.load(spec); ok {
+			b.mu.RLock()
+			allowed := b.hasTokens(executionTime, limit, n)
+			b.mu.RUnlock()
+			if !allowed {
+				return false
+			}
+			continue
+		}
+
+		// Use stack-allocated bucket for missing buckets
+
+		// We might just return true here, since any new
+		// bucket will allow, but going through the
+		// formality just in case something changes
+		b := bucket{
+			time: executionTime.Add(-limit.period),
+		}
+		if !b.hasTokens(executionTime, limit, n) {
+			return false
+		}
+	}
+	return true
 }
 
 // PeekWithDebug returns true if tokens are available for the given key,

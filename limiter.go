@@ -196,93 +196,6 @@ const (
 func (r *Limiter[TInput, TKey]) checkBucketsAndLimitsWithDetails(input TInput, executionTime time.Time, n int64, op op) (bool, Details[TInput, TKey]) {
 	userKey := r.keyer(input)
 
-	if limit, ok := r.trySingleLimit(input); ok {
-		spec := bucketSpec[TKey]{
-			limit:   limit,
-			userKey: userKey,
-		}
-
-		var b *bucket
-
-		switch op {
-		case allow:
-			b = r.buckets.loadOrStore(spec, executionTime, limit)
-		case peek:
-			if b2, ok := r.buckets.load(spec); ok {
-				b = b2
-			} else {
-				// Optimization: use stack-allocated bucket
-				b := bucket{
-					time: executionTime.Add(-limit.period),
-				}
-				allowed := b.hasTokens(executionTime, limit, n)
-				remainingTokens := remainingTokens(executionTime, b.time, limit)
-
-				var retryAfter time.Duration
-				if !allowed {
-					retryAfter = b.nextTokensTime(limit, n).Sub(executionTime)
-				}
-				if retryAfter < 0 {
-					retryAfter = 0
-				}
-
-				details := Details[TInput, TKey]{
-					allowed:         allowed,
-					tokensRequested: n,
-					tokensConsumed:  0, // peek never consumes
-					executionTime:   executionTime,
-					remainingTokens: remainingTokens,
-					retryAfter:      retryAfter,
-					bucketInput:     input,
-					bucketKey:       userKey,
-				}
-				return allowed, details
-			}
-		default:
-			panic("unknown op")
-		}
-
-		// Use appropriate lock based on operation
-		switch op {
-		case allow:
-			b.mu.Lock()
-			defer b.mu.Unlock()
-		case peek:
-			b.mu.RLock()
-			defer b.mu.RUnlock()
-		}
-
-		allowed := b.hasTokens(executionTime, limit, n)
-		remainingTokens := b.remainingTokens(executionTime, limit)
-
-		// Calculate retry-after
-		nextTokensTime := b.nextTokensTime(limit, n)
-		retryAfter := max(nextTokensTime.Sub(executionTime), 0)
-
-		var tokensConsumed int64
-		if allowed && op == allow {
-			b.consumeTokens(executionTime, limit, n)
-			tokensConsumed = n
-			// Recalculate remaining tokens after consumption
-			remainingTokens = b.remainingTokens(executionTime, limit)
-		}
-
-		details := Details[TInput, TKey]{
-			allowed:         allowed,
-			tokensRequested: n,
-			tokensConsumed:  tokensConsumed,
-			executionTime:   executionTime,
-			remainingTokens: remainingTokens,
-			retryAfter:      retryAfter,
-			bucketInput:     input,
-			bucketKey:       userKey,
-		}
-
-		return allowed, details
-	}
-
-	// Otherwise, multiple limits
-
 	// Collect the limits
 	var limits []Limit
 
@@ -432,62 +345,9 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimitsWithDetails(input TInput, e
 	return allowAll, details
 }
 
-func (r *Limiter[TInput, TKey]) trySingleLimit(input TInput) (Limit, bool) {
-	// Fast path for single static limit - avoid slice allocations
-	if len(r.limits) == 1 {
-		return r.limits[0], true
-	}
-	if len(r.limitFuncs) == 1 {
-		return r.limitFuncs[0](input), true
-	}
-	return Limit{}, false
-}
-
 // checkBucketsAndLimits determines whether all buckets & limits have tokens.
 // If the op is `allow`, it will consume tokens if available.
 func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTime time.Time, n int64, op op) bool {
-	userKey := r.keyer(input)
-
-	// Optimization: for single limit, avoid allocations
-	if limit, ok := r.trySingleLimit(input); ok {
-		spec := bucketSpec[TKey]{
-			limit:   limit,
-			userKey: userKey,
-		}
-
-		var b *bucket
-
-		switch op {
-		case allow:
-			b = r.buckets.loadOrStore(spec, executionTime, limit)
-		case peek:
-			b2, ok := r.buckets.load(spec)
-			if ok {
-				b = b2
-			} else {
-				// Optimization: stack-allocated bucket
-				b := bucket{
-					time: executionTime.Add(-limit.period),
-				}
-				return b.hasTokens(executionTime, limit, n)
-			}
-		default:
-			panic("unknown op")
-		}
-
-		b.mu.Lock()
-		defer b.mu.Unlock()
-
-		if b.hasTokens(executionTime, limit, n) {
-			if op == allow {
-				b.consumeTokens(executionTime, limit, n)
-			}
-			return true
-		}
-		return false
-	}
-
-	// Otherwise, multiple limits
 
 	// Collect the limits
 	var limits []Limit
@@ -519,6 +379,8 @@ func (r *Limiter[TInput, TKey]) checkBucketsAndLimits(input TInput, executionTim
 		// Fall back to heap for larger cases
 		buckets = make([]*bucket, 0, len(limits))
 	}
+
+	userKey := r.keyer(input)
 
 	// For peek operation, we can check each bucket individually
 	// without needing to collect and lock them all together

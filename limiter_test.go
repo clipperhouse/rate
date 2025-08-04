@@ -2412,10 +2412,10 @@ func TestLimiter_Wait_RaceCondition_Prevention(t *testing.T) {
 	require.Equal(t, 0, limiter.waiters.count(), "all waiters should be cleaned up")
 }
 
-func TestLimiter_AllowWithDetails_Aggregated(t *testing.T) {
+func TestLimiter_AllowWithDetails(t *testing.T) {
 	t.Parallel()
 	keyer := func(input string) string { return input }
-	
+
 	// Test single limit
 	t.Run("SingleLimit", func(t *testing.T) {
 		limit := NewLimit(5, time.Second)
@@ -2434,8 +2434,8 @@ func TestLimiter_AllowWithDetails_Aggregated(t *testing.T) {
 
 	// Test multiple limits - this is the key scenario
 	t.Run("MultipleLimits", func(t *testing.T) {
-		perSecond := NewLimit(2, time.Second)   // 2 per second = 500ms per token
-		perMinute := NewLimit(3, time.Minute)   // 3 per minute = 20s per token
+		perSecond := NewLimit(2, time.Second) // 2 per second = 500ms per token
+		perMinute := NewLimit(3, time.Minute) // 3 per minute = 20s per token
 		limiter := NewLimiter(keyer, perSecond, perMinute)
 
 		// Allow first request
@@ -2443,28 +2443,28 @@ func TestLimiter_AllowWithDetails_Aggregated(t *testing.T) {
 		require.True(t, allowed, "first request should be allowed")
 		require.Equal(t, int64(1), details.TokensRequested())
 		require.Equal(t, int64(1), details.TokensConsumed())
-		
+
 		// Remaining tokens should be minimum across buckets: min(1, 2) = 1
 		require.Equal(t, int64(1), details.TokensRemaining(), "should have min remaining tokens across buckets")
-		
+
 		// Allow second request
 		allowed, details = limiter.AllowWithDetails("test-multi")
 		require.True(t, allowed, "second request should be allowed")
-		
+
 		// Remaining tokens should be minimum across buckets: min(0, 1) = 0
 		require.Equal(t, int64(0), details.TokensRemaining(), "should have min remaining tokens across buckets")
-		
+
 		// Try third request - should be denied because per-second bucket is exhausted
 		allowed, details = limiter.AllowWithDetails("test-multi")
 		require.False(t, allowed, "third request should be denied")
 		require.Equal(t, int64(0), details.TokensConsumed(), "should consume 0 tokens when denied")
 		require.Equal(t, int64(0), details.TokensRemaining(), "should show 0 remaining when denied")
-		
+
 		// RetryAfter should be time needed for per-second bucket to refill (since it's the bottleneck)
 		require.Greater(t, details.RetryAfter(), time.Duration(0), "retry after should be positive when denied")
 		require.LessOrEqual(t, details.RetryAfter(), perSecond.DurationPerToken(), "retry after should not exceed per-token duration")
 	})
-	
+
 	// Test PeekWithDetails doesn't consume tokens
 	t.Run("PeekDoesNotConsume", func(t *testing.T) {
 		limit := NewLimit(2, time.Second)

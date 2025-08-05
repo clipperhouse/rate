@@ -2465,6 +2465,140 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 		require.LessOrEqual(t, details.RetryAfter(), perSecond.DurationPerToken(), "retry after should not exceed per-token duration")
 	})
 
+	// Test RetryAfter with multiple limits - comprehensive scenarios
+	t.Run("MultipleLimits_RetryAfter", func(t *testing.T) {
+		// Create limits with different refill rates to test RetryAfter logic
+		fast := NewLimit(10, time.Second) // 10 per second = 100ms per token
+		slow := NewLimit(6, time.Minute)  // 6 per minute = 10s per token
+		limiter := NewLimiter(keyer, fast, slow)
+
+		baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		// Test when both buckets are exhausted - RetryAfter should be max across buckets
+		t.Run("BothBucketsExhausted", func(t *testing.T) {
+			// Exhaust both buckets completely
+			for i := range 10 { // Exhaust fast bucket (10 tokens)
+				allowed := limiter.allowN("test-both-exhausted", baseTime, 1)
+				if i < 6 { // First 6 requests should succeed (limited by slow bucket)
+					require.True(t, allowed, "request %d should be allowed", i)
+				} else { // Requests 7-10 should fail (slow bucket exhausted)
+					require.False(t, allowed, "request %d should be denied", i)
+				}
+			}
+
+			// Now both buckets should be exhausted, test RetryAfter
+			allowed, details := limiter.allowNWithDetails("test-both-exhausted", baseTime, 1)
+			require.False(t, allowed, "request should be denied when both buckets exhausted")
+
+			// RetryAfter should be the MAX time needed across buckets
+			// Fast bucket needs 100ms for next token, slow bucket needs 10s
+			// So RetryAfter should be ~10s (the slower one)
+			expectedSlowRetry := slow.DurationPerToken() // 10s
+			require.GreaterOrEqual(t, details.RetryAfter(), expectedSlowRetry-time.Millisecond,
+				"retry after should be at least slow bucket duration")
+			require.LessOrEqual(t, details.RetryAfter(), expectedSlowRetry+time.Millisecond,
+				"retry after should not exceed slow bucket duration by much")
+		})
+
+		// Test when only fast bucket is exhausted
+		t.Run("FastBucketExhausted", func(t *testing.T) {
+			// Allow some requests to partially exhaust fast bucket but not slow bucket
+			for i := range 3 { // Use 3 tokens, leaving fast=7, slow=3
+				allowed := limiter.allowN("test-fast-exhausted", baseTime, 1)
+				require.True(t, allowed, "request %d should be allowed", i)
+			}
+
+			// Exhaust remaining fast bucket tokens (7 more requests)
+			for i := range 7 {
+				allowed := limiter.allowN("test-fast-exhausted", baseTime, 1)
+				if i < 3 { // Requests 4-6 should succeed (slow bucket still has tokens)
+					require.True(t, allowed, "request %d should be allowed", i+3)
+				} else { // Requests 7+ should fail (slow bucket now exhausted)
+					require.False(t, allowed, "request %d should be denied", i+3)
+				}
+			}
+
+			// At this point: fast bucket exhausted (0 tokens), slow bucket exhausted (0 tokens)
+			// Test RetryAfter - should still be dominated by slow bucket
+			allowed, details := limiter.allowNWithDetails("test-fast-exhausted", baseTime, 1)
+			require.False(t, allowed, "request should be denied")
+
+			// RetryAfter should be max(fast_retry, slow_retry) = max(100ms, 10s) = 10s
+			expectedRetry := slow.DurationPerToken() // 10s (slower bucket)
+			require.GreaterOrEqual(t, details.RetryAfter(), expectedRetry-time.Millisecond,
+				"retry after should be dominated by slower bucket")
+		})
+
+		// Test requesting multiple tokens - RetryAfter should account for N tokens
+		t.Run("MultipleTokensRequest", func(t *testing.T) {
+			// Request 3 tokens when buckets are fresh
+			allowed, details := limiter.allowNWithDetails("test-multi-tokens", baseTime, 3)
+			require.True(t, allowed, "request for 3 tokens should be allowed on fresh buckets")
+			require.Equal(t, int64(3), details.TokensConsumed())
+
+			// Remaining: fast=7, slow=3
+			// Request 4 more tokens - should be denied because slow bucket only has 3
+			allowed, details = limiter.allowNWithDetails("test-multi-tokens", baseTime, 4)
+			require.False(t, allowed, "request for 4 tokens should be denied")
+			require.Equal(t, int64(0), details.TokensConsumed())
+
+			// RetryAfter should be time needed for slow bucket to accumulate 4 tokens
+			// Since slow bucket has 3 tokens, it needs 1 more token = 10s
+			expectedRetry := slow.DurationPerToken() * 1 // 10s for 1 additional token
+			require.GreaterOrEqual(t, details.RetryAfter(), expectedRetry-time.Millisecond,
+				"retry after should account for tokens needed in limiting bucket")
+			require.LessOrEqual(t, details.RetryAfter(), expectedRetry+time.Millisecond,
+				"retry after should not exceed expected duration by much")
+		})
+
+		// Test when request is allowed - RetryAfter should be 0
+		t.Run("AllowedRequest", func(t *testing.T) {
+			// Fresh limiter, request should be allowed
+			freshLimiter := NewLimiter(keyer, fast, slow)
+			allowed, details := freshLimiter.allowNWithDetails("test-allowed", baseTime, 1)
+			require.True(t, allowed, "request should be allowed on fresh limiter")
+			require.Equal(t, time.Duration(0), details.RetryAfter(),
+				"retry after should be 0 when request is allowed")
+		})
+
+		// Test edge case: different buckets have different next-token times
+		t.Run("DifferentNextTokenTimes", func(t *testing.T) {
+			// Create a scenario where buckets have different "next token" times
+			// Use a custom time that progresses through the test
+			testTime := baseTime
+
+			// Consume tokens to create different states in each bucket
+			// The limiter has fast (10/sec) and slow (6/min) limits
+			// So we can consume at most 6 tokens total (limited by slow bucket)
+			for i := range 6 {
+				allowed := limiter.allowN("test-different-times", testTime, 1)
+				require.True(t, allowed, "request %d should be allowed", i)
+			}
+			// After 6 requests:
+			// Fast bucket: 10-6=4 tokens remaining
+			// Slow bucket: 6-6=0 tokens remaining (exhausted)
+
+			// Try 7th request - should fail because slow bucket is exhausted
+			allowed := limiter.allowN("test-different-times", testTime, 1)
+			require.False(t, allowed, "7th request should be denied due to slow bucket exhaustion")
+
+			// Move time forward by 50ms (half of fast bucket's refill time)
+			testTime = testTime.Add(50 * time.Millisecond)
+
+			// Request 1 token - should still be denied because slow bucket needs 10s to refill
+			allowed, details := limiter.allowNWithDetails("test-different-times", testTime, 1)
+			require.False(t, allowed, "request should still be denied due to slow bucket")
+
+			// RetryAfter should be dominated by slow bucket since it needs 10s for next token
+			// Fast bucket would only need ~50ms more, but slow bucket needs ~9.95s more
+			expectedRetry := slow.DurationPerToken() - 50*time.Millisecond // ~9.95s
+			require.GreaterOrEqual(t, details.RetryAfter(), expectedRetry-100*time.Millisecond,
+				"retry after should be dominated by slow bucket needing ~9.95s")
+			require.LessOrEqual(t, details.RetryAfter(), expectedRetry+100*time.Millisecond,
+				"retry after should not exceed expected time by much")
+		})
+	})
+
 	// Test PeekWithDetails doesn't consume tokens
 	t.Run("PeekDoesNotConsume", func(t *testing.T) {
 		limit := NewLimit(2, time.Second)
@@ -2482,5 +2616,265 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 		require.True(t, allowed, "allow should succeed")
 		require.Equal(t, int64(1), details.TokensConsumed(), "allow should consume tokens")
 		require.Equal(t, int64(1), details.TokensRemaining(), "should have 1 token remaining after consumption")
+	})
+
+	// Test edge cases and potential bugs
+	t.Run("EdgeCases", func(t *testing.T) {
+		// Test zero limits (no limits defined)
+		t.Run("NoLimits", func(t *testing.T) {
+			limiter := NewLimiter(keyer) // No limits
+			allowed, details := limiter.AllowWithDetails("test-no-limits")
+			require.True(t, allowed, "should allow when no limits defined")
+			require.Equal(t, int64(1), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed(), "BUG: should be 0 consumed when no limits, but implementation says 0")
+			require.Equal(t, int64(0), details.TokensRemaining(), "should show 0 remaining when no limits")
+			require.Equal(t, time.Duration(0), details.RetryAfter(), "should show 0 retry after when no limits")
+		})
+
+		// Test requesting zero tokens
+		t.Run("ZeroTokensRequest", func(t *testing.T) {
+			limit := NewLimit(5, time.Second)
+			limiter := NewLimiter(keyer, limit)
+			allowed, details := limiter.AllowNWithDetails("test-zero", 0)
+			require.True(t, allowed, "requesting 0 tokens should always be allowed")
+			require.Equal(t, int64(0), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed())
+			require.Equal(t, int64(5), details.TokensRemaining(), "should not affect remaining tokens")
+			require.Equal(t, time.Duration(0), details.RetryAfter())
+		})
+
+		// Test negative tokens request (potential edge case)
+		t.Run("NegativeTokensRequest", func(t *testing.T) {
+			limit := NewLimit(5, time.Second)
+			limiter := NewLimiter(keyer, limit)
+			// This might cause undefined behavior - let's see what happens
+			allowed, details := limiter.AllowNWithDetails("test-negative", -1)
+			// Behavior is undefined, but we should document what actually happens
+			t.Logf("Negative tokens request: allowed=%v, consumed=%d, remaining=%d",
+				allowed, details.TokensConsumed(), details.TokensRemaining())
+		})
+
+		// Test very large token request
+		t.Run("LargeTokensRequest", func(t *testing.T) {
+			limit := NewLimit(5, time.Second)
+			limiter := NewLimiter(keyer, limit)
+			allowed, details := limiter.AllowNWithDetails("test-large", 1000000)
+			require.False(t, allowed, "requesting huge number of tokens should be denied")
+			require.Equal(t, int64(1000000), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed())
+			require.Equal(t, int64(5), details.TokensRemaining())
+			// RetryAfter should be very large for 1M tokens
+			expectedRetry := limit.DurationPerToken() * 1000000
+			require.GreaterOrEqual(t, details.RetryAfter(), expectedRetry-time.Second)
+		})
+
+		// Test potential race condition in remaining tokens calculation
+		t.Run("RemainingTokensAfterConsumption", func(t *testing.T) {
+			// This tests a potential bug: are remaining tokens calculated correctly
+			// after consumption in the multiple-limits case?
+			fast := NewLimit(10, time.Second) // 100ms per token
+			slow := NewLimit(5, time.Minute)  // 12s per token
+			limiter := NewLimiter(keyer, fast, slow)
+
+			baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+
+			// Consume 3 tokens
+			allowed, details := limiter.allowNWithDetails("test-remaining", baseTime, 3)
+			require.True(t, allowed, "should allow 3 tokens initially")
+			require.Equal(t, int64(3), details.TokensConsumed())
+
+			// After consumption: fast bucket has 7, slow bucket has 2
+			// Remaining should be min(7, 2) = 2
+			require.Equal(t, int64(2), details.TokensRemaining(),
+				"remaining tokens should be min across buckets after consumption")
+
+			// Consume 2 more tokens
+			allowed, details = limiter.allowNWithDetails("test-remaining", baseTime, 2)
+			require.True(t, allowed, "should allow 2 more tokens")
+
+			// After consumption: fast bucket has 5, slow bucket has 0
+			// Remaining should be min(5, 0) = 0
+			require.Equal(t, int64(0), details.TokensRemaining(),
+				"remaining tokens should be 0 when any bucket is exhausted")
+		})
+
+		// Test bucket cutoff behavior
+		t.Run("BucketCutoffBehavior", func(t *testing.T) {
+			limit := NewLimit(5, time.Second)
+			limiter := NewLimiter(keyer, limit)
+
+			// Start at a base time
+			oldTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+
+			// Use up some tokens at old time
+			allowed := limiter.allowN("test-cutoff", oldTime, 3)
+			require.True(t, allowed, "should allow tokens at old time")
+
+			// Jump forward way past the bucket period (more than 1 second)
+			newTime := oldTime.Add(10 * time.Second)
+
+			// Now check details - bucket should be reset due to cutoff
+			allowed, details := limiter.allowNWithDetails("test-cutoff", newTime, 1)
+			require.True(t, allowed, "should allow after cutoff reset")
+
+			// After cutoff, bucket should have full tokens available
+			// But we consumed 1, so should have 4 remaining
+			require.Equal(t, int64(4), details.TokensRemaining(),
+				"should have nearly full tokens after cutoff reset")
+		})
+	})
+}
+
+// TestLimiter_PeekWithDetails provides comprehensive test coverage for peekNWithDetails
+// focusing on RetryAfter behavior similar to allowNWithDetails tests
+func TestLimiter_PeekWithDetails(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string { return input }
+
+	// Test single limit
+	t.Run("SingleLimit", func(t *testing.T) {
+		limit := NewLimit(5, time.Second)
+		limiter := NewLimiter(keyer, limit)
+
+		// Test when peek shows available tokens
+		allowed, details := limiter.PeekWithDetails("test-key1")
+		require.True(t, allowed, "peek should show available tokens")
+		require.Equal(t, int64(1), details.TokensRequested(), "should request 1 token")
+		require.Equal(t, int64(0), details.TokensConsumed(), "peek should never consume tokens")
+		require.Equal(t, int64(5), details.TokensRemaining(), "should have all 5 tokens remaining")
+		require.Equal(t, "test-key1", details.BucketKey(), "bucket key should match")
+		require.Equal(t, true, details.Allowed(), "should be allowed")
+		require.Equal(t, time.Duration(0), details.RetryAfter(), "retry after should be 0 when available")
+	})
+
+	// Test RetryAfter with multiple limits - the key scenario
+	t.Run("MultipleLimits_RetryAfter", func(t *testing.T) {
+		// Create limits with different refill rates to test RetryAfter logic
+		fast := NewLimit(10, time.Second) // 10 per second = 100ms per token
+		slow := NewLimit(6, time.Minute)  // 6 per minute = 10s per token
+		limiter := NewLimiter(keyer, fast, slow)
+
+		baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		// Test when both buckets are exhausted - RetryAfter should be max across buckets
+		t.Run("BothBucketsExhausted", func(t *testing.T) {
+			// Exhaust both buckets by consuming tokens first
+			for i := 0; i < 6; i++ { // Can only consume 6 due to slow bucket limit
+				allowed := limiter.allowN("test-peek-exhausted", baseTime, 1)
+				require.True(t, allowed, "request %d should be allowed", i)
+			}
+
+			// Now peek should show both buckets exhausted
+			allowed, details := limiter.peekNWithDetails("test-peek-exhausted", baseTime, 1)
+			require.False(t, allowed, "peek should show no tokens available when exhausted")
+			require.Equal(t, int64(0), details.TokensConsumed(), "peek never consumes")
+
+			// RetryAfter should be the MAX time needed across buckets
+			// Fast bucket needs 100ms for next token, slow bucket needs 10s
+			// So RetryAfter should be ~10s (the slower one)
+			expectedSlowRetry := slow.DurationPerToken() // 10s
+			require.GreaterOrEqual(t, details.RetryAfter(), expectedSlowRetry-time.Millisecond,
+				"retry after should be at least slow bucket duration")
+			require.LessOrEqual(t, details.RetryAfter(), expectedSlowRetry+time.Millisecond,
+				"retry after should not exceed slow bucket duration by much")
+		})
+
+		// Test requesting multiple tokens - RetryAfter should account for N tokens
+		t.Run("MultipleTokensRequest", func(t *testing.T) {
+			// Consume some tokens to create the right scenario
+			for i := 0; i < 3; i++ { // Use 3 tokens, leaving fast=7, slow=3
+				allowed := limiter.allowN("test-peek-multi-tokens", baseTime, 1)
+				require.True(t, allowed, "request %d should be allowed", i)
+			}
+
+			// Peek for 4 tokens - should be denied because slow bucket only has 3
+			allowed, details := limiter.peekNWithDetails("test-peek-multi-tokens", baseTime, 4)
+			require.False(t, allowed, "peek for 4 tokens should show not available")
+			require.Equal(t, int64(4), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed(), "peek never consumes")
+
+			// RetryAfter should be time needed for slow bucket to accumulate 4 tokens
+			// Since slow bucket has 3 tokens, it needs 1 more token = 10s
+			expectedRetry := slow.DurationPerToken() * 1 // 10s for 1 additional token
+			require.GreaterOrEqual(t, details.RetryAfter(), expectedRetry-time.Millisecond,
+				"retry after should account for tokens needed in limiting bucket")
+			require.LessOrEqual(t, details.RetryAfter(), expectedRetry+time.Millisecond,
+				"retry after should not exceed expected duration by much")
+		})
+
+		// Test when peek shows available - RetryAfter should be 0
+		t.Run("AvailableTokens", func(t *testing.T) {
+			// Fresh limiter, peek should show available
+			freshLimiter := NewLimiter(keyer, fast, slow)
+			allowed, details := freshLimiter.peekNWithDetails("test-peek-available", baseTime, 1)
+			require.True(t, allowed, "peek should show available on fresh limiter")
+			require.Equal(t, time.Duration(0), details.RetryAfter(),
+				"retry after should be 0 when peek shows available")
+		})
+
+		// Test peek vs allow RetryAfter consistency
+		t.Run("PeekAllowRetryAfterConsistency", func(t *testing.T) {
+			// Consume tokens to exhaust slow bucket
+			for i := 0; i < 6; i++ {
+				allowed := limiter.allowN("test-consistency", baseTime, 1)
+				require.True(t, allowed, "setup request %d should be allowed", i)
+			}
+
+			// Both peek and allow should show same RetryAfter when denied
+			peekAllowed, peekDetails := limiter.peekNWithDetails("test-consistency", baseTime, 1)
+			allowAllowed, allowDetails := limiter.allowNWithDetails("test-consistency", baseTime, 1)
+
+			require.False(t, peekAllowed, "peek should show not available")
+			require.False(t, allowAllowed, "allow should show not available")
+
+			// CRITICAL: RetryAfter should be identical between peek and allow
+			require.Equal(t, peekDetails.RetryAfter(), allowDetails.RetryAfter(),
+				"peek and allow should calculate identical RetryAfter times")
+		})
+	})
+
+	// Test edge cases
+	t.Run("EdgeCases", func(t *testing.T) {
+		// Test no limits defined
+		t.Run("NoLimits", func(t *testing.T) {
+			limiter := NewLimiter(keyer) // No limits
+			allowed, details := limiter.PeekWithDetails("test-no-limits")
+			require.True(t, allowed, "should show available when no limits defined")
+			require.Equal(t, int64(1), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed(), "peek never consumes")
+			require.Equal(t, int64(0), details.TokensRemaining(), "should show 0 remaining when no limits")
+			require.Equal(t, time.Duration(0), details.RetryAfter(), "should show 0 retry after when no limits")
+		})
+
+		// Test requesting zero tokens
+		t.Run("ZeroTokensRequest", func(t *testing.T) {
+			limit := NewLimit(5, time.Second)
+			limiter := NewLimiter(keyer, limit)
+			allowed, details := limiter.PeekNWithDetails("test-zero", 0)
+			require.True(t, allowed, "peeking 0 tokens should always show available")
+			require.Equal(t, int64(0), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed())
+			require.Equal(t, int64(5), details.TokensRemaining(), "should show all tokens remaining")
+			require.Equal(t, time.Duration(0), details.RetryAfter())
+		})
+
+		// Test peek doesn't mutate bucket state
+		t.Run("PeekDoesNotMutate", func(t *testing.T) {
+			limit := NewLimit(5, time.Second)
+			limiter := NewLimiter(keyer, limit)
+
+			// Multiple peeks should show same state
+			for i := 0; i < 5; i++ {
+				allowed, details := limiter.PeekWithDetails("test-no-mutate")
+				require.True(t, allowed, "peek %d should show available", i)
+				require.Equal(t, int64(5), details.TokensRemaining(),
+					"remaining tokens should not change after peek %d", i)
+			}
+
+			// After all those peeks, allow should still work and show same initial state
+			allowed, details := limiter.AllowWithDetails("test-no-mutate")
+			require.True(t, allowed, "allow should still work after multiple peeks")
+			require.Equal(t, int64(4), details.TokensRemaining(), "should have 4 tokens after consuming 1")
+		})
 	})
 }

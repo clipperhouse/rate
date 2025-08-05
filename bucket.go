@@ -77,7 +77,8 @@ func (b *bucket) checkCutoff(executionTime time.Time, limit Limit) (updated bool
 //
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) remainingTokens(executionTime time.Time, limit Limit) int64 {
-	// TODO: not sure I love this, maybe remainingTokens() should not mutate the bucket.
+	// TODO: not sure I love this, maybe should not mutate the bucket
+	// for this read-only operation.
 	b.checkCutoff(executionTime, limit)
 	return remainingTokens(executionTime, b.time, limit)
 }
@@ -95,6 +96,9 @@ func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit)
 // treat nextTokensTime as a prediction, not a guarantee.
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) nextTokensTime(limit Limit, n int64) time.Time {
+func (b *bucket) nextTokensTime(executionTime time.Time, limit Limit, n int64) time.Time {
+	// TODO: not sure I love this, maybe should not mutate the bucket
+	// for this read-only operation.
+	b.checkCutoff(executionTime, limit)
 	return b.time.Add(limit.durationPerToken * time.Duration(n))
 }

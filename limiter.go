@@ -494,7 +494,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 
 	allowAll := buckets[0].hasTokens(executionTime, limits[0], n)
 	remainingTokens := buckets[0].remainingTokens(executionTime, limits[0])
-	retryAfter := buckets[0].nextTokensTime(limits[0], n).Sub(executionTime)
+	retryAfter := buckets[0].nextTokensTime(executionTime, limits[0], n).Sub(executionTime)
 
 	for i := 1; i < len(buckets); i++ {
 		// note start at index 1 because we
@@ -511,13 +511,12 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		}
 
 		// Calculate retry-after from this bucket's next tokens time
-		r := b.nextTokensTime(limit, n).Sub(executionTime)
+		r := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 		if r > retryAfter { // max
 			retryAfter = r
 		}
 	}
 
-	// guardrail, not sure if this is possible
 	if remainingTokens < 0 {
 		remainingTokens = 0
 	}
@@ -544,7 +543,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		}
 	}
 
-	// guardrail, not sure if this is possible
+	// if the request was allowed, retryAfter will be negative
 	if retryAfter < 0 {
 		retryAfter = 0
 	}
@@ -767,7 +766,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 			if remainingTokens == -1 || rt < remainingTokens { // min
 				remainingTokens = rt
 			}
-			r := b.nextTokensTime(limit, n).Sub(executionTime)
+			r := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 			if r > retryAfter { // max
 				retryAfter = r
 			}
@@ -786,10 +785,15 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 		if remainingTokens == -1 || rt < remainingTokens { // min
 			remainingTokens = rt
 		}
-		r := b.nextTokensTime(limit, n).Sub(executionTime)
+		r := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 		if r > retryAfter { // max
 			retryAfter = r
 		}
+	}
+
+	// if the request was allowed, retryAfter will be negative
+	if retryAfter < 0 {
+		retryAfter = 0
 	}
 
 	return allowAll, Details[TInput, TKey]{
@@ -932,7 +936,7 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 		var wait time.Duration
 		for i, b := range buckets {
 			limit := limits[i]
-			nextTokensTime := b.nextTokensTime(limit, n)
+			nextTokensTime := b.nextTokensTime(currentTime, limit, n)
 			untilNext := nextTokensTime.Sub(currentTime)
 			if i == 0 || untilNext > wait {
 				wait = untilNext

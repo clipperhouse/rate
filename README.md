@@ -1,20 +1,18 @@
 [![Tests](https://github.com/clipperhouse/rate/actions/workflows/tests.yml/badge.svg)](https://github.com/clipperhouse/rate/actions/workflows/tests.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/clipperhouse/rate.svg)](https://pkg.go.dev/github.com/clipperhouse/rate)
 
-I am designing a new, composable rate limiter for Go, with an emphasis on clean API and low overhead. Early days!
+I am designing a new, composable rate limiter for Go, with an emphasis on clean API and low overhead.
 
-Rate limiters are typically an expression of several layers of policy. You might limit by user, by product, or by URL, or all of the above. You might allow short spikes; you might apply dynamic limits; you may want to stack several limiters on top of one another.
+Rate limiters are typically an expression of several layers of policy. You might limit by user, by product, or by URL, or all of the above. You might allow short spikes; you might apply dynamic limits; you may want to stack several limits on top of one another.
 
 This library intends to make all the above use cases expressible, readable and easy to reason about.
 
-Here is a [blog post describing the design](https://clipperhouse.com/composable-rate-limiter/).
+Early days! I want your feedback, here on GitHub or [on 𝕏](https://x.com/clipperhouse).
 
-## Installation
+## Quick start
 
 ```bash
 go get github.com/clipperhouse/rate
 ```
-
-## Example
 
 ```go
 // Define a getter for the rate limiter “bucket”
@@ -23,104 +21,79 @@ func byIP(req *http.Request) string {
     return req.RemoteAddr
 }
 
-// 10 requests per second
 limit := rate.NewLimit(10, time.Second)
-
-// 10 requests per second per IP
 limiter := rate.NewLimiter(byIP, limit)
 
-// In your HTTP handler, where r is the http.Request
+// In your HTTP handler:
 if limiter.Allow(r) {
     w.WriteHeader(http.StatusOK)
-    w.Write([]byte("Success"))
 } else {
     w.WriteHeader(http.StatusTooManyRequests)
-    w.Write([]byte("Too many requests"))
 }
 ```
 
-## Concepts
+## Composability
 
-### `bucket`
+I intend this package to offer a set of basics for rate limiting, that you can compose into
+arbitrary logic, while being easy to reason about. In my experience, rate limiting gets complicated
+in production -- layered policies, dynamic policies, etc.
 
-The rate-limiting algorithm is a “token bucket”. The bucket begins with _n_ tokens
-as defined by your `Limit`.
+So, let’s make easy things easy and hard things possible.
 
-When you `Allow` a request, a token is deducted from the bucket <sup>[*]</sup>. Requests
-are allowed as long as there is at least one token remaining in the bucket.
+#### One or many
 
-The bucket is refilled by the passage of time. If you define a limit of 10 req/s,
-a new token will be added every 100ms.
+My first concept of composability is that you can have one or many of anything, and
+the library will do the right thing.
 
-<sup>_[*] More precisely, a token is deducted when the request is allowed; if the request
-is denied for lack of tokens, no token is deducted, i.e. debt is not incurred._</sup>
-
-### `Keyer`
-
-You define your buckets with a `func` that takes one parameter,
-and returns a bucket’s unique identifier (key).
-
-```go
-type Keyer[TInput any, TKey comparable] func(input TInput) TKey
-```
-
-Go’s type inference makes this read cleanly, don’t worry. To limit by IP address,
-for example:
+You might wish to allow short spikes while preventing sustained load. So a `Limiter`
+can accept any number of `Limit`’s:
 
 ```go
 func byIP(req *http.Request) string {
+    // You can put arbitrary logic in here. In this case, we’ll just use IP address.
     return req.RemoteAddr
 }
-```
 
-The resulting limiter will be typed by the input parameter of your `keyer`.
-Your `limiter.Allow()` call will take the input type of your `keyer`.
-
-```go
-// Somewhere in your HTTP handler, where r is the incoming http.Request:
-
-limiter.Allow(r)
-```
-
-I think that’s elegant.
-
-Nothing about this is HTTP-specific, you can use it for anything you wish to rate-limit:
-
-```go
-var db = getDBConnection()  // a closure might be handy
-func byUserID(email string) int {
-    return db.GetUserIDByEmail(email)
-}
-```
-
-### `Limit`
-
-A `limit` is a count over a period of time, which is tracked in a `bucket`. It is
-defined by calling (e.g.) `rate.NewLimit(10, time.Second)`.
-
-```go
 perSecond := rate.NewLimit(10, time.Second)
-limiter := rate.NewLimiter(byUser, perSecond)
+perMinute := rate.NewLimit(100, time.Minute)
+
+limiter := rate.NewLimiter(byIP, perSecond, perMinute)
 ```
 
-You can use arbitrary `time.Duration`’s.
+The `limiter.Allow()` call checks both limits; all must allow or the request is denied.
+And, it will only consume tokens when _all_ limits allow.
 
-## Tips & tricks
+#### Dynamic
 
-If your `Keyer` requires more than one input, consider a closure:
+Rate limiters often need arbitrary logic, depending on your app. The best way to express
+this is funcs, instead of some sort of config.
 
 ```go
-var db = getDBConnection()
-func byUserID(email string) int {
-    return db.GetUserIDByEmail(email)
+// Dynamic based on customer
+
+func byCustomerID(customerID int) int {
+    return customerID
+}
+
+func getCustomerLimit(customerID int) Limit {
+    plan := lookupCustomerPlan(customerID)
+    return plan.Limit
+}
+
+limiter := rate.NewLimiterFunc(byCustomerID, getCustomerLimit)
+
+// somewhere in the app:
+
+customerID := getTheCustomerID()
+
+if limiter.Allow(customerID) {
+    ...do the thing
 }
 ```
-...or create a new struct type to represent the multiple inputs. If it requires zero inputs,
-just use `_`.
-
-If you want different limits for different requests, use `NewLimiterFunc`.
 
 ```go
+// Dynamic based on expense
+
 // reads are cheap
 readLimit := rate.NewLimit(50, time.Second)
 // writes are expensive
@@ -135,29 +108,56 @@ limitFunc := func(r *http.Request) Limit {
 limiter := rate.NewLimiterFunc(keyer, limitFunc)
 ```
 
-If you want to allow short spikes but prevent sustained ones, create two `rate.Limiter`’s
-and call `Allow` in succession.
+You’ll notice that the funcs are all generic, instead of requiring strings,
+or being limited to HTTP.
 
-```go
-perSecond := rate.NewLimit(10, time.Second)
-perMinute := rate.NewLimit(100, time.Minute)
+## Implementation details
 
-limiters := []rate.Limiter {
-    rate.NewLimiter(keyer, perSecond),
-    rate.NewLimiter(keyer, perMinute),
-}
+We define “do the right thing” as “minimize surprise”. Whether we’ve achieved
+that is what I want to hear from you.
 
-for _, limiter := range limiters {
-    if limiter.Allow() {
-        ...
-    }
-}
-```
+#### Concurrent
 
-## Prior art
+Of course we need to handle concurrency. After all, a rate limiter is
+only important in contended circumstances. We’ve worked to make this correct
+and performant.
 
-The Go team offers [golang.org/x/time/rate](https://golang.org/x/time/rate). What they call
-a `limiter` is equivalent to our `bucket` type above.
+#### Transactional
 
-This package builds on top of that primitive concept, to look up buckets by key, and to
-accommodate dynamic limits.
+For a soft definition of “transactional”. Tokens are only deducted when all
+limits pass, otherwise no tokens are deducted. I think this is the right semantics,
+but perhaps more importantly, it mitigates noisy-neighbor DOS attempts.
+
+There is only one call to `time.Now()`, and all subsequent logic uses that time
+-- instead of calling `time.Now()` again a millisecond later. Inspired by databases,
+where a transaction has a consistent snapshot view that applies throughout.
+
+#### Efficient
+
+We’ve worked hard to have minimal (often zero) allocations, minimize branching,
+etc. An `Allow()` call takes around 60ns on my machine. Here are some [benchmarks
+of other Go rate limiters](https://github.com/sethvargo/go-limiter#speed-and-performance).
+
+At scale, one might create millions of buckets, so we’ve minimized the [data
+size of that struct](https://github.com/clipperhouse/rate/blob/main/bucket.go).
+
+I had an insight that the state of a bucket is completely expressed by a `time` field
+(in combination with a `Limit`). There is no `token` type or field.
+Calculating the available tokens is just arithmetic on time.
+
+#### Inspectable
+
+You’ll find `*WithDetails` and `*WithDebug` methods, which give you the information
+you’ll need to return “retry after” or “remaining tokens” headers, or do
+detailed logging.
+
+## Roadmap
+
+First and foremost, I want some feedback. Please try it and open an issue.
+
+I’d like to be able to stack multiple `Limiter`s into a single `Limiter`, and get
+the convenience and transactionality. Maybe you want to limit first by customer,
+then by path, then by region, then globally. [TODO open an issue]
+
+We may wish to have a shared store (e.g. Redis) to allow multiple machines to share limits. The
+current implementation is a map in memory.

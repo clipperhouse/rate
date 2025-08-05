@@ -45,28 +45,40 @@ type bucketMap[TKey comparable] struct {
 // loadOrStore returns the existing bucket for the key if present.
 // Otherwise, it creates a new bucket, stores it, and returns it.
 // This is specialized to avoid a closure allocation for the getter.
-func (bm *bucketMap[TKey]) loadOrStore(key bucketSpec[TKey], executionTime time.Time, limit Limit) *bucket {
-	if loaded, ok := bm.m.Load(key); ok {
+func (bm *bucketMap[TKey]) loadOrStore(userKey TKey, executionTime time.Time, limit Limit) *bucket {
+	spec := bucketSpec[TKey]{
+		limit:   limit,
+		userKey: userKey,
+	}
+	if loaded, ok := bm.m.Load(spec); ok {
 		return loaded.(*bucket)
 	}
 	// Only create the value if we didn't find an existing one
 	value := newBucket(executionTime, limit)
-	actual, _ := bm.m.LoadOrStore(key, value)
+	actual, _ := bm.m.LoadOrStore(spec, value)
 	return actual.(*bucket)
 }
 
 // loadOrGet returns the existing value for the key if present.
 // Otherwise, it returns a new (temporary) value.
-func (bm *bucketMap[TKey]) loadOrGet(key bucketSpec[TKey], executionTime time.Time, limit Limit) *bucket {
-	loaded, ok := bm.m.Load(key)
+func (bm *bucketMap[TKey]) loadOrGet(userKey TKey, executionTime time.Time, limit Limit) *bucket {
+	spec := bucketSpec[TKey]{
+		limit:   limit,
+		userKey: userKey,
+	}
+	loaded, ok := bm.m.Load(spec)
 	if ok {
 		return loaded.(*bucket)
 	}
 	return newBucket(executionTime, limit)
 }
 
-func (bm *bucketMap[TKey]) load(key bucketSpec[TKey]) (*bucket, bool) {
-	if loaded, ok := bm.m.Load(key); ok {
+func (bm *bucketMap[TKey]) load(userKey TKey, limit Limit) (*bucket, bool) {
+	spec := bucketSpec[TKey]{
+		limit:   limit,
+		userKey: userKey,
+	}
+	if loaded, ok := bm.m.Load(spec); ok {
 		return loaded.(*bucket), true
 	}
 	return nil, false

@@ -108,13 +108,28 @@ limitFunc := func(r *http.Request) Limit {
 limiter := rate.NewLimiterFunc(keyer, limitFunc)
 ```
 
-You’ll notice that the funcs are all generic, instead of requiring strings,
-or being limited to HTTP.
+
+```go
+// Dynamic based on expense, another way
+
+// think of 100 as "a dollar"
+limit := rate.NewLimit(100, time.Second)
+limiter := rate.NewLimiter(keyer, limit)
+
+// somewhere in the app:
+
+// decide how many "cents" a given request costs
+tokens := decideThePriceOfThisRequest()
+
+if limiter.AllowN(customerID, tokens) {
+    ...do the thing
+}
+```
 
 ## Implementation details
 
 We define “do the right thing” as “minimize surprise”. Whether we’ve achieved
-that is what I want to hear from you.
+that is what I would like to hear from you.
 
 #### Concurrent
 
@@ -153,11 +168,11 @@ detailed logging.
 
 ## Roadmap
 
-First and foremost, I want some feedback. Please try it and open an issue.
+First and foremost, I want some feedback. Please try it and open an issue, or [ping me](https://x.com/clipperhouse).
 
-I’d like to be able to stack multiple `Limiter`s into a single `Limiter`, and get
-the convenience and transactionality. Maybe you want to limit first by customer,
-then by path, then by region, then globally. [TODO open an issue]
+I’d like to be able to stack multiple `Limiter`s into a single `Limiter`.
+Maybe you want to limit first by customer, then by path, then by region,
+then globally. [TODO open an issue]
 
-We may wish to have a shared store (e.g. Redis) to allow multiple machines to share limits. The
-current implementation is a map in memory.
+We may wish to have a shared store (e.g. Redis) to allow multiple machines to share limits,
+or have persistence. The current implementation is a map in memory.

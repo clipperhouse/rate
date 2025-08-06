@@ -28,20 +28,6 @@ func newBucket(executionTime time.Time, limit Limit) *bucket {
 	}
 }
 
-// allow returns true if there are at least `n` tokens available in the bucket,
-// and consumes `n` tokens if so.
-//
-// If false, no tokens were consumed.
-//
-// ⚠️ caller is responsible for locking appropriately
-func (b *bucket) allow(executionTime time.Time, limit Limit, n int64) bool {
-	if b.hasTokens(executionTime, limit, n) {
-		b.consumeTokens(executionTime, limit, n)
-		return true
-	}
-	return false
-}
-
 // hasTokens checks if there are at least `n` tokens in the bucket
 //
 // ⚠️ caller is responsible for locking appropriately

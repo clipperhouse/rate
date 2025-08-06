@@ -45,12 +45,12 @@ func BenchmarkLimiter_Allow_MultipleBuckets(b *testing.B) {
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
 		limiter := NewLimiter(keyer, limit)
-		now := time.Now()
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
+			now := time.Now()
 			limiter.allowN(i%buckets, now, 1)
 		}
 	})
@@ -64,7 +64,7 @@ func BenchmarkLimiter_Allow_MultipleBuckets(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			limiter.allowN(i%buckets, now, 1)
 		}
 	})

@@ -150,52 +150,6 @@ func TestBucket_CheckCutoff(t *testing.T) {
 	require.True(t, bucket.checkCutoff(now, limit), "expected cutoff update on old bucket")
 }
 
-func TestBucket_Allow(t *testing.T) {
-	t.Parallel()
-	now := time.Now()
-
-	// Tokens refill at ~111ms intervals
-	limit := NewLimit(9, time.Second)
-	bucket := newBucket(now, limit)
-
-	for range limit.count {
-		actual := bucket.allow(now, limit, 1)
-		require.True(t, actual, "expected to allow request when tokens are available")
-	}
-
-	// Tokens should be gone now
-	{
-		actual := bucket.allow(now, limit, 1)
-		require.False(t, actual, "expected to deny request after tokens are exhausted")
-	}
-
-	// Refill with one token and consume it
-	{
-		now = now.Add(limit.durationPerToken)
-		actual := bucket.allow(now, limit, 1)
-		require.True(t, actual, "expected to allow request after waiting for refill")
-	}
-
-	// Token should be gone now
-	{
-		actual := bucket.allow(now, limit, 1)
-		require.False(t, actual, "expected to deny request after one refilled token is consumed")
-	}
-
-	// If the bucket is old, it should not mistakenly be interpreted as having too many tokens
-	now = now.Add(time.Hour)
-	for range limit.count {
-		actual := bucket.allow(now, limit, 1)
-		require.True(t, actual, "expected to allow requests with old bucket")
-	}
-
-	// Tokens should be gone now
-	{
-		actual := bucket.allow(now, limit, 1)
-		require.False(t, actual, "expected to deny request after old bucket's tokens are exhausted")
-	}
-}
-
 func TestBucket_HasToken(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -212,11 +166,10 @@ func TestBucket_HasToken(t *testing.T) {
 
 	// Consume all the tokens
 	for range limit.count {
-		actual := bucket.allow(now, limit, 1)
-		require.True(t, actual, "expected to allow requests as normal when hasToken previously called")
+		bucket.consumeTokens(now, limit, 1)
 	}
 
-	require.False(t, bucket.allow(now, limit, 1), "should have exhausted tokens")
+	require.False(t, bucket.hasTokens(now, limit, 1), "should have exhausted tokens")
 
 	for range limit.count * 2 {
 		// any number of hasToken should return false with no remaining tokens

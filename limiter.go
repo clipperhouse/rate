@@ -147,16 +147,11 @@ func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, userKey TKey, 
 	// Fast path for single static limit - avoid slice allocations
 	if len(r.limits) == 1 && len(r.limitFuncs) == 0 {
 		limit := r.limits[0]
-		spec := bucketSpec[TKey]{
-			limit:   limit,
-			userKey: userKey,
-		}
-
 		var b *bucket
 		if persist {
-			b = r.buckets.loadOrStore(spec, executionTime, limit)
+			b = r.buckets.loadOrStore(userKey, executionTime, limit)
 		} else {
-			b = r.buckets.loadOrGet(spec, executionTime, limit)
+			b = r.buckets.loadOrGet(userKey, executionTime, limit)
 		}
 
 		// Return slices with single elements - this still allocates but less than before
@@ -173,9 +168,9 @@ func (r *Limiter[TInput, TKey]) getBucketsAndLimits(input TInput, userKey TKey, 
 	for i, spec := range specs {
 		var b *bucket
 		if persist {
-			b = r.buckets.loadOrStore(spec, executionTime, spec.limit)
+			b = r.buckets.loadOrStore(userKey, executionTime, spec.limit)
 		} else {
-			b = r.buckets.loadOrGet(spec, executionTime, spec.limit)
+			b = r.buckets.loadOrGet(userKey, executionTime, spec.limit)
 		}
 		buckets[i] = b
 		limits[i] = spec.limit
@@ -210,23 +205,25 @@ func (r *Limiter[TInput, TKey]) allow(input TInput, executionTime time.Time) boo
 	return r.allowN(input, executionTime, 1)
 }
 
-func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
-	// Allow must be true for all limits, a strict AND operation.
-	// If any limit is not allowed, the overall allow is false and
-	// no token is consumed from any bucket.
-
-	// Collect the limits
-	var limits []Limit
+func (r *Limiter[TInput, TKey]) getLimits(input TInput) []Limit {
+	limits := r.limits
 
 	// limits and limitFuncs are mutually exclusive.
-	if len(r.limits) > 0 {
-		limits = r.limits
-	} else if len(r.limitFuncs) > 0 {
+	if len(r.limitFuncs) > 0 {
 		limits = make([]Limit, 0, len(r.limitFuncs))
 		for _, limitFunc := range r.limitFuncs {
 			limits = append(limits, limitFunc(input))
 		}
 	}
+	return limits
+}
+
+func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
+	// Allow must be true for all limits, a strict AND operation.
+	// If any limit is not allowed, the overall allow is false and
+	// no token is consumed from any bucket.
+
+	limits := r.getLimits(input)
 	if len(limits) == 0 {
 		// No limits defined, so we allow everything
 		return true
@@ -250,12 +247,7 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 
 	// We need to collect all buckets and lock them together
 	for _, limit := range limits {
-		spec := bucketSpec[TKey]{
-			limit:   limit,
-			userKey: userKey,
-		}
-
-		b := r.buckets.loadOrStore(spec, executionTime, limit)
+		b := r.buckets.loadOrStore(userKey, executionTime, limit)
 		buckets = append(buckets, b)
 	}
 
@@ -411,18 +403,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 	// no token is consumed from any bucket.
 	userKey := r.keyer(input)
 
-	// Collect the limits
-	var limits []Limit
-
-	// limits and limitFuncs are mutually exclusive.
-	if len(r.limits) > 0 {
-		limits = r.limits
-	} else if len(r.limitFuncs) > 0 {
-		limits = make([]Limit, 0, len(r.limitFuncs))
-		for _, limitFunc := range r.limitFuncs {
-			limits = append(limits, limitFunc(input))
-		}
-	}
+	limits := r.getLimits(input)
 	if len(limits) == 0 {
 		// No limits defined, so we allow everything
 		details := Details[TInput, TKey]{
@@ -452,12 +433,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 	}
 
 	for _, limit := range limits {
-		spec := bucketSpec[TKey]{
-			limit:   limit,
-			userKey: userKey,
-		}
-
-		b := r.buckets.loadOrStore(spec, executionTime, limit)
+		b := r.buckets.loadOrStore(userKey, executionTime, limit)
 		buckets = append(buckets, b)
 	}
 
@@ -583,18 +559,8 @@ func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n int64) bool {
-	// Collect the limits
-	var limits []Limit
 
-	// limits and limitFuncs are mutually exclusive.
-	if len(r.limits) > 0 {
-		limits = r.limits
-	} else if len(r.limitFuncs) > 0 {
-		limits = make([]Limit, 0, len(r.limitFuncs))
-		for _, limitFunc := range r.limitFuncs {
-			limits = append(limits, limitFunc(input))
-		}
-	}
+	limits := r.getLimits(input)
 	if len(limits) == 0 {
 		// No limits defined, so we allow everything
 		return true
@@ -605,12 +571,7 @@ func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n i
 	// For peek operation, we can check each bucket individually
 	// without needing to collect and lock them all together
 	for _, limit := range limits {
-		spec := bucketSpec[TKey]{
-			limit:   limit,
-			userKey: userKey,
-		}
-
-		if b, ok := r.buckets.load(spec); ok {
+		if b, ok := r.buckets.load(userKey, limit); ok {
 			b.mu.RLock()
 			allowed := b.hasTokens(executionTime, limit, n)
 			b.mu.RUnlock()
@@ -720,18 +681,7 @@ func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time
 func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, Details[TInput, TKey]) {
 	userKey := r.keyer(input)
 
-	// Collect the limits
-	var limits []Limit
-
-	// limits and limitFuncs are mutually exclusive.
-	if len(r.limits) > 0 {
-		limits = r.limits
-	} else if len(r.limitFuncs) > 0 {
-		limits = make([]Limit, 0, len(r.limitFuncs))
-		for _, limitFunc := range r.limitFuncs {
-			limits = append(limits, limitFunc(input))
-		}
-	}
+	limits := r.getLimits(input)
 	if len(limits) == 0 {
 		// No limits defined, so we allow everything
 		return true, Details[TInput, TKey]{
@@ -753,12 +703,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 	// For peek operation, we can check each bucket individually
 	// without needing to collect and lock them all together
 	for _, limit := range limits {
-		spec := bucketSpec[TKey]{
-			limit:   limit,
-			userKey: userKey,
-		}
-
-		if b, ok := r.buckets.load(spec); ok {
+		if b, ok := r.buckets.load(userKey, limit); ok {
 			b.mu.RLock()
 
 			allowAll = allowAll && b.hasTokens(executionTime, limit, n)

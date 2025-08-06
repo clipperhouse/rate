@@ -535,7 +535,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 
 	// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
 	{
-		results := make([][]DetailsDebug[int, string], buckets*int(perSecond.count))
+		results := make([][]Debug[int, string], buckets*int(perSecond.count))
 		resultIndex := 0
 
 		var wg sync.WaitGroup
@@ -569,7 +569,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Verify that additional requests are rejected, all buckets should be exhausted on per-second limit
 	{
 		var wg sync.WaitGroup
-		results := make([][]DetailsDebug[int, string], buckets)
+		results := make([][]Debug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
@@ -603,7 +603,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Per-second bucket should now have 1 more token available
 	{
 		var wg sync.WaitGroup
-		results := make([][]DetailsDebug[int, string], buckets)
+		results := make([][]Debug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
@@ -630,7 +630,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Now all buckets should be exhausted on per-minute limit
 	{
 		var wg sync.WaitGroup
-		results := make([][]DetailsDebug[int, string], buckets)
+		results := make([][]Debug[int, string], buckets)
 
 		for bucketID := range buckets {
 			wg.Add(1)
@@ -662,7 +662,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Test concurrent access after full refill
 	{
 		var wg sync.WaitGroup
-		results := make([][]DetailsDebug[int, string], buckets*int(perSecond.count))
+		results := make([][]Debug[int, string], buckets*int(perSecond.count))
 		resultIndex := 0
 
 		for bucketID := range buckets {
@@ -2427,7 +2427,7 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 		require.Equal(t, int64(1), details.TokensRequested(), "should request 1 token")
 		require.Equal(t, int64(1), details.TokensConsumed(), "should consume 1 token when allowed")
 		require.Equal(t, int64(4), details.TokensRemaining(), "should have 4 tokens remaining")
-		require.Equal(t, "test-key1", details.BucketKey(), "bucket key should match")
+		require.Equal(t, "test-key1", details.Key(), "bucket key should match")
 		require.Equal(t, true, details.Allowed(), "should be allowed")
 		require.GreaterOrEqual(t, details.RetryAfter(), time.Duration(0), "retry after should be non-negative")
 	})
@@ -2742,7 +2742,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 		require.Equal(t, int64(1), details.TokensRequested(), "should request 1 token")
 		require.Equal(t, int64(0), details.TokensConsumed(), "peek should never consume tokens")
 		require.Equal(t, int64(5), details.TokensRemaining(), "should have all 5 tokens remaining")
-		require.Equal(t, "test-key1", details.BucketKey(), "bucket key should match")
+		require.Equal(t, "test-key1", details.Key(), "bucket key should match")
 		require.Equal(t, true, details.Allowed(), "should be allowed")
 		require.Equal(t, time.Duration(0), details.RetryAfter(), "retry after should be 0 when available")
 	})

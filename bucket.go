@@ -28,20 +28,6 @@ func newBucket(executionTime time.Time, limit Limit) *bucket {
 	}
 }
 
-// allow returns true if there are at least `n` tokens available in the bucket,
-// and consumes `n` tokens if so.
-//
-// If false, no tokens were consumed.
-//
-// ⚠️ caller is responsible for locking appropriately
-func (b *bucket) allow(executionTime time.Time, limit Limit, n int64) bool {
-	if b.hasTokens(executionTime, limit, n) {
-		b.consumeTokens(executionTime, limit, n)
-		return true
-	}
-	return false
-}
-
 // hasTokens checks if there are at least `n` tokens in the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
@@ -101,4 +87,26 @@ func (b *bucket) nextTokensTime(executionTime time.Time, limit Limit, n int64) t
 	// for this read-only operation.
 	b.checkCutoff(executionTime, limit)
 	return b.time.Add(limit.durationPerToken * time.Duration(n))
+}
+
+func lockBuckets(buckets []*bucket) (unlock func()) {
+	for _, b := range buckets {
+		b.mu.Lock()
+	}
+	return func() {
+		for _, b := range buckets {
+			b.mu.Unlock()
+		}
+	}
+}
+
+func rLockBuckets(buckets []*bucket) (unlock func()) {
+	for _, b := range buckets {
+		b.mu.RLock()
+	}
+	return func() {
+		for _, b := range buckets {
+			b.mu.RUnlock()
+		}
+	}
 }

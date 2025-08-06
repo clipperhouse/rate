@@ -42,6 +42,14 @@ type bucketMap[TKey comparable] struct {
 	m sync.Map
 }
 
+// bucketSpec is a key for the bucket map, which includes the limit and the user key.
+// It is a composite key to ensure that each bucket is unique for a given limit and user key.
+type bucketSpec[TKey comparable] struct {
+	limit Limit
+	// userKey is the result of calling the user-defined Keyer
+	userKey TKey
+}
+
 // loadOrStore returns the existing bucket for the key if present.
 // Otherwise, it creates a new bucket, stores it, and returns it.
 // This is specialized to avoid a closure allocation for the getter.

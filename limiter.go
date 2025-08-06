@@ -249,10 +249,6 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	for _, limit := range limits {
 		b := r.buckets.loadOrStore(userKey, executionTime, limit)
 		buckets = append(buckets, b)
-	}
-
-	// Lock all buckets
-	for _, b := range buckets {
 		b.mu.Lock()
 	}
 	// ...and defer unlock
@@ -435,10 +431,6 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 	for _, limit := range limits {
 		b := r.buckets.loadOrStore(userKey, executionTime, limit)
 		buckets = append(buckets, b)
-	}
-
-	// Lock all buckets
-	for _, b := range buckets {
 		b.mu.Lock()
 	}
 	// ..and defer unlock

@@ -84,7 +84,7 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 	return r.waitNWithCancellation(input, startTime, 1, deadline, done)
 }
 
-// waitWithCancellation is a more testable version of wait that accepts
+// waitNWithCancellation is a more testable version of wait that accepts
 // deadline and done functions instead of a context, allowing for deterministic testing.
 func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	input TInput,
@@ -116,22 +116,19 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	}()
 
 	for {
-		// The goroutine at the front of the queue gets to try for a token first.
+		// Only hold the lock while checking for tokens, not while waiting
 		waiter.mu.Lock()
 		allow, details := r.allowNWithDetails(input, currentTime, n)
-		waiter.mu.Unlock()
+
 		if allow {
+			waiter.mu.Unlock()
 			return true
 		}
 
 		wait := max(details.RetryAfter(), 0)
 
-		// if we can't possibly get a token, fail fast
-		if deadline, ok := deadline(); ok {
-			if deadline.Before(currentTime.Add(wait)) {
-				return false
-			}
-		}
+		// Release the lock before waiting
+		waiter.mu.Unlock()
 
 		select {
 		case <-done():

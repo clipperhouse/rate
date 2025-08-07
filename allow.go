@@ -355,6 +355,9 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time
 		limit := limits[i]
 		allow := b.hasTokens(executionTime, limit, n)
 		allowAll = allowAll && allow
+
+		// some of these fields can only be determined
+		// after we know if we are allowing all, see below
 		debugs[i] = Debug[TInput, TKey]{
 			allowed:         allow,
 			executionTime:   executionTime,
@@ -366,23 +369,29 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time
 	}
 
 	// Consume tokens only when all buckets allow
+	if allowAll {
+		for i := range buckets {
+			b := buckets[i]
+			limit := limits[i]
+			b.consumeTokens(executionTime, limit, n)
+			debugs[i].tokensConsumed = n
+			debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
+			debugs[i].retryAfter = 0
+		}
+
+		return true, debugs
+	}
+
+	// We didn't allow all, so no tokens to consume,
+	// but need to update details
 	for i := range buckets {
 		b := buckets[i]
 		limit := limits[i]
-
-		if allowAll {
-			b.consumeTokens(executionTime, limit, n)
-			debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
-			debugs[i].tokensConsumed = n
-			debugs[i].retryAfter = 0
-			continue
-		}
-
-		debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
 		debugs[i].tokensConsumed = 0
+		debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
 		retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 		debugs[i].retryAfter = max(0, retryAfter)
 	}
 
-	return allowAll, debugs
+	return false, debugs
 }

@@ -70,7 +70,6 @@ func (r *Limiter[TInput, TKey]) waitN(ctx context.Context, input TInput, executi
 		input,
 		executionTime,
 		n,
-		ctx.Deadline,
 		ctx.Done,
 	)
 }
@@ -78,10 +77,9 @@ func (r *Limiter[TInput, TKey]) waitN(ctx context.Context, input TInput, executi
 func (r *Limiter[TInput, TKey]) waitWithCancellation(
 	input TInput,
 	startTime time.Time,
-	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
-	return r.waitNWithCancellation(input, startTime, 1, deadline, done)
+	return r.waitNWithCancellation(input, startTime, 1, done)
 }
 
 // waitNWithCancellation is a more testable version of wait that accepts
@@ -90,7 +88,6 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	input TInput,
 	startTime time.Time,
 	n int64,
-	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
 	if r.allowN(input, startTime, n) {

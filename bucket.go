@@ -88,14 +88,3 @@ func (b *bucket) nextTokensTime(executionTime time.Time, limit Limit, n int64) t
 	b.checkCutoff(executionTime, limit)
 	return b.time.Add(limit.durationPerToken * time.Duration(n))
 }
-
-func rLockBuckets(buckets []*bucket) (unlock func()) {
-	for _, b := range buckets {
-		b.mu.RLock()
-	}
-	return func() {
-		for _, b := range buckets {
-			b.mu.RUnlock()
-		}
-	}
-}

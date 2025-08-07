@@ -309,13 +309,14 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time
 		debugs := []Debug[TInput, TKey]{
 			{
 				allowed:         true,
-				tokensRequested: n,
-				tokensConsumed:  0,
-				executionTime:   executionTime,
-				tokensRemaining: 0,
-				retryAfter:      0,
 				input:           input,
 				key:             userKey,
+				limit:           Limit{},
+				executionTime:   executionTime,
+				tokensRequested: n,
+				tokensConsumed:  0,
+				tokensRemaining: 0,
+				retryAfter:      0,
 			},
 		}
 		return true, debugs
@@ -380,10 +381,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time
 		debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
 		debugs[i].tokensConsumed = 0
 		retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
-		if retryAfter < 0 {
-			retryAfter = 0
-		}
-		debugs[i].retryAfter = retryAfter
+		debugs[i].retryAfter = max(0, retryAfter)
 	}
 
 	return allowAll, debugs

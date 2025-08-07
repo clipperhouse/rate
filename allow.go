@@ -92,8 +92,7 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 }
 
 // AllowWithDetails returns true if a token is available for the given key,
-// along with aggregated details optimized for setting response headers.
-// This method avoids allocations and is suitable for performance-critical paths.
+// along with details for setting response headers.
 //
 // If true, it will consume one token. If false, no token will be consumed.
 //
@@ -110,8 +109,7 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 }
 
 // AllowNWithDetails returns true if at least `n` tokens are available
-// for the given key, along with aggregated details optimized for setting response headers.
-// This method avoids allocations and is suitable for performance-critical paths.
+// for the given key, along with details for setting response headers.
 //
 // If true, it will consume `n` tokens. If false, no token will be consumed.
 //
@@ -175,7 +173,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		"remaining tokens" and "retry after" mean. There are `n`
 		answers but we will return only one.
 
-		(See AllowNWithDebug for per-bucket details.)
+		(See AllowWithDebug for per-bucket details.)
 
 		So, let's answer the question of what is most useful to
 		the caller.

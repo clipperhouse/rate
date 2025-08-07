@@ -132,13 +132,13 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		// No limits defined, so we allow everything
 		details := Details[TInput, TKey]{
 			allowed:         true,
-			tokensRequested: n,
-			tokensConsumed:  0,
 			executionTime:   executionTime,
-			tokensRemaining: 0,
-			retryAfter:      0,
 			input:           input,
 			key:             userKey,
+			tokensRequested: n,
+			tokensConsumed:  0,
+			tokensRemaining: 0,
+			retryAfter:      0,
 		}
 		return true, details
 	}
@@ -246,13 +246,13 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 
 	details := Details[TInput, TKey]{
 		allowed:         allowAll,
-		tokensRequested: n,
-		tokensConsumed:  consumed,
 		executionTime:   executionTime,
-		tokensRemaining: remainingTokens,
-		retryAfter:      retryAfter,
 		input:           input,
 		key:             userKey,
+		tokensRequested: n,
+		tokensConsumed:  consumed,
+		tokensRemaining: remainingTokens,
+		retryAfter:      retryAfter,
 	}
 
 	return allowAll, details

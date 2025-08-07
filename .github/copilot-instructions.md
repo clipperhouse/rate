@@ -11,6 +11,8 @@
 
 ## Testing Conventions
 
+When I ask you write tests, I am looking for bugs in my implementation. Try to discover bugs and edge cases.
+
 ### Race Detection
 - Always run Go tests with the `-race` flag to catch race conditions and ensure clean concurrency
 - Essential for this codebase since it heavily uses concurrent operations

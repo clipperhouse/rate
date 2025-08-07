@@ -92,8 +92,7 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 }
 
 // AllowWithDetails returns true if a token is available for the given key,
-// along with aggregated details optimized for setting response headers.
-// This method avoids allocations and is suitable for performance-critical paths.
+// along with details for setting response headers.
 //
 // If true, it will consume one token. If false, no token will be consumed.
 //
@@ -110,8 +109,7 @@ func (r *Limiter[TInput, TKey]) allowWithDetails(input TInput, executionTime tim
 }
 
 // AllowNWithDetails returns true if at least `n` tokens are available
-// for the given key, along with aggregated details optimized for setting response headers.
-// This method avoids allocations and is suitable for performance-critical paths.
+// for the given key, along with details for setting response headers.
 //
 // If true, it will consume `n` tokens. If false, no token will be consumed.
 //
@@ -134,13 +132,13 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		// No limits defined, so we allow everything
 		details := Details[TInput, TKey]{
 			allowed:         true,
+			executionTime:   executionTime,
+			input:           input,
+			key:             userKey,
 			tokensRequested: n,
 			tokensConsumed:  0,
-			executionTime:   executionTime,
-			remainingTokens: 0,
+			tokensRemaining: 0,
 			retryAfter:      0,
-			bucketInput:     input,
-			bucketKey:       userKey,
 		}
 		return true, details
 	}
@@ -175,7 +173,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		"remaining tokens" and "retry after" mean. There are `n`
 		answers but we will return only one.
 
-		(See AllowNWithDebug for per-bucket details.)
+		(See AllowWithDebug for per-bucket details.)
 
 		So, let's answer the question of what is most useful to
 		the caller.
@@ -248,13 +246,13 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 
 	details := Details[TInput, TKey]{
 		allowed:         allowAll,
+		executionTime:   executionTime,
+		input:           input,
+		key:             userKey,
 		tokensRequested: n,
 		tokensConsumed:  consumed,
-		executionTime:   executionTime,
-		remainingTokens: remainingTokens,
+		tokensRemaining: remainingTokens,
 		retryAfter:      retryAfter,
-		bucketInput:     input,
-		bucketKey:       userKey,
 	}
 
 	return allowAll, details
@@ -273,11 +271,11 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 // all limits allow the request, and one token will be consumed against
 // each limit. If any limit would be exceeded, no token will be consumed
 // against any limit.
-func (r *Limiter[TInput, TKey]) AllowWithDebug(input TInput) (bool, []DetailsDebug[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) AllowWithDebug(input TInput) (bool, []Debug[TInput, TKey]) {
 	return r.allowWithDebug(input, time.Now())
 }
 
-func (r *Limiter[TInput, TKey]) allowWithDebug(input TInput, executionTime time.Time) (bool, []DetailsDebug[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) allowWithDebug(input TInput, executionTime time.Time) (bool, []Debug[TInput, TKey]) {
 	return r.allowNWithDebug(input, executionTime, 1)
 }
 
@@ -294,21 +292,62 @@ func (r *Limiter[TInput, TKey]) allowWithDebug(input TInput, executionTime time.
 // all limits allow the request, and `n` tokens will be consumed against
 // each limit. If any limit would be exceeded, no token will be consumed
 // against any limit.
-func (r *Limiter[TInput, TKey]) AllowNWithDebug(input TInput, n int64) (bool, []DetailsDebug[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) AllowNWithDebug(input TInput, n int64) (bool, []Debug[TInput, TKey]) {
 	return r.allowNWithDebug(input, time.Now(), n)
 }
 
-func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []DetailsDebug[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
 	userKey := r.keyer(input)
-	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, true)
-	unlock := lockBuckets(buckets)
-	defer unlock()
 
-	details := make([]DetailsDebug[TInput, TKey], len(buckets))
+	limits := r.getLimits(input)
+	if len(limits) == 0 {
+		// No limits defined, so we allow everything
+		debugs := []Debug[TInput, TKey]{
+			{
+				allowed:         true,
+				input:           input,
+				key:             userKey,
+				limit:           Limit{},
+				executionTime:   executionTime,
+				tokensRequested: n,
+				tokensConsumed:  0,
+				tokensRemaining: 0,
+				retryAfter:      0,
+			},
+		}
+		return true, debugs
+	}
+
+	// Collect the buckets
+	var buckets []*bucket
+
+	// Optimization: use stack allocation for small numbers of limits,
+	// should be the common case
+	var bucketsArray [4]*bucket
+	if len(limits) <= len(bucketsArray) {
+		buckets = bucketsArray[:0]
+	} else {
+		// Fall back to heap for large cases
+		buckets = make([]*bucket, 0, len(limits))
+	}
+
+	for _, limit := range limits {
+		b := r.buckets.loadOrStore(userKey, executionTime, limit)
+		buckets = append(buckets, b)
+		b.mu.Lock()
+	}
+	// ..and defer unlock
+	defer func() {
+		for _, b := range buckets {
+			b.mu.Unlock()
+		}
+	}()
+
+	debugs := make([]Debug[TInput, TKey], len(buckets))
 
 	allowAll := true
 	for i := range buckets {
@@ -316,14 +355,16 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time
 		limit := limits[i]
 		allow := b.hasTokens(executionTime, limit, n)
 		allowAll = allowAll && allow
-		details[i] = DetailsDebug[TInput, TKey]{
+
+		// some of these fields can only be determined
+		// after we know if we are allowing all, see below
+		debugs[i] = Debug[TInput, TKey]{
 			allowed:         allow,
 			executionTime:   executionTime,
+			input:           input,
+			key:             userKey,
 			limit:           limit,
 			tokensRequested: n,
-			remainingTokens: b.remainingTokens(executionTime, limit),
-			bucketInput:     input,
-			bucketKey:       r.keyer(input),
 		}
 	}
 
@@ -333,10 +374,24 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time
 			b := buckets[i]
 			limit := limits[i]
 			b.consumeTokens(executionTime, limit, n)
-			details[i].remainingTokens = b.remainingTokens(executionTime, limit)
-			details[i].tokensConsumed = n
+			debugs[i].tokensConsumed = n
+			debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
+			debugs[i].retryAfter = 0
 		}
+
+		return true, debugs
 	}
 
-	return allowAll, details
+	// We didn't allow all, so no tokens to consume,
+	// but need to update details
+	for i := range buckets {
+		b := buckets[i]
+		limit := limits[i]
+		debugs[i].tokensConsumed = 0
+		debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
+		retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+		debugs[i].retryAfter = max(0, retryAfter)
+	}
+
+	return false, debugs
 }

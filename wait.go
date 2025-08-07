@@ -118,38 +118,13 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	for {
 		// The goroutine at the front of the queue gets to try for a token first.
 		waiter.mu.Lock()
-
-		// Try to get tokens while holding the waiter lock to prevent races
-		if r.allowN(input, currentTime, n) {
-			waiter.mu.Unlock()
+		allow, details := r.allowNWithDetails(input, currentTime, n)
+		waiter.mu.Unlock()
+		if allow {
 			return true
 		}
 
-		// Calculate wait time while still holding waiter lock to maintain atomicity
-		buckets, limits := r.getBucketsAndLimits(input, userKey, currentTime, true)
-		unlock := rLockBuckets(buckets)
-
-		// Find the earliest time that all buckets might have `n` tokens.
-		// The bucket with the longest wait time will determine how long we wait,
-		// because `allow` requires all buckets to have `n` tokens.
-		var wait time.Duration
-		for i, b := range buckets {
-			limit := limits[i]
-			nextTokensTime := b.nextTokensTime(currentTime, limit, n)
-			untilNext := nextTokensTime.Sub(currentTime)
-			if i == 0 || untilNext > wait {
-				wait = untilNext
-			}
-		}
-		unlock()
-
-		// Release waiter lock after calculating wait time
-		waiter.mu.Unlock()
-
-		// guardrail, not sure if this is possible, but we don't want it.
-		if wait < 0 {
-			wait = 0
-		}
+		wait := max(details.RetryAfter(), 0)
 
 		// if we can't possibly get a token, fail fast
 		if deadline, ok := deadline(); ok {

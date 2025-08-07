@@ -2,70 +2,17 @@ package rate
 
 import "time"
 
-// DetailsDebug is a struct that contains the details of a rate limit check for a single bucket.
-// Used by debug APIs that return per-bucket information.
-type DetailsDebug[TInput any, TKey comparable] struct {
-	allowed         bool
-	limit           Limit
-	tokensRequested int64
-	tokensConsumed  int64
-	executionTime   time.Time
-	remainingTokens int64
-	bucketInput     TInput
-	bucketKey       TKey
-}
-
 // Details contains aggregated rate limit details across multiple buckets/limits,
 // optimized for the common use case of setting response headers without expensive allocations.
 type Details[TInput any, TKey comparable] struct {
 	allowed         bool
+	executionTime   time.Time
+	input           TInput
+	key             TKey
 	tokensRequested int64
 	tokensConsumed  int64
-	executionTime   time.Time
-	remainingTokens int64  // minimum across all buckets (fewest before denial)
+	tokensRemaining int64         // minimum across all buckets (fewest before denial)
 	retryAfter      time.Duration // maximum wait time across all buckets
-	bucketInput     TInput
-	bucketKey       TKey
-}
-
-// Allowed returns true if the request was allowed.
-func (d DetailsDebug[TInput, TKey]) Allowed() bool {
-	return d.allowed
-}
-
-// Limit returns the limit that was used for the request.
-func (d DetailsDebug[TInput, TKey]) Limit() Limit {
-	return d.limit
-}
-
-// ExecutionTime returns the time the request was executed.
-func (d DetailsDebug[TInput, TKey]) ExecutionTime() time.Time {
-	return d.executionTime
-}
-
-// BucketInput returns the input that was used to create the bucket.
-func (d DetailsDebug[TInput, TKey]) BucketInput() TInput {
-	return d.bucketInput
-}
-
-// BucketKey returns the key of the bucket that was used for the request.
-func (d DetailsDebug[TInput, TKey]) BucketKey() TKey {
-	return d.bucketKey
-}
-
-// TokensRequested returns the number of tokens that were requested for the request.
-func (d DetailsDebug[TInput, TKey]) TokensRequested() int64 {
-	return d.tokensRequested
-}
-
-// TokensConsumed returns the number of tokens that were consumed for the request.
-func (d DetailsDebug[TInput, TKey]) TokensConsumed() int64 {
-	return d.tokensConsumed
-}
-
-// TokensRemaining returns the number of remaining tokens in the bucket
-func (d DetailsDebug[TInput, TKey]) TokensRemaining() int64 {
-	return d.remainingTokens
 }
 
 // Allowed returns true if the request was allowed.
@@ -78,14 +25,14 @@ func (d Details[TInput, TKey]) ExecutionTime() time.Time {
 	return d.executionTime
 }
 
-// BucketInput returns the input that was used to create the bucket.
-func (d Details[TInput, TKey]) BucketInput() TInput {
-	return d.bucketInput
+// Input returns the input that was used to create the bucket.
+func (d Details[TInput, TKey]) Input() TInput {
+	return d.input
 }
 
-// BucketKey returns the key of the bucket that was used for the request.
-func (d Details[TInput, TKey]) BucketKey() TKey {
-	return d.bucketKey
+// Key returns the key of the bucket that was used for the request.
+func (d Details[TInput, TKey]) Key() TKey {
+	return d.key
 }
 
 // TokensRequested returns the number of tokens that were requested for the request.
@@ -101,7 +48,7 @@ func (d Details[TInput, TKey]) TokensConsumed() int64 {
 // TokensRemaining returns the minimum number of remaining tokens across all buckets.
 // This represents "after using this many tokens, you will be denied".
 func (d Details[TInput, TKey]) TokensRemaining() int64 {
-	return d.remainingTokens
+	return d.tokensRemaining
 }
 
 // RetryAfter returns the duration after which all relevant buckets may have refilled.

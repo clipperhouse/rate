@@ -31,8 +31,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	ok := limiter.allow("test", executionTime)
 	require.False(t, ok, "should not allow when tokens exhausted")
 
-	// Test 1: Wait successfully (no cancellation)
-	{
+	t.Run("No_Cancellation", func(t *testing.T) {
 		// Done channel that never closes (no cancellation)
 		done := func() <-chan struct{} {
 			return make(chan struct{}) // never closes
@@ -43,14 +42,13 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 
 		// We waited
 		executionTime = executionTime.Add(limit.durationPerToken)
-	}
 
-	// Should not allow again immediately after wait
-	ok = limiter.allow("test", executionTime)
-	require.False(t, ok, "should not allow again immediately after wait")
+		// Should not allow again immediately after wait
+		ok := limiter.allow("test", executionTime)
+		require.False(t, ok, "should not allow again immediately after wait")
+	})
 
-	// Test 2: Wait with cancellation after delay
-	{
+	t.Run("Timed_Cancellation", func(t *testing.T) {
 		// Done channel that closes when cancellation occurs
 		doneCh := make(chan struct{})
 		done := func() <-chan struct{} {
@@ -67,10 +65,9 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 
 		allow := limiter.waitWithCancellation("test", executionTime, done)
 		require.False(t, allow, "should not acquire token if cancellation occurs before token is available")
-	}
+	})
 
-	// Test 3: Wait with immediate cancellation
-	{
+	t.Run("Immediate_Cancellation", func(t *testing.T) {
 		// Done channel that closes immediately
 		done := func() <-chan struct{} {
 			ch := make(chan struct{})
@@ -80,8 +77,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 
 		allow := limiter.waitWithCancellation("test", executionTime, done)
 		require.False(t, allow, "should not acquire token if context is cancelled immediately")
-	}
-
+	})
 }
 
 func TestLimiter_WaitN_SingleBucket(t *testing.T) {
@@ -95,18 +91,14 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 	executionTime := time.Now()
 
 	// Consume all tokens
-	{
-		ok := limiter.allowN("test", executionTime, limit.count)
-		require.True(t, ok, "should allow initial tokens")
-	}
-	{
-		// Should not allow immediately
-		ok := limiter.allowN("test", executionTime, 1)
-		require.False(t, ok, "should not allow when tokens exhausted")
-	}
+	ok := limiter.allowN("test", executionTime, limit.count)
+	require.True(t, ok, "should allow initial tokens")
 
-	// Test 1: WaitN successfully (no cancellation)
-	{
+	// Should not allow immediately
+	ok = limiter.allowN("test", executionTime, 1)
+	require.False(t, ok, "should not allow when tokens exhausted")
+
+	t.Run("No_Cancellation", func(t *testing.T) {
 		// Done channel that never closes (no cancellation)
 		done := func() <-chan struct{} {
 			return make(chan struct{}) // never closes
@@ -117,17 +109,13 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 
 		// We waited
 		executionTime = executionTime.Add(limit.durationPerToken)
-	}
 
-	{
 		// Should not allow again immediately after wait
 		ok := limiter.allow("test", executionTime)
 		require.False(t, ok, "should not allow again immediately after wait")
-	}
+	})
 
-	// Test 2: WaitN with cancellation after delay
-	{
-
+	t.Run("Timed_Cancellation", func(t *testing.T) {
 		// Done channel that closes when cancellation occurs
 		doneCh := make(chan struct{})
 		done := func() <-chan struct{} {
@@ -144,10 +132,9 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 
 		allow := limiter.waitNWithCancellation("test", executionTime, limit.count, done)
 		require.False(t, allow, "should not acquire tokens if cancellation occurs before tokens are available")
-	}
+	})
 
-	// Test 3: Wait with immediate cancellation
-	{
+	t.Run("Immediate_Cancellation", func(t *testing.T) {
 		// Done channel that closes immediately
 		done := func() <-chan struct{} {
 			ch := make(chan struct{})
@@ -157,8 +144,7 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 
 		allow := limiter.waitNWithCancellation("test", executionTime, limit.count, done)
 		require.False(t, allow, "should not acquire tokens if context is cancelled immediately")
-	}
-
+	})
 }
 
 func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
@@ -230,8 +216,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		require.False(t, allow, "should not allow when tokens exhausted for bucket %d", bucketID)
 	}
 
-	// Test 1: Multiple goroutines competing for tokens with limited time
-	{
+	t.Run("Limited_Time", func(t *testing.T) {
 		// More goroutines than available tokens to create competition
 		tokens := buckets * limit.count
 		concurrency := tokens * 3 // oversubscribe by 3x
@@ -281,10 +266,9 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		require.Greater(t, successes, int64(0), "some goroutines should succeed")
 		require.Less(t, successes, concurrency, "not all goroutines should succeed due to deadline")
 		require.Equal(t, concurrency, successes+failures, "all goroutines should complete")
-	}
+	})
 
-	// Test 2: Multiple goroutines with deadline that expires before tokens are available
-	{
+	t.Run("Early_Deadline", func(t *testing.T) {
 		// Use fresh execution time for this test
 		currentTime := time.Now()
 
@@ -328,10 +312,9 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		for i, result := range results {
 			require.False(t, result, "goroutine %d should not acquire token due to early deadline", i)
 		}
-	}
+	})
 
-	// Test 3: Multiple goroutines with immediate cancellation
-	{
+	t.Run("Immediate_Cancellation", func(t *testing.T) {
 		concurrency := buckets
 		results := make([]bool, concurrency)
 
@@ -358,7 +341,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		for i, result := range results {
 			require.False(t, result, "goroutine %d should not acquire token due to immediate cancellation", i)
 		}
-	}
+	})
 }
 
 func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
@@ -372,7 +355,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	executionTime := time.Now()
 
 	// Test 1: Wait should consume exactly 1 token
-	t.Run("Wait_Consumes_One_Token", func(t *testing.T) {
+	t.Run("One_Token", func(t *testing.T) {
 		// Verify initial state
 		_, initialDetails := limiter.peekWithDebug("test-wait-1", executionTime)
 		require.Equal(t, limit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
@@ -391,7 +374,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	})
 
 	// Test 2: WaitN should consume exactly n tokens
-	t.Run("WaitN_Consumes_N_Tokens", func(t *testing.T) {
+	t.Run("N_Tokens", func(t *testing.T) {
 		const tokensToWait = 3
 
 		// Verify initial state
@@ -412,7 +395,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	})
 
 	// Test 3: WaitN with multiple limits should consume n tokens from all buckets
-	t.Run("WaitN_MultipleLimits_Consumes_N_From_All", func(t *testing.T) {
+	t.Run("MultipleLimits_N_Tokens", func(t *testing.T) {
 		perSecond := NewLimit(5, time.Second)
 		perMinute := NewLimit(20, time.Minute)
 		limiter := NewLimiter(keyer, perSecond, perMinute)
@@ -440,7 +423,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	})
 
 	// Test 4: WaitN that fails should consume zero tokens
-	t.Run("WaitN_Fails_Consumes_Zero_Tokens", func(t *testing.T) {
+	t.Run("Zero_Tokens", func(t *testing.T) {
 		// First, exhaust the bucket
 		for range limit.count {
 			limiter.allow("test-fail-waitn", executionTime)
@@ -467,7 +450,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	})
 
 	// Test 5: Verify WaitN with high token count
-	t.Run("WaitN_High_Token_Count", func(t *testing.T) {
+	t.Run("High_Token_Count", func(t *testing.T) {
 		bigLimit := NewLimit(50, time.Second)
 		bigLimiter := NewLimiter(keyer, bigLimit)
 		const tokensToWait = 25
@@ -490,7 +473,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	})
 
 	// Test 6: Concurrent WaitN should consume correct total tokens
-	t.Run("WaitN_Concurrent_Token_Consumption", func(t *testing.T) {
+	t.Run("Concurrent_Consumption", func(t *testing.T) {
 		concurrentLimit := NewLimit(20, time.Second)
 		concurrentLimiter := NewLimiter(keyer, concurrentLimit)
 		const tokensPerWait = 2
@@ -677,7 +660,7 @@ func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
 	}
 }
 
-func TestLimiter_WaitersCleanup_Basic(t *testing.T) {
+func TestLimiter_Waiters_Cleanup(t *testing.T) {
 	t.Parallel()
 
 	keyer := func(input string) string {
@@ -691,36 +674,44 @@ func TestLimiter_WaitersCleanup_Basic(t *testing.T) {
 
 	executionTime := time.Now()
 
-	// Exhaust tokens for multiple keys
-	require.True(t, limiter.allow("key1", executionTime), "should allow initial token for key1")
-	require.True(t, limiter.allow("key2", executionTime), "should allow initial token for key2")
-
 	done := func() <-chan struct{} {
 		ch := make(chan struct{})
 		close(ch) // immediately cancelled
 		return ch
 	}
 
-	// Try to wait - this should create a waiter entry that gets cleaned up
-	allow := limiter.waitWithCancellation("key1", executionTime, done)
-	require.False(t, allow, "should timeout immediately")
+	t.Run("Single_Key", func(t *testing.T) {
+		// Exhaust tokens for key1
+		require.True(t, limiter.allow("key1", executionTime), "should allow initial token for key1")
 
-	// Check if waiter was cleaned up
-	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+		// Try to wait - this should create a waiter entry that gets cleaned up
+		allow := limiter.waitWithCancellation("key1", executionTime, done)
+		require.False(t, allow, "should timeout immediately")
 
-	// Try again with a different key
-	allow = limiter.waitWithCancellation("key2", executionTime, done)
-	require.False(t, allow, "should timeout immediately")
+		// Check if waiter was cleaned up
+		require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+	})
 
-	// Check waiters count again
-	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+	t.Run("Different_Key", func(t *testing.T) {
+		// Exhaust tokens for key2
+		require.True(t, limiter.allow("key2", executionTime), "should allow initial token for key2")
 
-	// Try the same key again
-	allow = limiter.waitWithCancellation("key1", executionTime, done)
-	require.False(t, allow, "should timeout immediately")
+		// Try again with a different key
+		allow := limiter.waitWithCancellation("key2", executionTime, done)
+		require.False(t, allow, "should timeout immediately")
 
-	// Check waiters count
-	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+		// Check waiters count again
+		require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+	})
+
+	t.Run("Same_Key_Reuse", func(t *testing.T) {
+		// Try the same key again
+		allow := limiter.waitWithCancellation("key1", executionTime, done)
+		require.False(t, allow, "should timeout immediately")
+
+		// Check waiters count
+		require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after timeout")
+	})
 }
 
 func TestLimiter_WaitersCleanup_MemoryLeak_Prevention(t *testing.T) {
@@ -755,7 +746,7 @@ func TestLimiter_WaitersCleanup_MemoryLeak_Prevention(t *testing.T) {
 	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after use")
 }
 
-func TestLimiter_WaitersCleanup_Concurrent(t *testing.T) {
+func TestLimiter_Waiters_Cleanup_Concurrent(t *testing.T) {
 	t.Parallel()
 
 	keyer := func(input int) string {
@@ -797,7 +788,7 @@ func TestLimiter_WaitersCleanup_Concurrent(t *testing.T) {
 	require.Equal(t, 0, limiter.waiters.count(), "waiters should be cleaned up after use")
 }
 
-func TestLimiter_WaitersCleanup_WithSuccessfulWaits(t *testing.T) {
+func TestLimiter_Waiters_Cleanup_WithSuccessfulWaits(t *testing.T) {
 	t.Parallel()
 
 	keyer := func(input string) string {

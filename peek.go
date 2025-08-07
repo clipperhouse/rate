@@ -187,32 +187,73 @@ func (r *Limiter[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, []D
 
 func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {
 	userKey := r.keyer(input)
-	buckets, limits := r.getBucketsAndLimits(input, userKey, executionTime, false)
 
-	details := make([]Debug[TInput, TKey], len(buckets))
-	allowAll := true
-
-	unlock := rLockBuckets(buckets)
-	defer unlock()
-
-	for i := range buckets {
-		b := buckets[i]
-		limit := limits[i]
-
-		allow := b.hasTokens(executionTime, limit, n)
-		allowAll = allowAll && allow
-
-		details[i] = Debug[TInput, TKey]{
-			allowed:         allow,
-			executionTime:   executionTime,
-			limit:           limit,
-			tokensRequested: n,
-			tokensConsumed:  0, // Never consume tokens in peek
-			tokensRemaining: b.remainingTokens(executionTime, limit),
-			input:           input,
-			key:             r.keyer(input),
+	limits := r.getLimits(input)
+	if len(limits) == 0 {
+		// No limits defined, so we allow everything
+		return true, []Debug[TInput, TKey]{
+			{
+				allowed:         true,
+				executionTime:   executionTime,
+				input:           input,
+				key:             userKey,
+				limit:           Limit{},
+				tokensRequested: n,
+				tokensConsumed:  0,
+				tokensRemaining: 0,
+				retryAfter:      0,
+			},
 		}
 	}
 
-	return allowAll, details
+	allowAll := true
+	debugs := make([]Debug[TInput, TKey], 0, len(limits))
+
+	// For peek operation, we can check each bucket individually
+	// without needing to collect and lock them all together
+	for _, limit := range limits {
+		if b, ok := r.buckets.load(userKey, limit); ok {
+			b.mu.RLock()
+
+			allow := b.hasTokens(executionTime, limit, n)
+			retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+			debugs = append(debugs, Debug[TInput, TKey]{
+				allowed:         allow,
+				executionTime:   executionTime,
+				input:           input,
+				key:             userKey,
+				limit:           limit,
+				tokensRequested: n,
+				tokensConsumed:  0, // Never consume tokens in peek
+				tokensRemaining: b.remainingTokens(executionTime, limit),
+				retryAfter:      max(0, retryAfter),
+			})
+
+			b.mu.RUnlock()
+			allowAll = allowAll && allow
+
+			continue
+		}
+
+		// Use stack-allocated bucket for missing buckets
+		b := bucket{
+			time: executionTime.Add(-limit.period),
+		}
+		allow := b.hasTokens(executionTime, limit, n)
+		retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+		debugs = append(debugs, Debug[TInput, TKey]{
+			allowed:         allow,
+			input:           input,
+			key:             userKey,
+			executionTime:   executionTime,
+			limit:           limit,
+			tokensRequested: n,
+			tokensConsumed:  0,
+			tokensRemaining: b.remainingTokens(executionTime, limit),
+			retryAfter:      max(0, retryAfter),
+		})
+		allowAll = allowAll && allow
+	}
+
+	return allowAll, debugs
 }

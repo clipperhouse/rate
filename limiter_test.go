@@ -1051,24 +1051,93 @@ func TestLimiter_PeekWithDebug(t *testing.T) {
 	limiter := NewLimiter(keyer, perSecond, perMinute)
 
 	executionTime := time.Now()
+	input := "test-debug-peek"
 
 	// any number of peeks should be true
 	for range 101 {
-		allowed, details := limiter.peekWithDebug("test-details", executionTime)
+		allowed, debugs := limiter.peekWithDebug(input, executionTime)
 		require.True(t, allowed)
-		require.Len(t, details, 2, "should have details for both limits")
+		require.Len(t, debugs, 2, "should have debugs for both limits")
 
-		require.Equal(t, perSecond, details[0].Limit(), "should have per-second limit in details")
-		require.Equal(t, allowed, details[0].Allowed(), "allowed should match for per-second limit")
-		require.Equal(t, executionTime, details[0].ExecutionTime(), "execution time should match for per-second limit")
-		require.Equal(t, "test-details", details[0].Key(), "bucket key should match for per-second limit")
-		require.Equal(t, perSecond.Count(), details[0].TokensRemaining(), "remaining tokens should match for per-second limit")
+		// Per-second limit debug checks
+		d0 := debugs[0]
+		require.Equal(t, perSecond, d0.Limit(), "should have per-second limit in details")
+		require.Equal(t, allowed, d0.Allowed(), "allowed should match for per-second limit")
+		require.Equal(t, executionTime, d0.ExecutionTime(), "execution time should match for per-second limit")
+		require.Equal(t, input, d0.Input(), "input should match for per-second limit")
+		require.Equal(t, input, d0.Key(), "bucket key should match for per-second limit")
+		require.Equal(t, perSecond.Count(), d0.TokensRemaining(), "remaining tokens should match for per-second limit")
+		require.Equal(t, int64(1), d0.TokensRequested(), "tokens requested should be 1 for per-second limit")
+		require.Equal(t, int64(0), d0.TokensConsumed(), "tokens consumed should be 0 for peek operation on per-second limit")
+		require.Equal(t, time.Duration(0), d0.RetryAfter(), "retry after should be 0 for allowed request on per-second limit")
 
-		require.Equal(t, perMinute, details[1].Limit(), "should have per-minute limit in details")
-		require.Equal(t, allowed, details[1].Allowed(), "allowed should match for per-minute limit")
-		require.Equal(t, executionTime, details[1].ExecutionTime(), "execution time should match for per-minute limit")
-		require.Equal(t, "test-details", details[1].Key(), "bucket key should match for per-minute limit")
-		require.Equal(t, perMinute.Count(), details[1].TokensRemaining(), "remaining tokens should match for per-minute limit")
+		// Per-minute limit debug checks
+		d1 := debugs[1]
+		require.Equal(t, perMinute, d1.Limit(), "should have per-minute limit in details")
+		require.Equal(t, allowed, d1.Allowed(), "allowed should match for per-minute limit")
+		require.Equal(t, executionTime, d1.ExecutionTime(), "execution time should match for per-minute limit")
+		require.Equal(t, input, d1.Input(), "input should match for per-minute limit")
+		require.Equal(t, input, d1.Key(), "bucket key should match for per-minute limit")
+		require.Equal(t, perMinute.Count(), d1.TokensRemaining(), "remaining tokens should match for per-minute limit")
+		require.Equal(t, int64(1), d1.TokensRequested(), "tokens requested should be 1 for per-minute limit")
+		require.Equal(t, int64(0), d1.TokensConsumed(), "tokens consumed should be 0 for peek operation on per-minute limit")
+		require.Equal(t, time.Duration(0), d1.RetryAfter(), "retry after should be 0 for allowed request on per-minute limit")
+	}
+}
+
+func TestLimiter_PeekWithDebug_AllowedAndDenied(t *testing.T) {
+	t.Parallel()
+	keyer := func(input string) string {
+		return input
+	}
+	// Create a small limit to easily test denial scenarios
+	limit := NewLimit(2, time.Second)
+	limiter := NewLimiter(keyer, limit)
+
+	now := time.Now()
+	input := "test-peek-debug"
+
+	{
+		// Test allowed scenario - first peek should be allowed
+		allowed, debugs := limiter.peekWithDebug(input, now)
+		require.True(t, allowed, "first peek should be allowed")
+		require.Len(t, debugs, 1, "should have debug info for single limit")
+
+		d := debugs[0]
+		require.True(t, d.Allowed(), "debug should show allowed")
+		require.Equal(t, limit, d.Limit(), "should have correct limit")
+		require.Equal(t, now, d.ExecutionTime(), "execution time should match")
+		require.Equal(t, input, d.Input(), "input should match")
+		require.Equal(t, input, d.Key(), "bucket key should match")
+		require.Equal(t, limit.count, d.TokensRemaining(), "should have full tokens remaining for peek")
+		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
+		require.Equal(t, int64(0), d.TokensConsumed(), "should consume 0 tokens for peek")
+		require.Equal(t, time.Duration(0), d.RetryAfter(), "retry after should be 0 for allowed request")
+	}
+
+	// Consume all tokens with allow calls to create a denied scenario
+	for range limit.count {
+		limiter.allow(input, now)
+	}
+
+	{
+		// Test allowed scenario - peek should now be allowed
+		allowed, debugs := limiter.peekWithDebug(input, now)
+		require.False(t, allowed, "peek should be denied after tokens exhausted")
+		require.Len(t, debugs, 1, "should have debug info for single limit")
+
+		d := debugs[0]
+		require.False(t, d.Allowed(), "debug should show denied")
+		require.Equal(t, limit, d.Limit(), "should have correct limit")
+		require.Equal(t, now, d.ExecutionTime(), "execution time should match")
+		require.Equal(t, input, d.Input(), "input should match")
+		require.Equal(t, input, d.Key(), "bucket key should match")
+		require.Equal(t, int64(0), d.TokensRemaining(), "should have 0 tokens remaining")
+		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
+		require.Equal(t, int64(0), d.TokensConsumed(), "should consume 0 tokens for peek even when denied")
+		// RetryAfter should be > 0 for denied requests
+		expectedRetryAfter := limit.durationPerToken
+		require.InDelta(t, float64(expectedRetryAfter), float64(d.RetryAfter()), float64(time.Nanosecond), "retry after should be duration per token for denied request")
 	}
 }
 
@@ -1353,23 +1422,23 @@ func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 
 	{
 		request := int64(10)
-		allowed, details := limiter.peekNWithDebug("test-allow-with-details", now, request)
+		allowed, debugs := limiter.peekNWithDebug("test-allow-with-debug", now, request)
 		require.False(t, allowed)
-		require.Len(t, details, 2, "should have details for both limits")
+		require.Len(t, debugs, 2, "should have debugs for both limits")
 
-		d0 := details[0]
+		d0 := debugs[0]
 		require.False(t, d0.Allowed())
-		require.Equal(t, d0.Input(), "test-allow-with-details")
-		require.Equal(t, d0.Key(), "test-allow-with-details-key")
+		require.Equal(t, d0.Input(), "test-allow-with-debug")
+		require.Equal(t, d0.Key(), "test-allow-with-debug-key")
 		require.Equal(t, d0.ExecutionTime(), now)
 		require.Equal(t, d0.TokensRequested(), request)
 		require.Equal(t, d0.TokensConsumed(), int64(0))
 		require.Equal(t, d0.TokensRemaining(), perSecond.count)
 
-		d1 := details[1]
+		d1 := debugs[1]
 		require.True(t, d1.Allowed())
-		require.Equal(t, d1.Input(), "test-allow-with-details")
-		require.Equal(t, d1.Key(), "test-allow-with-details-key")
+		require.Equal(t, d1.Input(), "test-allow-with-debug")
+		require.Equal(t, d1.Key(), "test-allow-with-debug-key")
 		require.Equal(t, d1.ExecutionTime(), now)
 		require.Equal(t, d1.TokensRequested(), request)
 		require.Equal(t, d1.TokensConsumed(), int64(0))
@@ -1378,23 +1447,23 @@ func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 
 	{
 		request := int64(9)
-		allowed, details := limiter.peekNWithDebug("test-allow-with-details", now, request)
+		allowed, debugs := limiter.peekNWithDebug("test-allow-with-debug", now, request)
 		require.True(t, allowed)
-		require.Len(t, details, 2, "should have details for both limits")
+		require.Len(t, debugs, 2, "should have debugs for both limits")
 
-		d0 := details[0]
+		d0 := debugs[0]
 		require.True(t, d0.Allowed())
-		require.Equal(t, d0.Input(), "test-allow-with-details")
-		require.Equal(t, d0.Key(), "test-allow-with-details-key")
+		require.Equal(t, d0.Input(), "test-allow-with-debug")
+		require.Equal(t, d0.Key(), "test-allow-with-debug-key")
 		require.Equal(t, d0.ExecutionTime(), now)
 		require.Equal(t, d0.TokensRequested(), request)
 		require.Equal(t, d0.TokensConsumed(), int64(0))
 		require.Equal(t, d0.TokensRemaining(), perSecond.count)
 
-		d1 := details[1]
+		d1 := debugs[1]
 		require.True(t, d1.Allowed())
-		require.Equal(t, d1.Input(), "test-allow-with-details")
-		require.Equal(t, d1.Key(), "test-allow-with-details-key")
+		require.Equal(t, d1.Input(), "test-allow-with-debug")
+		require.Equal(t, d1.Key(), "test-allow-with-debug-key")
 		require.Equal(t, d1.ExecutionTime(), now)
 		require.Equal(t, d1.TokensRequested(), request)
 		require.Equal(t, d1.TokensConsumed(), int64(0))
@@ -1412,14 +1481,22 @@ func TestLimiter_PeekWithDebug_Func(t *testing.T) {
 	limiter := NewLimiterFunc(keyer, limitFunc)
 
 	now := time.Now()
+	input := "test-details"
 
-	allowed, details := limiter.peekWithDebug("test-details", now)
+	allowed, debugs := limiter.peekWithDebug(input, now)
 	require.True(t, allowed)
-	d := details[0]
-	require.Equal(t, limit, d.Limit())
-	require.Equal(t, now, d.ExecutionTime())
-	require.Equal(t, "test-details", d.Key())
-	require.Equal(t, limit.count, d.TokensRemaining())
+	require.Len(t, debugs, 1, "should have debug info for single limit")
+
+	d := debugs[0]
+	require.Equal(t, limit, d.Limit(), "should have correct limit")
+	require.True(t, d.Allowed(), "should be allowed")
+	require.Equal(t, now, d.ExecutionTime(), "execution time should match")
+	require.Equal(t, input, d.Input(), "input should match")
+	require.Equal(t, input, d.Key(), "bucket key should match")
+	require.Equal(t, limit.count, d.TokensRemaining(), "remaining tokens should match")
+	require.Equal(t, int64(1), d.TokensRequested(), "tokens requested should be 1")
+	require.Equal(t, int64(0), d.TokensConsumed(), "tokens consumed should be 0 for peek operation")
+	require.Equal(t, time.Duration(0), d.RetryAfter(), "retry after should be 0 for allowed request")
 }
 
 func TestLimiter_UsesLimitFunc(t *testing.T) {

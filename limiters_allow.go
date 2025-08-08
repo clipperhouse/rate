@@ -11,70 +11,93 @@ import "time"
 // and `n` tokens will be consumed against each limit. If any limit
 // would be exceeded, no token will be consumed against from any Limiter.
 func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
-	// Count the allLimits for allocating buckets
-	var allLimits []Limit
-	for _, r := range rs.limiters {
-		l := r.getLimits(input)
-		allLimits = append(allLimits, l...)
-	}
-	if len(allLimits) == 0 {
-		// No limits defined, allow everything
+	// Gather per-limiter limits (avoid copying them into a single slice)
+	if len(rs.limiters) == 0 {
 		return true
 	}
 
-	// Collect the buckets
-	var buckets []*bucket
+	// Small-stack optimization for per-limiter limits slice to avoid heap allocs in common cases
+	const maxStackLimiters = 4
+	var limitsByLimiter []([]Limit)
+	if len(rs.limiters) <= maxStackLimiters {
+		var stackPerLimiter [maxStackLimiters][]Limit
+		limitsByLimiter = stackPerLimiter[:len(rs.limiters)]
+	} else {
+		limitsByLimiter = make([][]Limit, len(rs.limiters))
+	}
+	totalLimits := 0
+	for i, r := range rs.limiters {
+		limits := r.getLimits(input)
+		limitsByLimiter[i] = limits
+		totalLimits += len(limits)
+	}
+	if totalLimits == 0 {
+		return true // no limits overall
+	}
 
-	// Optimization: use a stack allocation for small numbers of limits,
-	// should be the common case
+	// Collect buckets in a flat slice (retain previous locking order) with stack opt
+	var buckets []*bucket
 	const maxStackBuckets = 6
-	if len(allLimits) <= maxStackBuckets {
+	if totalLimits <= maxStackBuckets {
 		var stackBuckets [maxStackBuckets]*bucket
 		buckets = stackBuckets[:0]
 	} else {
-		// Fall back to heap for larger cases
-		buckets = make([]*bucket, 0, len(allLimits))
+		buckets = make([]*bucket, 0, totalLimits)
 	}
 
-	for _, r := range rs.limiters {
-		// Just the limits for this limiter
-		limits := r.getLimits(input)
+	for i, r := range rs.limiters {
+		limits := limitsByLimiter[i]
 		if len(limits) == 0 {
 			continue
 		}
-
 		userKey := r.keyer(input)
-
-		// We need to collect all buckets and lock them together
 		for _, limit := range limits {
 			b := r.buckets.loadOrStore(userKey, executionTime, limit)
 			buckets = append(buckets, b)
 			b.mu.Lock()
 		}
 	}
-	// ...and defer unlock
 	defer func() {
 		for _, b := range buckets {
 			b.mu.Unlock()
 		}
 	}()
 
-	// Check if all buckets allow
+	// Check all buckets using two-level indexing over perLimiterLimits
 	allowAll := true
-	for i, b := range buckets {
-		limit := allLimits[i]
-		if !b.hasTokens(executionTime, limit, n) {
-			allowAll = false
+	flat := 0
+	outerBreak := false
+	for _, limits := range limitsByLimiter {
+		if len(limits) == 0 {
+			continue
+		}
+		for li := range limits {
+			b := buckets[flat]
+			limit := limits[li]
+			if !b.hasTokens(executionTime, limit, n) {
+				allowAll = false
+				outerBreak = true
+				break
+			}
+			flat++
+		}
+		if outerBreak {
 			break
 		}
 	}
 
-	// Consume tokens only when all buckets allow
 	if allowAll {
-		for i := range buckets {
-			b := buckets[i]
-			limit := allLimits[i]
-			b.consumeTokens(executionTime, limit, n)
+		flat = 0
+		for _, limits := range limitsByLimiter {
+			if len(limits) == 0 {
+				continue
+			}
+			for li := range limits {
+				b := buckets[flat]
+				limit := limits[li]
+				b.consumeTokens(executionTime, limit, n)
+				flat++
+			}
 		}
 	}
 	return allowAll

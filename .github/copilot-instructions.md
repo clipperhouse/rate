@@ -22,7 +22,8 @@ When I ask you write tests, I am looking for bugs in my implementation. Try to d
 ### Test Structure Patterns
 - Every test function must start with `t.Parallel()` to enable concurrent test execution
 - Use comprehensive test naming: `TestType_Method_Scenario` (e.g., `TestLimiter_Allow_MultipleBuckets_Concurrent`)
-- Create test variations covering: single/multiple buckets, single/multiple limits, serial/concurrent access
+- Create test variations covering: single/multiple buckets, single/multiple limits, serial/concurrent access.
+- The t.Run subtest style is good if the tests are seem combinatorial.
 - When you assert that something has been fixed or improved, run tests.
 - Do not ask me to run tests or benchmarks, just run them yourself.
 
@@ -39,6 +40,9 @@ When I ask you write tests, I am looking for bugs in my implementation. Try to d
 - Always verify state after operations (remaining tokens, bucket exhaustion, etc.)
 
 ## Code Structure
+
+### Comments
+- Don't add comments for fairly obvious things, if they seem repetitive with the code itself
 
 ### Generic Types
 - Maintain generic type constraints: `[TInput any, TKey comparable]`

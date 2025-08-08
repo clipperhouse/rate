@@ -23,7 +23,7 @@ When I ask you write tests, I am looking for bugs in my implementation. Try to d
 - Every test function must start with `t.Parallel()` to enable concurrent test execution
 - Use comprehensive test naming: `TestType_Method_Scenario` (e.g., `TestLimiter_Allow_MultipleBuckets_Concurrent`)
 - Create test variations covering: single/multiple buckets, single/multiple limits, serial/concurrent access.
-- The t.Run subtest style is good if the tests are seem combinatorial.
+- The t.Run subtest style is good if the tests are seem combinatorial, same for benchmarks and b.Run
 - When you assert that something has been fixed or improved, run tests.
 - Do not ask me to run tests or benchmarks, just run them yourself.
 

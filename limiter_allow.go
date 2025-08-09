@@ -70,25 +70,21 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	}()
 
 	// Check if all buckets allow
-	allowAll := true
 	for i, b := range buckets {
 		limit := limits[i]
 		if !b.hasTokens(executionTime, limit, n) {
-			allowAll = false
-			break
+			return false
 		}
 	}
 
 	// Consume tokens only when all buckets allow
-	if allowAll {
-		for i := range buckets {
-			b := buckets[i]
-			limit := limits[i]
-			b.consumeTokens(executionTime, limit, n)
-		}
+	for i := range buckets {
+		b := buckets[i]
+		limit := limits[i]
+		b.consumeTokens(executionTime, limit, n)
 	}
 
-	return allowAll
+	return true
 }
 
 // AllowWithDetails returns true if a token is available for the given key,

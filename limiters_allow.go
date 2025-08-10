@@ -25,51 +25,47 @@ func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime time.Time, 
 		limitsByLimiter = make([][]Limit, len(rs.limiters))
 	}
 
-	// First pass: gather slices & count.
-	totalLimits := 0
+	count := 0
 	for i, r := range rs.limiters {
-		ls := r.getLimits(input)
-		limitsByLimiter[i] = ls
-		totalLimits += len(ls)
+		lims := r.getLimits(input)
+		limitsByLimiter[i] = lims
+		count += len(lims)
 	}
-	if totalLimits == 0 {
+	if count == 0 {
 		return true
 	}
 
 	// Optimization: use stack allocation for small number of limits
 	const maxStackLimits = 6
-	var allLimits []Limit
-	if totalLimits <= maxStackLimits {
+	var limits []Limit
+	if count <= maxStackLimits {
 		var stackLimits [maxStackLimits]Limit
-		allLimits = stackLimits[:0]
+		limits = stackLimits[:0]
 	} else {
-		allLimits = make([]Limit, 0, totalLimits)
+		limits = make([]Limit, 0, count)
 	}
-	for _, ls := range limitsByLimiter {
-		if len(ls) == 0 {
-			continue
-		}
-		allLimits = append(allLimits, ls...)
+	for _, lims := range limitsByLimiter {
+		limits = append(limits, lims...)
 	}
 
-	// Collect buckets in same order as allLimits
+	// Collect buckets in same order as limits
 	// Optimization: use stack allocation for small number of limits
 	var buckets []*bucket
 	const maxStackBuckets = 6
-	if totalLimits <= maxStackBuckets {
+	if count <= maxStackBuckets {
 		var stackBuckets [maxStackBuckets]*bucket
 		buckets = stackBuckets[:0]
 	} else {
-		buckets = make([]*bucket, 0, totalLimits)
+		buckets = make([]*bucket, 0, count)
 	}
 
 	for i, r := range rs.limiters {
-		ls := limitsByLimiter[i]
-		if len(ls) == 0 {
+		lims := limitsByLimiter[i]
+		if len(lims) == 0 {
 			continue
 		}
 		userKey := r.keyer(input)
-		for _, limit := range ls {
+		for _, limit := range lims {
 			b := r.buckets.loadOrStore(userKey, executionTime, limit)
 			buckets = append(buckets, b)
 			b.mu.Lock()
@@ -82,14 +78,14 @@ func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime time.Time, 
 	}()
 
 	for i, b := range buckets {
-		if !b.hasTokens(executionTime, allLimits[i], n) {
+		if !b.hasTokens(executionTime, limits[i], n) {
 			return false
 		}
 	}
 
 	// All are allowed, consume tokens
 	for i, b := range buckets {
-		b.consumeTokens(executionTime, allLimits[i], n)
+		b.consumeTokens(executionTime, limits[i], n)
 	}
 	return true
 }

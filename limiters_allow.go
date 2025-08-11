@@ -64,7 +64,7 @@ func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime time.Time, 
 		if len(lims) == 0 {
 			continue
 		}
-		userKey := r.keyer(input)
+		userKey := r.keyFunc(input)
 		for _, limit := range lims {
 			b := r.buckets.loadOrStore(userKey, executionTime, limit)
 			buckets = append(buckets, b)
@@ -88,4 +88,136 @@ func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime time.Time, 
 		b.consumeTokens(executionTime, limits[i], n)
 	}
 	return true
+}
+
+func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime time.Time, n int64) (bool, Details[TInput, TKey]) {
+	if len(rs.limiters) == 0 { // no limiters -> allow everything
+		return true, Details[TInput, TKey]{
+			allowed:         true,
+			executionTime:   executionTime,
+			tokensRequested: n,
+			tokensConsumed:  0,
+			tokensRemaining: 0,
+			retryAfter:      0,
+		}
+	}
+
+	const maxStackLimiters = 4
+	var limitsByLimiter [][]Limit
+	if len(rs.limiters) <= maxStackLimiters {
+		var stackLimits [maxStackLimiters][]Limit
+		limitsByLimiter = stackLimits[:len(rs.limiters)]
+	} else {
+		limitsByLimiter = make([][]Limit, len(rs.limiters))
+	}
+
+	totalLimits := 0
+	for i, r := range rs.limiters {
+		lims := r.getLimits(input)
+		limitsByLimiter[i] = lims
+		totalLimits += len(lims)
+	}
+	if totalLimits == 0 { // all limiters had zero limits
+		return true, Details[TInput, TKey]{
+			allowed:         true,
+			executionTime:   executionTime,
+			tokensRequested: n,
+			tokensConsumed:  0,
+			tokensRemaining: 0,
+			retryAfter:      0,
+		}
+	}
+
+	const maxStackLimits = 6
+	var limits []Limit
+	if totalLimits <= maxStackLimits {
+		var stackLimits [maxStackLimits]Limit
+		limits = stackLimits[:0]
+	} else {
+		limits = make([]Limit, 0, totalLimits)
+	}
+	for _, lims := range limitsByLimiter {
+		limits = append(limits, lims...)
+	}
+
+	const maxStackBuckets = 6
+	var buckets []*bucket
+	if totalLimits <= maxStackBuckets {
+		var stackBuckets [maxStackBuckets]*bucket
+		buckets = stackBuckets[:0]
+	} else {
+		buckets = make([]*bucket, 0, totalLimits)
+	}
+
+	// pick first key encountered as representative
+	// capture first key (not currently exposed via Details but may be useful later)
+	haveKey := false
+	for i, r := range rs.limiters {
+		lims := limitsByLimiter[i]
+		if len(lims) == 0 {
+			continue
+		}
+		k := r.keyFunc(input)
+		if !haveKey {
+			haveKey = true
+		}
+		for _, limit := range lims {
+			b := r.buckets.loadOrStore(k, executionTime, limit)
+			buckets = append(buckets, b)
+			b.mu.Lock()
+		}
+	}
+	defer func() {
+		for _, b := range buckets {
+			b.mu.Unlock()
+		}
+	}()
+
+	allowAll := buckets[0].hasTokens(executionTime, limits[0], n)
+	remainingTokens := buckets[0].remainingTokens(executionTime, limits[0])
+	retryAfter := buckets[0].nextTokensTime(executionTime, limits[0], n).Sub(executionTime)
+	for i := 1; i < len(buckets); i++ {
+		b := buckets[i]
+		limit := limits[i]
+		if !b.hasTokens(executionTime, limit, n) {
+			allowAll = false
+		}
+		rt := b.remainingTokens(executionTime, limit)
+		if rt < remainingTokens {
+			remainingTokens = rt
+		}
+		ra := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+		if ra > retryAfter {
+			retryAfter = ra
+		}
+	}
+	if remainingTokens < 0 {
+		remainingTokens = 0
+	}
+
+	consumed := int64(0)
+	if allowAll {
+		for i, b := range buckets {
+			b.consumeTokens(executionTime, limits[i], n)
+			rt := b.remainingTokens(executionTime, limits[i])
+			if rt < remainingTokens {
+				remainingTokens = rt
+			}
+		}
+		consumed = n
+		if remainingTokens < 0 {
+			remainingTokens = 0
+		}
+	}
+	if retryAfter < 0 {
+		retryAfter = 0
+	}
+	return allowAll, Details[TInput, TKey]{
+		allowed:         allowAll,
+		executionTime:   executionTime,
+		tokensRequested: n,
+		tokensConsumed:  consumed,
+		tokensRemaining: remainingTokens,
+		retryAfter:      retryAfter,
+	}
 }

@@ -41,6 +41,8 @@ When I ask you write tests, I am looking for bugs in my implementation. Try to d
 
 ## Code Structure
 
+Use the naming conventions of existing code in this package.
+
 ### Comments
 - Don't add comments for fairly obvious things, if they seem repetitive with the code itself
 

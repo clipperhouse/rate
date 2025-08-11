@@ -103,7 +103,7 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	// be a parameter. The alternative is calling time.Now().
 	currentTime := startTime
 
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 	waiter := r.getWaiter(userKey)
 
 	// Ensure cleanup happens when this waiter exits

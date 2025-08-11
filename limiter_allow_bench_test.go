@@ -7,11 +7,11 @@ import (
 
 func BenchmarkLimiter_Allow(b *testing.B) {
 	b.Run("SingleBucket", func(b *testing.B) {
-		keyer := func(id int) string { return "allow-single-bucket" }
+		keyFunc := func(id int) string { return "allow-single-bucket" }
 
 		b.Run("SingleLimit", func(b *testing.B) {
 			limit := NewLimit(1000000, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 			now := time.Now()
 
 			b.ReportAllocs()
@@ -24,7 +24,7 @@ func BenchmarkLimiter_Allow(b *testing.B) {
 		b.Run("MultipleLimits", func(b *testing.B) {
 			limit1 := NewLimit(1000000, time.Second)
 			limit2 := NewLimit(500000, time.Second/2)
-			limiter := NewLimiter(keyer, limit1, limit2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 			now := time.Now()
 
 			b.ReportAllocs()
@@ -37,11 +37,11 @@ func BenchmarkLimiter_Allow(b *testing.B) {
 
 	b.Run("MultipleBuckets", func(b *testing.B) {
 		const buckets = 1000
-		keyer := func(id int) int { return id }
+		keyFunc := func(id int) int { return id }
 
 		b.Run("SingleLimit", func(b *testing.B) {
 			limit := NewLimit(1000000, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 			now := time.Now()
 
 			b.ResetTimer()
@@ -55,7 +55,7 @@ func BenchmarkLimiter_Allow(b *testing.B) {
 		b.Run("MultipleLimits", func(b *testing.B) {
 			limit1 := NewLimit(1000000, time.Second)
 			limit2 := NewLimit(500000, time.Second/2)
-			limiter := NewLimiter(keyer, limit1, limit2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 			now := time.Now()
 
 			b.ResetTimer()
@@ -70,11 +70,11 @@ func BenchmarkLimiter_Allow(b *testing.B) {
 
 func BenchmarkLimiter_AllowWithDetails(b *testing.B) {
 	b.Run("SingleBucket", func(b *testing.B) {
-		keyer := func(id int) string { return "allow-details-single-bucket" }
+		keyFunc := func(id int) string { return "allow-details-single-bucket" }
 
 		b.Run("SingleLimit", func(b *testing.B) {
 			limit := NewLimit(1000000, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 			now := time.Now()
 
 			b.ReportAllocs()
@@ -87,7 +87,7 @@ func BenchmarkLimiter_AllowWithDetails(b *testing.B) {
 		b.Run("MultipleLimits", func(b *testing.B) {
 			limit1 := NewLimit(1000000, time.Second)
 			limit2 := NewLimit(500000, time.Second/2)
-			limiter := NewLimiter(keyer, limit1, limit2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 			now := time.Now()
 
 			b.ReportAllocs()
@@ -100,11 +100,11 @@ func BenchmarkLimiter_AllowWithDetails(b *testing.B) {
 
 	b.Run("MultipleBuckets", func(b *testing.B) {
 		const buckets = 1000
-		keyer := func(id int) int { return id }
+		keyFunc := func(id int) int { return id }
 
 		b.Run("SingleLimit", func(b *testing.B) {
 			limit := NewLimit(1000000, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 			now := time.Now()
 
 			b.ResetTimer()
@@ -118,7 +118,7 @@ func BenchmarkLimiter_AllowWithDetails(b *testing.B) {
 		b.Run("MultipleLimits", func(b *testing.B) {
 			limit1 := NewLimit(1000000, time.Second)
 			limit2 := NewLimit(500000, time.Second/2)
-			limiter := NewLimiter(keyer, limit1, limit2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 			now := time.Now()
 
 			b.ResetTimer()
@@ -133,11 +133,11 @@ func BenchmarkLimiter_AllowWithDetails(b *testing.B) {
 
 func BenchmarkLimiter_AllowWithDebug(b *testing.B) {
 	b.Run("SingleBucket", func(b *testing.B) {
-		keyer := func(id int) string { return "allow-debug-single-bucket" }
+		keyFunc := func(id int) string { return "allow-debug-single-bucket" }
 
 		b.Run("SingleLimit", func(b *testing.B) {
 			limit := NewLimit(1000000, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 			now := time.Now()
 
 			b.ReportAllocs()
@@ -150,7 +150,7 @@ func BenchmarkLimiter_AllowWithDebug(b *testing.B) {
 		b.Run("MultipleLimits", func(b *testing.B) {
 			limit1 := NewLimit(1000000, time.Second)
 			limit2 := NewLimit(500000, time.Second/2)
-			limiter := NewLimiter(keyer, limit1, limit2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 			now := time.Now()
 
 			b.ReportAllocs()
@@ -163,11 +163,11 @@ func BenchmarkLimiter_AllowWithDebug(b *testing.B) {
 
 	b.Run("MultipleBuckets", func(b *testing.B) {
 		const buckets = 1000
-		keyer := func(id int) int { return id }
+		keyFunc := func(id int) int { return id }
 
 		b.Run("SingleLimit", func(b *testing.B) {
 			limit := NewLimit(1000000, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 			now := time.Now()
 
 			b.ResetTimer()
@@ -181,7 +181,7 @@ func BenchmarkLimiter_AllowWithDebug(b *testing.B) {
 		b.Run("MultipleLimits", func(b *testing.B) {
 			limit1 := NewLimit(1000000, time.Second)
 			limit2 := NewLimit(500000, time.Second/2)
-			limiter := NewLimiter(keyer, limit1, limit2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 			now := time.Now()
 
 			b.ResetTimer()

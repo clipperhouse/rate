@@ -13,12 +13,12 @@ import (
 func TestLimiter_Peek_NeverPersists(t *testing.T) {
 	t.Parallel()
 	const key = "single-test-bucket"
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit1 := NewLimit(rand.Int63n(9)+1, time.Second)
 	limit2 := NewLimit(rand.Int63n(99)+1, time.Second)
-	limiter := NewLimiter(keyer, limit1, limit2)
+	limiter := NewLimiter(keyFunc, limit1, limit2)
 
 	now := time.Now()
 
@@ -34,11 +34,11 @@ func TestLimiter_Peek_NeverPersists(t *testing.T) {
 func TestLimiter_Peek_SingleBucket(t *testing.T) {
 	t.Parallel()
 	const key = "single-test-bucket"
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(9, time.Second)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	now := time.Now()
 
@@ -63,11 +63,11 @@ func TestLimiter_Peek_SingleBucket(t *testing.T) {
 
 func TestLimiter_PeekN_SingleBucket(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(9, time.Second)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	now := time.Now()
 	require.False(t, limiter.peekN("test", now, 10))
@@ -88,12 +88,12 @@ func TestLimiter_PeekN_SingleBucket(t *testing.T) {
 
 func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
 	t.Parallel()
-	keyer := func(i int) string {
+	keyFunc := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
 	const buckets = 3
 	limit := NewLimit(9, time.Second)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 	now := time.Now()
 
 	// any number of peeks should be true
@@ -127,13 +127,13 @@ func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
 
 func TestLimiter_Peek_MultipleBuckets_MultipleLimits(t *testing.T) {
 	t.Parallel()
-	keyer := func(i int) string {
+	keyFunc := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
 	const buckets = 3
 	perSecond := NewLimit(2, time.Second)
 	perMinute := NewLimit(3, time.Minute)
-	limiter := NewLimiter(keyer, perSecond, perMinute)
+	limiter := NewLimiter(keyFunc, perSecond, perMinute)
 	now := time.Now()
 
 	// any number of peeks should be true
@@ -171,12 +171,12 @@ func TestLimiter_Peek_MultipleBuckets_MultipleLimits(t *testing.T) {
 
 func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 	t.Parallel()
-	keyer := func(i int) string {
+	keyFunc := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
 	const buckets = 3
 	limit := NewLimit(9, time.Second)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 	now := time.Now()
 
 	// Concurrent peeks: all should be true initially
@@ -241,12 +241,12 @@ func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 
 func TestLimiter_PeekWithDebug(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	perSecond := NewLimit(rand.Int63n(9)+1, time.Second)
 	perMinute := NewLimit(rand.Int63n(99)+1, time.Minute)
-	limiter := NewLimiter(keyer, perSecond, perMinute)
+	limiter := NewLimiter(keyFunc, perSecond, perMinute)
 
 	executionTime := time.Now()
 	input := "test-debug-peek"
@@ -285,12 +285,12 @@ func TestLimiter_PeekWithDebug(t *testing.T) {
 
 func TestLimiter_PeekWithDebug_AllowedAndDenied(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	// Create a small limit to easily test denial scenarios
 	limit := NewLimit(2, time.Second)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	now := time.Now()
 	input := "test-peek-debug"
@@ -342,12 +342,12 @@ func TestLimiter_PeekWithDebug_AllowedAndDenied(t *testing.T) {
 func TestLimiter_Peek_SingleBucket_Func(t *testing.T) {
 	t.Parallel()
 	const key = "single-test-bucket"
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(9, time.Second)
 	limitFunc := func(input string) Limit { return limit }
-	limiter := NewLimiterFunc(keyer, limitFunc)
+	limiter := NewLimiterFunc(keyFunc, limitFunc)
 
 	now := time.Now()
 
@@ -372,13 +372,13 @@ func TestLimiter_Peek_SingleBucket_Func(t *testing.T) {
 
 func TestLimiter_Peek_MultipleBuckets_Func(t *testing.T) {
 	t.Parallel()
-	keyer := func(i int) string {
+	keyFunc := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
 	const buckets = 3
 	limit := NewLimit(9, time.Second)
 	limitFunc := func(input int) Limit { return limit }
-	limiter := NewLimiterFunc(keyer, limitFunc)
+	limiter := NewLimiterFunc(keyFunc, limitFunc)
 	now := time.Now()
 
 	// any number of peeks should be true
@@ -412,13 +412,13 @@ func TestLimiter_Peek_MultipleBuckets_Func(t *testing.T) {
 
 func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 	t.Parallel()
-	keyer := func(i int) string {
+	keyFunc := func(i int) string {
 		return fmt.Sprintf("test-bucket-%d", i)
 	}
 	const buckets = 3
 	limit := NewLimit(9, time.Second)
 	limitFunc := func(input int) Limit { return limit }
-	limiter := NewLimiterFunc(keyer, limitFunc)
+	limiter := NewLimiterFunc(keyFunc, limitFunc)
 	now := time.Now()
 
 	// Concurrent peeks: all should be true initially
@@ -483,12 +483,12 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 
 func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input + "-key"
 	}
 	perSecond := NewLimit(9, time.Second)
 	perHour := NewLimit(99, time.Hour)
-	limiter := NewLimiter(keyer, perSecond, perHour)
+	limiter := NewLimiter(keyFunc, perSecond, perHour)
 
 	now := time.Now()
 
@@ -545,12 +545,12 @@ func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 
 func TestLimiter_PeekWithDebug_Func(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(9, time.Second)
 	limitFunc := func(input string) Limit { return limit }
-	limiter := NewLimiterFunc(keyer, limitFunc)
+	limiter := NewLimiterFunc(keyFunc, limitFunc)
 
 	now := time.Now()
 	input := "test-details"
@@ -575,12 +575,12 @@ func TestLimiter_PeekWithDebug_Func(t *testing.T) {
 // focusing on RetryAfter behavior similar to allowNWithDetails tests
 func TestLimiter_PeekWithDetails(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string { return input }
+	keyFunc := func(input string) string { return input }
 
 	// Test single limit
 	t.Run("SingleLimit", func(t *testing.T) {
 		limit := NewLimit(5, time.Second)
-		limiter := NewLimiter(keyer, limit)
+		limiter := NewLimiter(keyFunc, limit)
 
 		// Test when peek shows available tokens
 		allowed, details := limiter.PeekWithDetails("test-key1")
@@ -597,7 +597,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 		// Create limits with different refill rates to test RetryAfter logic
 		fast := NewLimit(10, time.Second) // 10 per second = 100ms per token
 		slow := NewLimit(6, time.Minute)  // 6 per minute = 10s per token
-		limiter := NewLimiter(keyer, fast, slow)
+		limiter := NewLimiter(keyFunc, fast, slow)
 
 		baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -650,7 +650,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 		// Test when peek shows available - RetryAfter should be 0
 		t.Run("AvailableTokens", func(t *testing.T) {
 			// Fresh limiter, peek should show available
-			freshLimiter := NewLimiter(keyer, fast, slow)
+			freshLimiter := NewLimiter(keyFunc, fast, slow)
 			allowed, details := freshLimiter.peekNWithDetails("test-peek-available", baseTime, 1)
 			require.True(t, allowed, "peek should show available on fresh limiter")
 			require.Equal(t, time.Duration(0), details.RetryAfter(),
@@ -682,7 +682,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 	t.Run("EdgeCases", func(t *testing.T) {
 		// Test no limits defined
 		t.Run("NoLimits", func(t *testing.T) {
-			limiter := NewLimiter(keyer) // No limits
+			limiter := NewLimiter(keyFunc) // No limits
 			allowed, details := limiter.PeekWithDetails("test-no-limits")
 			require.True(t, allowed, "should show available when no limits defined")
 			require.Equal(t, int64(1), details.TokensRequested())
@@ -694,7 +694,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 		// Test requesting zero tokens
 		t.Run("ZeroTokensRequest", func(t *testing.T) {
 			limit := NewLimit(5, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 			allowed, details := limiter.PeekNWithDetails("test-zero", 0)
 			require.True(t, allowed, "peeking 0 tokens should always show available")
 			require.Equal(t, int64(0), details.TokensRequested())
@@ -706,7 +706,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 		// Test peek doesn't mutate bucket state
 		t.Run("PeekDoesNotMutate", func(t *testing.T) {
 			limit := NewLimit(5, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 
 			// Multiple peeks should show same state
 			for i := 0; i < 5; i++ {

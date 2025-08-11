@@ -105,7 +105,7 @@ limitFunc := func(r *http.Request) Limit {
     }
     return writeLimit
 }
-limiter := rate.NewLimiterFunc(keyer, limitFunc)
+limiter := rate.NewLimiterFunc(keyFunc, limitFunc)
 ```
 
 
@@ -114,7 +114,7 @@ limiter := rate.NewLimiterFunc(keyer, limitFunc)
 
 // think of 100 as "a dollar"
 limit := rate.NewLimit(100, time.Second)
-limiter := rate.NewLimiter(keyer, limit)
+limiter := rate.NewLimiter(keyFunc, limit)
 
 // somewhere in the app:
 

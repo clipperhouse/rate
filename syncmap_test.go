@@ -12,11 +12,11 @@ import (
 func TestSyncMap_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(100, time.Second)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	const concurrency = 100
 	const ops = 1000

@@ -39,7 +39,7 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	// Optimization for single-limit case, likely common
 	if len(r.limits) == 1 {
 		limit := r.limits[0]
-		userKey := r.keyer(input)
+		userKey := r.keyFunc(input)
 		b := r.buckets.loadOrStore(userKey, executionTime, limit)
 
 		b.mu.Lock()
@@ -73,7 +73,7 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 		buckets = make([]*bucket, 0, len(limits))
 	}
 
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	// We need to collect all buckets and lock them together
 	for _, limit := range limits {
@@ -140,7 +140,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	limits := r.getLimits(input)
 	if len(limits) == 0 {
@@ -312,7 +312,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	limits := r.getLimits(input)
 	if len(limits) == 0 {

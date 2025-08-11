@@ -12,7 +12,7 @@ import (
 func TestLimiters_AllowN_SingleLimiter(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return fmt.Sprintf("bucket-%s", input)
 	}
 
@@ -23,7 +23,7 @@ func TestLimiters_AllowN_SingleLimiter(t *testing.T) {
 			t.Parallel()
 
 			limit := NewLimit(5, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 
 			limiters := NewLimiters(limiter)
 
@@ -50,7 +50,7 @@ func TestLimiters_AllowN_SingleLimiter(t *testing.T) {
 			t.Parallel()
 
 			limit := NewLimit(10, time.Second)
-			limiter := NewLimiter(keyer, limit)
+			limiter := NewLimiter(keyFunc, limit)
 
 			limiters := NewLimiters(limiter)
 
@@ -90,7 +90,7 @@ func TestLimiters_AllowN_SingleLimiter(t *testing.T) {
 
 			limit1 := NewLimit(10, time.Second)
 			limit2 := NewLimit(50, time.Minute)
-			limiter := NewLimiter(keyer, limit1, limit2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 
 			limiters := NewLimiters(limiter)
 
@@ -138,7 +138,7 @@ func TestLimiters_AllowN_SingleLimiter(t *testing.T) {
 
 			limit1 := NewLimit(8, time.Second)  // 8 requests per second (more restrictive)
 			limit2 := NewLimit(30, time.Minute) // 30 requests per minute
-			limiter := NewLimiter(keyer, limit1, limit2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 
 			limiters := NewLimiters(limiter)
 
@@ -200,12 +200,12 @@ func TestLimiters_AllowN_SingleLimiter(t *testing.T) {
 func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input string) string {
-		return fmt.Sprintf("bucket-%s", input)
-	}
-
 	t.Run("SameKeyer", func(t *testing.T) {
 		t.Parallel()
+
+		keyFunc := func(input string) string {
+			return fmt.Sprintf("bucket-%s", input)
+		}
 
 		t.Run("SingleLimits", func(t *testing.T) {
 			t.Parallel()
@@ -215,8 +215,8 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 
 				limit1 := NewLimit(3, time.Second)
 				limit2 := NewLimit(5, time.Second)
-				limiter1 := NewLimiter(keyer, limit1)
-				limiter2 := NewLimiter(keyer, limit2)
+				limiter1 := NewLimiter(keyFunc, limit1)
+				limiter2 := NewLimiter(keyFunc, limit2)
 
 				// Create Limiters with both limiters
 				limiters := NewLimiters(limiter1, limiter2)
@@ -244,8 +244,8 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 
 				limit1 := NewLimit(3, time.Second) // 3 requests per second (most restrictive)
 				limit2 := NewLimit(5, time.Second) // 5 requests per second
-				limiter1 := NewLimiter(keyer, limit1)
-				limiter2 := NewLimiter(keyer, limit2)
+				limiter1 := NewLimiter(keyFunc, limit1)
+				limiter2 := NewLimiter(keyFunc, limit2)
 
 				// Create Limiters with both limiters
 				limiters := NewLimiters(limiter1, limiter2)
@@ -287,11 +287,11 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 
 				limit1a := NewLimit(5, time.Second)
 				limit1b := NewLimit(100, time.Minute)
-				limiter1 := NewLimiter(keyer, limit1a, limit1b)
+				limiter1 := NewLimiter(keyFunc, limit1a, limit1b)
 
 				limit2a := NewLimit(10, time.Second)
 				limit2b := NewLimit(50, time.Minute)
-				limiter2 := NewLimiter(keyer, limit2a, limit2b)
+				limiter2 := NewLimiter(keyFunc, limit2a, limit2b)
 
 				limiters := NewLimiters(limiter1, limiter2)
 
@@ -335,11 +335,11 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 
 				limit1a := NewLimit(4, time.Second)  // 4 requests per second (most restrictive)
 				limit1b := NewLimit(60, time.Minute) // 60 requests per minute
-				limiter1 := NewLimiter(keyer, limit1a, limit1b)
+				limiter1 := NewLimiter(keyFunc, limit1a, limit1b)
 
 				limit2a := NewLimit(8, time.Second)  // 8 requests per second
 				limit2b := NewLimit(40, time.Minute) // 40 requests per minute (more restrictive per-minute)
-				limiter2 := NewLimiter(keyer, limit2a, limit2b)
+				limiter2 := NewLimiter(keyFunc, limit2a, limit2b)
 
 				limiters := NewLimiters(limiter1, limiter2)
 
@@ -400,10 +400,10 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 	t.Run("DifferentKeyers", func(t *testing.T) {
 		t.Parallel()
 
-		keyer1 := func(input string) string {
+		keyFunc1 := func(input string) string {
 			return fmt.Sprintf("limiter1-%s", input)
 		}
-		keyer2 := func(input string) string {
+		keyFunc2 := func(input string) string {
 			return fmt.Sprintf("limiter2-%s", input)
 		}
 
@@ -415,8 +415,8 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 
 				limit1 := NewLimit(3, time.Second)
 				limit2 := NewLimit(5, time.Second)
-				limiter1 := NewLimiter(keyer1, limit1)
-				limiter2 := NewLimiter(keyer2, limit2)
+				limiter1 := NewLimiter(keyFunc1, limit1)
+				limiter2 := NewLimiter(keyFunc2, limit2)
 
 				// Create Limiters with both limiters
 				limiters := NewLimiters(limiter1, limiter2)
@@ -458,8 +458,8 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 
 				limit1 := NewLimit(3, time.Second) // 3 requests per second (most restrictive)
 				limit2 := NewLimit(5, time.Second) // 5 requests per second
-				limiter1 := NewLimiter(keyer1, limit1)
-				limiter2 := NewLimiter(keyer2, limit2)
+				limiter1 := NewLimiter(keyFunc1, limit1)
+				limiter2 := NewLimiter(keyFunc2, limit2)
 
 				// Create Limiters with both limiters
 				limiters := NewLimiters(limiter1, limiter2)
@@ -523,11 +523,11 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 
 				limit1a := NewLimit(4, time.Second)
 				limit1b := NewLimit(80, time.Minute)
-				limiter1 := NewLimiter(keyer1, limit1a, limit1b)
+				limiter1 := NewLimiter(keyFunc1, limit1a, limit1b)
 
 				limit2a := NewLimit(8, time.Second)
 				limit2b := NewLimit(60, time.Minute)
-				limiter2 := NewLimiter(keyer2, limit2a, limit2b)
+				limiter2 := NewLimiter(keyFunc2, limit2a, limit2b)
 
 				limiters := NewLimiters(limiter1, limiter2)
 
@@ -585,11 +585,11 @@ func TestLimiters_AllowN_MultipleLimiters(t *testing.T) {
 
 				limit1a := NewLimit(4, time.Second)  // 4 requests per second (most restrictive)
 				limit1b := NewLimit(60, time.Minute) // 60 requests per minute
-				limiter1 := NewLimiter(keyer1, limit1a, limit1b)
+				limiter1 := NewLimiter(keyFunc1, limit1a, limit1b)
 
 				limit2a := NewLimit(8, time.Second)  // 8 requests per second
 				limit2b := NewLimit(40, time.Minute) // 40 requests per minute (more restrictive per-minute)
-				limiter2 := NewLimiter(keyer2, limit2a, limit2b)
+				limiter2 := NewLimiter(keyFunc2, limit2a, limit2b)
 
 				limiters := NewLimiters(limiter1, limiter2)
 
@@ -689,8 +689,8 @@ func TestLimiters_AllowN_NoLimiters(t *testing.T) {
 func TestLimiters_AllowN_MultipleTokens(t *testing.T) {
 	t.Parallel()
 
-	// Create a simple keyer function
-	keyer := func(input string) string {
+	// Create a simple keyFunc function
+	keyFunc := func(input string) string {
 		return fmt.Sprintf("bucket-%s", input)
 	}
 
@@ -699,7 +699,7 @@ func TestLimiters_AllowN_MultipleTokens(t *testing.T) {
 
 		// Create a limiter with 10 requests per second
 		limit := NewLimit(10, time.Second)
-		limiter := NewLimiter(keyer, limit)
+		limiter := NewLimiter(keyFunc, limit)
 
 		// Create Limiters with the single limiter
 		limiters := NewLimiters(limiter)
@@ -733,8 +733,8 @@ func TestLimiters_AllowN_MultipleTokens(t *testing.T) {
 		// Create two limiters with different limits
 		limit1 := NewLimit(8, time.Second)  // 8 requests per second (more restrictive)
 		limit2 := NewLimit(12, time.Second) // 12 requests per second
-		limiter1 := NewLimiter(keyer, limit1)
-		limiter2 := NewLimiter(keyer, limit2)
+		limiter1 := NewLimiter(keyFunc, limit1)
+		limiter2 := NewLimiter(keyFunc, limit2)
 
 		// Create Limiters with both limiters
 		limiters := NewLimiters(limiter1, limiter2)

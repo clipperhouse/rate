@@ -1,6 +1,8 @@
 package rate
 
-import "time"
+import (
+	"time"
+)
 
 // Allow returns true if one or more tokens are available for the given key.
 // If true, it will consume a token from the key's bucket. If false,
@@ -33,6 +35,23 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
+
+	// Optimization for single-limit case, likely common
+	if len(r.limits) == 1 {
+		limit := r.limits[0]
+		userKey := r.keyer(input)
+		b := r.buckets.loadOrStore(userKey, executionTime, limit)
+
+		b.mu.Lock()
+		defer b.mu.Unlock()
+
+		if !b.hasTokens(executionTime, limit, n) {
+			return false
+		}
+
+		b.consumeTokens(executionTime, limit, n)
+		return true
+	}
 
 	limits := r.getLimits(input)
 	if len(limits) == 0 {

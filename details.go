@@ -7,8 +7,6 @@ import "time"
 type Details[TInput any, TKey comparable] struct {
 	allowed         bool
 	executionTime   time.Time
-	input           TInput
-	key             TKey
 	tokensRequested int64
 	tokensConsumed  int64
 	tokensRemaining int64         // minimum across all buckets (fewest before denial)
@@ -23,16 +21,6 @@ func (d Details[TInput, TKey]) Allowed() bool {
 // ExecutionTime returns the time the request was executed.
 func (d Details[TInput, TKey]) ExecutionTime() time.Time {
 	return d.executionTime
-}
-
-// Input returns the input that was used to create the bucket.
-func (d Details[TInput, TKey]) Input() TInput {
-	return d.input
-}
-
-// Key returns the key of the bucket that was used for the request.
-func (d Details[TInput, TKey]) Key() TKey {
-	return d.key
 }
 
 // TokensRequested returns the number of tokens that were requested for the request.

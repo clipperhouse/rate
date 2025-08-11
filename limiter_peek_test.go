@@ -585,11 +585,10 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 		// Test when peek shows available tokens
 		allowed, details := limiter.PeekWithDetails("test-key1")
 		require.True(t, allowed, "peek should show available tokens")
+		require.Equal(t, true, details.Allowed(), "should be allowed")
 		require.Equal(t, int64(1), details.TokensRequested(), "should request 1 token")
 		require.Equal(t, int64(0), details.TokensConsumed(), "peek should never consume tokens")
 		require.Equal(t, int64(5), details.TokensRemaining(), "should have all 5 tokens remaining")
-		require.Equal(t, "test-key1", details.Key(), "bucket key should match")
-		require.Equal(t, true, details.Allowed(), "should be allowed")
 		require.Equal(t, time.Duration(0), details.RetryAfter(), "retry after should be 0 when available")
 	})
 

@@ -90,13 +90,11 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 		// No limits defined, so we allow everything
 		return true, Details[TInput, TKey]{
 			allowed:         true,
+			executionTime:   executionTime,
 			tokensRequested: n,
 			tokensConsumed:  0,
-			executionTime:   executionTime,
 			tokensRemaining: 0,
 			retryAfter:      0,
-			input:           input,
-			key:             userKey,
 		}
 	}
 
@@ -147,13 +145,11 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 
 	return allowAll, Details[TInput, TKey]{
 		allowed:         allowAll,
+		executionTime:   executionTime,
 		tokensRequested: n,
 		tokensConsumed:  0,
-		executionTime:   executionTime,
 		tokensRemaining: remainingTokens,
 		retryAfter:      retryAfter,
-		input:           input,
-		key:             userKey,
 	}
 }
 

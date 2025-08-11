@@ -1013,11 +1013,10 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 		// Test when request is allowed
 		allowed, details := limiter.AllowWithDetails("test-key1")
 		require.True(t, allowed, "request should be allowed")
+		require.Equal(t, true, details.Allowed(), "should be allowed")
 		require.Equal(t, int64(1), details.TokensRequested(), "should request 1 token")
 		require.Equal(t, int64(1), details.TokensConsumed(), "should consume 1 token when allowed")
 		require.Equal(t, int64(4), details.TokensRemaining(), "should have 4 tokens remaining")
-		require.Equal(t, "test-key1", details.Key(), "bucket key should match")
-		require.Equal(t, true, details.Allowed(), "should be allowed")
 		require.GreaterOrEqual(t, details.RetryAfter(), time.Duration(0), "retry after should be non-negative")
 	})
 

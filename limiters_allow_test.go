@@ -779,3 +779,467 @@ func TestLimiters_AllowN_MultipleTokens(t *testing.T) {
 		require.False(t, allowed, "should deny when limiter1 exhausted again")
 	})
 }
+
+func TestLimiters_AllowNWithDebug(t *testing.T) {
+	t.Parallel()
+
+	keyFunc := func(input string) string {
+		return fmt.Sprintf("bucket-%s", input)
+	}
+
+	t.Run("NoLimiters", func(t *testing.T) {
+		t.Parallel()
+
+		limiters := NewLimiters[string, string]()
+		now := time.Now()
+
+		allowed, debugs := limiters.allowNWithDebug("test", now, 1)
+		require.True(t, allowed, "should allow when no limiters present")
+		require.Empty(t, debugs, "debug slice should be empty when no limiters present")
+	})
+
+	t.Run("SingleLimiter", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("SingleLimit", func(t *testing.T) {
+			t.Parallel()
+
+			limit := NewLimit(5, time.Second)
+			limiter := NewLimiter(keyFunc, limit)
+			limiters := NewLimiters(limiter)
+			now := time.Now()
+
+			// First allow - should succeed
+			allowed, debugs := limiters.allowNWithDebug("test", now, 1)
+			require.True(t, allowed, "first request should be allowed")
+			require.Len(t, debugs, 1, "should have debug info for single limit")
+
+			d := debugs[0]
+			require.True(t, d.Allowed(), "debug should show allowed")
+			require.Equal(t, "test", d.Input(), "input should match")
+			require.Equal(t, "bucket-test", d.Key(), "key should match keyFunc output")
+			require.Equal(t, limit, d.Limit(), "limit should match")
+			require.Equal(t, now, d.ExecutionTime(), "execution time should match")
+			require.Equal(t, int64(1), d.TokensRequested(), "tokens requested should be 1")
+			require.Equal(t, int64(1), d.TokensConsumed(), "tokens consumed should be 1 when allowed")
+			require.Equal(t, limit.Count()-1, d.TokensRemaining(), "tokens remaining should decrease by 1")
+			require.Equal(t, time.Duration(0), d.RetryAfter(), "retry after should be 0 when allowed")
+
+			// Consume remaining tokens
+			allowed, debugs = limiters.allowNWithDebug("test", now, 4)
+			require.True(t, allowed, "should allow consuming remaining 4 tokens")
+			require.Len(t, debugs, 1, "should have debug info for single limit")
+
+			d = debugs[0]
+			require.True(t, d.Allowed(), "debug should show allowed")
+			require.Equal(t, int64(4), d.TokensRequested(), "tokens requested should be 4")
+			require.Equal(t, int64(4), d.TokensConsumed(), "tokens consumed should be 4 when allowed")
+			require.Equal(t, int64(0), d.TokensRemaining(), "tokens remaining should be 0 after exhaustion")
+
+			// Try to consume when exhausted - should fail
+			allowed, debugs = limiters.allowNWithDebug("test", now, 1)
+			require.False(t, allowed, "should deny when bucket exhausted")
+			require.Len(t, debugs, 1, "should have debug info for single limit")
+
+			d = debugs[0]
+			require.False(t, d.Allowed(), "debug should show denied")
+			require.Equal(t, int64(1), d.TokensRequested(), "tokens requested should be 1")
+			require.Equal(t, int64(0), d.TokensConsumed(), "tokens consumed should be 0 when denied")
+			require.Equal(t, int64(0), d.TokensRemaining(), "tokens remaining should be 0")
+			expectedRetryAfter := limit.DurationPerToken()
+			require.Equal(t, expectedRetryAfter, d.RetryAfter(), "retry after should be time for 1 token to refill")
+		})
+
+		t.Run("MultipleLimits", func(t *testing.T) {
+			t.Parallel()
+
+			perSecond := NewLimit(3, time.Second)
+			perMinute := NewLimit(10, time.Minute)
+			limiter := NewLimiter(keyFunc, perSecond, perMinute)
+			limiters := NewLimiters(limiter)
+			now := time.Now()
+
+			// First allow - should succeed
+			allowed, debugs := limiters.allowNWithDebug("test", now, 1)
+			require.True(t, allowed, "first request should be allowed")
+			require.Len(t, debugs, 2, "should have debug info for both limits")
+
+			// Check per-second limit debug
+			d0 := debugs[0]
+			require.True(t, d0.Allowed(), "per-second limit should allow")
+			require.Equal(t, "test", d0.Input(), "input should match")
+			require.Equal(t, "bucket-test", d0.Key(), "key should match")
+			require.Equal(t, perSecond, d0.Limit(), "limit should be per-second")
+			require.Equal(t, int64(1), d0.TokensConsumed(), "per-second tokens consumed should be 1")
+			require.Equal(t, perSecond.Count()-1, d0.TokensRemaining(), "per-second remaining should decrease")
+
+			// Check per-minute limit debug
+			d1 := debugs[1]
+			require.True(t, d1.Allowed(), "per-minute limit should allow")
+			require.Equal(t, "test", d1.Input(), "input should match")
+			require.Equal(t, "bucket-test", d1.Key(), "key should match")
+			require.Equal(t, perMinute, d1.Limit(), "limit should be per-minute")
+			require.Equal(t, int64(1), d1.TokensConsumed(), "per-minute tokens consumed should be 1")
+			require.Equal(t, perMinute.Count()-1, d1.TokensRemaining(), "per-minute remaining should decrease")
+
+			// Exhaust per-second limit
+			allowed, debugs = limiters.allowNWithDebug("test", now, 2)
+			require.True(t, allowed, "should allow consuming remaining 2 per-second tokens")
+			require.Len(t, debugs, 2, "should have debug info for both limits")
+
+			// Try one more - should fail because per-second is exhausted
+			allowed, debugs = limiters.allowNWithDebug("test", now, 1)
+			require.False(t, allowed, "should deny when per-second limit exhausted")
+			require.Len(t, debugs, 2, "should have debug info for both limits")
+
+			// Check per-second limit debug (should be denied)
+			d0 = debugs[0]
+			require.False(t, d0.Allowed(), "per-second limit should deny")
+			require.Equal(t, int64(0), d0.TokensConsumed(), "no tokens consumed when denied")
+			require.Equal(t, int64(0), d0.TokensRemaining(), "per-second should be exhausted")
+			expectedRetryAfter := perSecond.DurationPerToken()
+			require.InDelta(t, float64(expectedRetryAfter), float64(d0.RetryAfter()), float64(time.Nanosecond), "per-second retry after should be token duration")
+
+			// Check per-minute limit debug (would allow but overall denied)
+			d1 = debugs[1]
+			require.True(t, d1.Allowed(), "per-minute limit would allow individually")
+			require.Equal(t, int64(0), d1.TokensConsumed(), "no tokens consumed when overall denied")
+			require.Equal(t, perMinute.Count()-3, d1.TokensRemaining(), "per-minute should have tokens remaining")
+			require.Equal(t, time.Duration(0), d1.RetryAfter(), "per-minute retry after should be 0")
+		})
+	})
+
+	t.Run("MultipleLimiters", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("SameKeyer", func(t *testing.T) {
+			t.Parallel()
+
+			keyFunc := func(input string) string {
+				return fmt.Sprintf("bucket-%s", input)
+			}
+
+			t.Run("SingleLimits", func(t *testing.T) {
+				t.Parallel()
+
+				limit1 := NewLimit(3, time.Second)
+				limit2 := NewLimit(5, time.Second)
+				limiter1 := NewLimiter(keyFunc, limit1)
+				limiter2 := NewLimiter(keyFunc, limit2)
+				limiters := NewLimiters(limiter1, limiter2)
+				now := time.Now()
+
+				// Should allow first 3 requests (limited by limiter1)
+				allowed, debugs := limiters.allowNWithDebug("test", now, 3)
+				require.True(t, allowed, "should allow 3 tokens")
+				require.Len(t, debugs, 2, "should have debug info for both limiters")
+
+				// Check limiter1 debug (more restrictive)
+				d0 := debugs[0]
+				require.True(t, d0.Allowed(), "limiter1 should allow 3 tokens")
+				require.Equal(t, limit1, d0.Limit(), "should be limit1")
+				require.Equal(t, int64(3), d0.TokensConsumed(), "should consume 3 tokens")
+				require.Equal(t, int64(0), d0.TokensRemaining(), "limiter1 should be exhausted")
+
+				// Check limiter2 debug
+				d1 := debugs[1]
+				require.True(t, d1.Allowed(), "limiter2 should allow 3 tokens")
+				require.Equal(t, limit2, d1.Limit(), "should be limit2")
+				require.Equal(t, int64(3), d1.TokensConsumed(), "should consume 3 tokens")
+				require.Equal(t, limit2.Count()-3, d1.TokensRemaining(), "limiter2 should have 2 tokens remaining")
+
+				// Try one more - should fail because limiter1 is exhausted
+				allowed, debugs = limiters.allowNWithDebug("test", now, 1)
+				require.False(t, allowed, "should deny when limiter1 exhausted")
+				require.Len(t, debugs, 2, "should have debug info for both limiters")
+
+				// Check limiter1 debug (exhausted)
+				d0 = debugs[0]
+				require.False(t, d0.Allowed(), "limiter1 should deny")
+				require.Equal(t, int64(0), d0.TokensConsumed(), "no tokens consumed when denied")
+				require.Equal(t, int64(0), d0.TokensRemaining(), "limiter1 should remain exhausted")
+
+				// Check limiter2 debug (would allow but overall denied)
+				d1 = debugs[1]
+				require.True(t, d1.Allowed(), "limiter2 would allow individually")
+				require.Equal(t, int64(0), d1.TokensConsumed(), "no tokens consumed when overall denied")
+				require.Equal(t, limit2.Count()-3, d1.TokensRemaining(), "limiter2 should still have tokens")
+			})
+
+			t.Run("MultipleLimits", func(t *testing.T) {
+				t.Parallel()
+
+				// Limiter1: restrictive per-second, generous per-minute
+				limit1a := NewLimit(2, time.Second)
+				limit1b := NewLimit(20, time.Minute)
+				limiter1 := NewLimiter(keyFunc, limit1a, limit1b)
+
+				// Limiter2: generous per-second, restrictive per-minute
+				limit2a := NewLimit(10, time.Second)
+				limit2b := NewLimit(5, time.Minute)
+				limiter2 := NewLimiter(keyFunc, limit2a, limit2b)
+
+				limiters := NewLimiters(limiter1, limiter2)
+				now := time.Now()
+
+				// Should allow first 2 requests (limited by limiter1's per-second)
+				allowed, debugs := limiters.allowNWithDebug("test", now, 2)
+				require.True(t, allowed, "should allow 2 tokens")
+				require.Len(t, debugs, 4, "should have debug info for all 4 limits (2 limiters × 2 limits each)")
+
+				// Check all limits allowed the request
+				for i, d := range debugs {
+					require.True(t, d.Allowed(), "limit %d should allow", i)
+					require.Equal(t, int64(2), d.TokensConsumed(), "limit %d should consume 2 tokens", i)
+				}
+
+				// Try 2 more - should fail because limiter1's per-second is exhausted
+				allowed, debugs = limiters.allowNWithDebug("test", now, 2)
+				require.False(t, allowed, "should deny when limiter1 per-second exhausted")
+				require.Len(t, debugs, 4, "should have debug info for all 4 limits")
+
+				// limiter1 per-second should deny
+				require.False(t, debugs[0].Allowed(), "limiter1 per-second should deny")
+				require.Equal(t, int64(0), debugs[0].TokensConsumed(), "no tokens consumed")
+
+				// limiter1 per-minute should allow (would have tokens)
+				require.True(t, debugs[1].Allowed(), "limiter1 per-minute should allow individually")
+				require.Equal(t, int64(0), debugs[1].TokensConsumed(), "no tokens consumed when overall denied")
+
+				// limiter2 per-second should allow
+				require.True(t, debugs[2].Allowed(), "limiter2 per-second should allow individually")
+				require.Equal(t, int64(0), debugs[2].TokensConsumed(), "no tokens consumed when overall denied")
+
+				// limiter2 per-minute should allow
+				require.True(t, debugs[3].Allowed(), "limiter2 per-minute should allow individually")
+				require.Equal(t, int64(0), debugs[3].TokensConsumed(), "no tokens consumed when overall denied")
+			})
+		})
+
+		t.Run("DifferentKeyers", func(t *testing.T) {
+			t.Parallel()
+
+			keyFunc1 := func(input string) string {
+				return fmt.Sprintf("bucket1-%s", input)
+			}
+			keyFunc2 := func(input string) string {
+				return fmt.Sprintf("bucket2-%s", input)
+			}
+
+			limit1 := NewLimit(3, time.Second)
+			limit2 := NewLimit(5, time.Second)
+			limiter1 := NewLimiter(keyFunc1, limit1)
+			limiter2 := NewLimiter(keyFunc2, limit2)
+			limiters := NewLimiters(limiter1, limiter2)
+			now := time.Now()
+
+			// Should allow first 3 requests (limited by limiter1)
+			allowed, debugs := limiters.allowNWithDebug("test", now, 3)
+			require.True(t, allowed, "should allow 3 tokens with different keyers")
+			require.Len(t, debugs, 2, "should have debug info for both limiters")
+
+			// Check limiter1 debug (different key)
+			d0 := debugs[0]
+			require.True(t, d0.Allowed(), "limiter1 should allow")
+			require.Equal(t, "test", d0.Input(), "input should match")
+			require.Equal(t, "bucket1-test", d0.Key(), "key should use keyFunc1")
+			require.Equal(t, limit1, d0.Limit(), "should be limit1")
+
+			// Check limiter2 debug (different key)
+			d1 := debugs[1]
+			require.True(t, d1.Allowed(), "limiter2 should allow")
+			require.Equal(t, "test", d1.Input(), "input should match")
+			require.Equal(t, "bucket2-test", d1.Key(), "key should use keyFunc2")
+			require.Equal(t, limit2, d1.Limit(), "should be limit2")
+		})
+	})
+
+	t.Run("Concurrent", func(t *testing.T) {
+		t.Parallel()
+
+		limit1 := NewLimit(5, time.Second)
+		limit2 := NewLimit(8, time.Second)
+		limiter1 := NewLimiter(keyFunc, limit1)
+		limiter2 := NewLimiter(keyFunc, limit2)
+		limiters := NewLimiters(limiter1, limiter2)
+		now := time.Now()
+
+		const concurrency = 10
+
+		// Run concurrent requests, expecting only 5 to succeed (limited by limiter1)
+		results := make([]bool, concurrency)
+		debugResults := make([][]Debug[string, string], concurrency)
+
+		var wg sync.WaitGroup
+		for i := range concurrency {
+			wg.Add(1)
+			go func(index int) {
+				defer wg.Done()
+				allowed, debugs := limiters.allowNWithDebug("test", now, 1)
+				results[index] = allowed
+				debugResults[index] = debugs
+			}(i)
+		}
+		wg.Wait()
+
+		// Count successes
+		successes := 0
+		for _, result := range results {
+			if result {
+				successes++
+			}
+		}
+
+		// Should allow exactly 5 requests (limited by the more restrictive limiter1)
+		require.Equal(t, 5, successes, "should allow exactly 5 concurrent requests")
+
+		// Verify debug structure for all results
+		for i, debugs := range debugResults {
+			require.Len(t, debugs, 2, "result %d should have debug info for both limiters", i)
+			if results[i] {
+				// Successful requests should have tokens consumed
+				require.True(t, debugs[0].Allowed(), "successful request %d limiter1 should show allowed", i)
+				require.True(t, debugs[1].Allowed(), "successful request %d limiter2 should show allowed", i)
+				require.Equal(t, int64(1), debugs[0].TokensConsumed(), "successful request %d should consume from limiter1", i)
+				require.Equal(t, int64(1), debugs[1].TokensConsumed(), "successful request %d should consume from limiter2", i)
+			} else {
+				// Failed requests should have no tokens consumed
+				require.Equal(t, int64(0), debugs[0].TokensConsumed(), "failed request %d should not consume from limiter1", i)
+				require.Equal(t, int64(0), debugs[1].TokensConsumed(), "failed request %d should not consume from limiter2", i)
+			}
+		}
+	})
+}
+
+func TestLimiters_AllowNWithDetails(t *testing.T) {
+	t.Parallel()
+
+	keyFunc := func(input string) string {
+		return fmt.Sprintf("bucket-%s", input)
+	}
+
+	t.Run("NoLimiters", func(t *testing.T) {
+		t.Parallel()
+
+		limiters := NewLimiters[string, string]()
+		now := time.Now()
+
+		allowed, d := limiters.allowNWithDetails("test", now, 1)
+		require.True(t, allowed, "should allow when no limiters present")
+		require.True(t, d.Allowed(), "details.Allowed should be true when no limiters present")
+		require.Equal(t, int64(1), d.TokensRequested(), "tokens requested should match input")
+		require.Equal(t, int64(0), d.TokensConsumed(), "no tokens consumed when unconstrained")
+		require.Equal(t, int64(0), d.TokensRemaining(), "remaining tokens reported as 0 when unconstrained")
+		require.Equal(t, time.Duration(0), d.RetryAfter(), "retryAfter should be 0 when allowed and unconstrained")
+	})
+
+	t.Run("SingleLimiter", func(t *testing.T) {
+		t.Parallel()
+
+		limit := NewLimit(5, time.Second)
+		limiter := NewLimiter(keyFunc, limit)
+		limiters := NewLimiters(limiter)
+		now := time.Now()
+
+		allowed, d := limiters.allowNWithDetails("test", now, 1)
+		require.True(t, allowed)
+		require.True(t, d.Allowed())
+		require.Equal(t, int64(1), d.TokensRequested())
+		require.Equal(t, int64(1), d.TokensConsumed())
+		require.Equal(t, limit.Count()-1, d.TokensRemaining(), "remaining should decrement by 1")
+		require.Equal(t, time.Duration(0), d.RetryAfter())
+
+		t.Run("Identical", func(t *testing.T) {
+			t.Parallel()
+
+			now := time.Now()
+
+			limiter := NewLimiter(keyFunc, limit)
+			limiters := NewLimiters(limiter)
+
+			identical := NewLimiter(keyFunc, limit)
+
+			// Test that Limiters with single Limiter behaves identically to direct Limiter usage
+
+			// First request - both should allow
+			allowed1, details1 := limiters.allowNWithDetails("test", now, 1)
+			allowedDirect1, detailsDirect1 := identical.allowNWithDetails("test", now, 1)
+
+			require.Equal(t, allowedDirect1, allowed1, "allow result should be identical")
+			require.Equal(t, detailsDirect1.Allowed(), details1.Allowed(), "details.Allowed should be identical")
+			require.Equal(t, detailsDirect1.TokensRequested(), details1.TokensRequested(), "tokensRequested should be identical")
+			require.Equal(t, detailsDirect1.TokensConsumed(), details1.TokensConsumed(), "tokensConsumed should be identical")
+			require.Equal(t, detailsDirect1.TokensRemaining(), details1.TokensRemaining(), "tokensRemaining should be identical")
+			require.Equal(t, detailsDirect1.RetryAfter(), details1.RetryAfter(), "retryAfter should be identical")
+
+			// Second request - both should allow
+			allowed2, details2 := limiters.allowNWithDetails("test", now, 2)
+			allowedDirect2, detailsDirect2 := identical.allowNWithDetails("test", now, 2)
+
+			require.Equal(t, allowedDirect2, allowed2, "allow result should be identical for multi-token request")
+			require.Equal(t, detailsDirect2.Allowed(), details2.Allowed(), "details.Allowed should be identical")
+			require.Equal(t, detailsDirect2.TokensConsumed(), details2.TokensConsumed(), "tokensConsumed should be identical")
+			require.Equal(t, detailsDirect2.TokensRemaining(), details2.TokensRemaining(), "tokensRemaining should be identical")
+			require.Equal(t, detailsDirect2.RetryAfter(), details2.RetryAfter(), "retryAfter should be identical")
+
+			// Third request - both should deny (bucket exhausted)
+			allowed3, details3 := limiters.allowNWithDetails("test", now, 1)
+			allowedDirect3, detailsDirect3 := identical.allowNWithDetails("test", now, 1)
+
+			require.Equal(t, allowedDirect3, allowed3, "deny result should be identical")
+			require.Equal(t, detailsDirect3.Allowed(), details3.Allowed(), "details.Allowed should be identical when denied")
+			require.Equal(t, detailsDirect3.TokensConsumed(), details3.TokensConsumed(), "tokensConsumed should be identical when denied")
+			require.Equal(t, detailsDirect3.TokensRemaining(), details3.TokensRemaining(), "tokensRemaining should be identical when denied")
+			require.Equal(t, detailsDirect3.RetryAfter(), details3.RetryAfter(), "retryAfter should be identical when denied")
+		})
+	})
+
+	t.Run("MultipleLimiters", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+
+		// Limiter1: more restrictive per-second, generous per-minute
+		perSecond1 := NewLimit(2, time.Second)  // 500ms/token
+		perMinute1 := NewLimit(20, time.Minute) // 3s/token
+		limiter1 := NewLimiter(keyFunc, perSecond1, perMinute1)
+
+		// Limiter2: less restrictive per-second, more restrictive per-minute
+		perSecond2 := NewLimit(3, time.Second)  // ~333ms/token
+		perMinute2 := NewLimit(10, time.Minute) // 6s/token
+		limiter2 := NewLimiter(keyFunc, perSecond2, perMinute2)
+
+		limiters := NewLimiters(limiter1, limiter2)
+
+		// First allow
+		allowed1, d1 := limiters.allowNWithDetails("acct", now, 1)
+		require.True(t, allowed1)
+		require.True(t, d1.Allowed())
+
+		// Remaining should be minimum across all 4 buckets:
+		// perSecond1: 1 left, perMinute1: 19, perSecond2: 2, perMinute2: 9 => min=1
+		require.Equal(t, int64(1), d1.TokensRemaining(), "remaining should be min across buckets")
+		require.Equal(t, int64(1), d1.TokensConsumed())
+		require.Equal(t, time.Duration(0), d1.RetryAfter(), "retryAfter should be 0 when allowed")
+
+		// Second allow (consumes perSecond1 second token)
+		allowed2, d2 := limiters.allowNWithDetails("acct", now, 1)
+		require.True(t, allowed2)
+
+		// Remaining now min across: perSecond1:0, perMinute1:18, perSecond2:1, perMinute2:8 => 0
+		require.Equal(t, int64(0), d2.TokensRemaining(), "remaining should drop to 0 (most restrictive exhausted)")
+		require.Equal(t, int64(1), d2.TokensConsumed())
+		require.Equal(t, time.Duration(0), d2.RetryAfter())
+
+		// Third allow denied (per-second bucket in limiter1 exhausted)
+		allowed3, d3 := limiters.allowNWithDetails("acct", now, 1)
+		require.False(t, allowed3, "should be denied due to exhausted fastest bucket")
+		require.False(t, d3.Allowed())
+		require.Equal(t, int64(0), d3.TokensConsumed(), "no tokens consumed on denial")
+
+		// RetryAfter should be max(next token wait across buckets). Per-second exhausted needs 500ms.
+		// Other buckets still have tokens so their retryAfter <=0. Expect 500ms.
+		perSecWait := perSecond1.DurationPerToken()
+		require.Equal(t, perSecWait, d3.RetryAfter(), "retryAfter should be exactly one token duration for exhausted per-second bucket")
+	})
+}

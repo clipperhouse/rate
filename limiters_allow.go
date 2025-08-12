@@ -1,6 +1,8 @@
 package rate
 
-import "time"
+import (
+	"time"
+)
 
 // allowN returns true if at least `n` tokens are available for the given input,
 // across all Limiters.
@@ -149,20 +151,14 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 		buckets = make([]*bucket, 0, totalLimits)
 	}
 
-	// pick first key encountered as representative
-	// capture first key (not currently exposed via Details but may be useful later)
-	haveKey := false
 	for i, r := range rs.limiters {
 		lims := limitsByLimiter[i]
 		if len(lims) == 0 {
 			continue
 		}
-		k := r.keyFunc(input)
-		if !haveKey {
-			haveKey = true
-		}
+		userKey := r.keyFunc(input)
 		for _, limit := range lims {
-			b := r.buckets.loadOrStore(k, executionTime, limit)
+			b := r.buckets.loadOrStore(userKey, executionTime, limit)
 			buckets = append(buckets, b)
 			b.mu.Lock()
 		}
@@ -220,4 +216,116 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 		tokensRemaining: remainingTokens,
 		retryAfter:      retryAfter,
 	}
+}
+
+func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {
+	const maxStackLimiters = 4
+	var limitsByLimiter [][]Limit
+	if len(rs.limiters) <= maxStackLimiters {
+		var stackLimits [maxStackLimiters][]Limit
+		limitsByLimiter = stackLimits[:len(rs.limiters)]
+	} else {
+		limitsByLimiter = make([][]Limit, len(rs.limiters))
+	}
+
+	totalLimits := 0
+	for i, r := range rs.limiters {
+		lims := r.getLimits(input)
+		limitsByLimiter[i] = lims
+		totalLimits += len(lims)
+	}
+
+	const maxStackLimits = 6
+	var limits []Limit
+	if totalLimits <= maxStackLimits {
+		var stackLimits [maxStackLimits]Limit
+		limits = stackLimits[:0]
+	} else {
+		limits = make([]Limit, 0, totalLimits)
+	}
+	for _, lims := range limitsByLimiter {
+		limits = append(limits, lims...)
+	}
+
+	const maxStackBuckets = 6
+	var buckets []*bucket
+	if totalLimits <= maxStackBuckets {
+		var stackBuckets [maxStackBuckets]*bucket
+		buckets = stackBuckets[:0]
+	} else {
+		buckets = make([]*bucket, 0, totalLimits)
+	}
+
+	for i, r := range rs.limiters {
+		lims := limitsByLimiter[i]
+		if len(lims) == 0 {
+			continue
+		}
+		userKey := r.keyFunc(input)
+		for _, limit := range lims {
+			b := r.buckets.loadOrStore(userKey, executionTime, limit)
+			buckets = append(buckets, b)
+			b.mu.Lock()
+		}
+	}
+	defer func() {
+		for _, b := range buckets {
+			b.mu.Unlock()
+		}
+	}()
+
+	debugs := make([]Debug[TInput, TKey], len(buckets))
+	allowAll := true
+
+	// Build debugs by iterating through buckets and matching with limits
+	bucketIndex := 0
+	for i, r := range rs.limiters {
+		lims := limitsByLimiter[i]
+		if len(lims) == 0 {
+			continue
+		}
+		userKey := r.keyFunc(input)
+		for _, limit := range lims {
+			b := buckets[bucketIndex]
+			allow := b.hasTokens(executionTime, limit, n)
+			allowAll = allowAll && allow
+
+			debugs[bucketIndex] = Debug[TInput, TKey]{
+				allowed:         allow,
+				executionTime:   executionTime,
+				input:           input,
+				key:             userKey,
+				limit:           limit,
+				tokensRequested: n,
+			}
+			bucketIndex++
+		}
+	}
+
+	// Consume tokens only when all buckets allow
+	if allowAll {
+		for i := range buckets {
+			b := buckets[i]
+			limit := limits[i]
+			b.consumeTokens(executionTime, limit, n)
+			debugs[i].tokensConsumed = n
+			debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
+			debugs[i].retryAfter = 0
+		}
+
+		return true, debugs
+	}
+
+	// We didn't allow all, so no tokens to consume,
+	// but need to update details
+	for i := range buckets {
+		b := buckets[i]
+		limit := limits[i]
+		debugs[i].tokensConsumed = 0
+		debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
+		retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+		debugs[i].retryAfter = max(0, retryAfter)
+	}
+
+	return false, debugs
 }

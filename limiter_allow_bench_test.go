@@ -1,9 +1,39 @@
 package rate
 
 import (
+	"math"
 	"testing"
 	"time"
 )
+
+func BenchmarkLimiter_Serial_Parallel(b *testing.B) {
+	keyer := func(i int) int {
+		return i % 1000
+	}
+	limit := NewLimit(math.MaxInt64, time.Duration(math.MaxInt64))
+
+	b.Run("Serial", func(b *testing.B) {
+		limiter := NewLimiter(keyer, limit)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			limiter.Allow(i)
+		}
+		b.StopTimer()
+	})
+
+	b.Run("Parallel", func(b *testing.B) {
+		limiter := NewLimiter(keyer, limit)
+		b.ResetTimer()
+
+		b.RunParallel(func(pb *testing.PB) {
+			for i := 0; pb.Next(); i++ {
+				limiter.Allow(i)
+			}
+		})
+		b.StopTimer()
+	})
+}
 
 func BenchmarkLimiter_Allow(b *testing.B) {
 	b.Run("SingleBucket", func(b *testing.B) {

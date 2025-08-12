@@ -30,10 +30,10 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 		require.Equal(t, time.Duration(0), d.RetryAfter(), "retryAfter should be 0 when allowed and unconstrained")
 	})
 
-	t.Run("SingleLimiter_Allowed", func(t *testing.T) {
+	t.Run("SingleLimiter", func(t *testing.T) {
 		t.Parallel()
 
-		limit := NewLimit(5, time.Second) // 200ms per token
+		limit := NewLimit(5, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
 		limiters := NewLimiters(limiter)
 		now := time.Now()
@@ -45,34 +45,56 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 		require.Equal(t, int64(1), d.TokensConsumed())
 		require.Equal(t, limit.Count()-1, d.TokensRemaining(), "remaining should decrement by 1")
 		require.Equal(t, time.Duration(0), d.RetryAfter())
-	})
 
-	t.Run("SingleLimiter_Denied_MultiTokenRequest", func(t *testing.T) {
-		t.Parallel()
+		t.Run("Identical", func(t *testing.T) {
+			t.Parallel()
 
-		limit := NewLimit(5, time.Second) // 200ms/token
-		limiter := NewLimiter(keyFunc, limit)
-		limiters := NewLimiters(limiter)
-		now := time.Now()
+			now := time.Now()
 
-		// Consume all 5 tokens in one go
-		allowed, d := limiters.allowNWithDetails("test", now, 5)
-		require.True(t, allowed)
-		require.Equal(t, int64(5), d.TokensConsumed())
-		require.Equal(t, int64(0), d.TokensRemaining())
+			limiter := NewLimiter(keyFunc, limit)
+			limiters := NewLimiters(limiter)
 
-		// Request 2 tokens immediately (should be denied)
-		deniedAllowed, deniedDetails := limiters.allowNWithDetails("test", now, 2)
-		require.False(t, deniedAllowed)
-		require.Equal(t, int64(0), deniedDetails.TokensConsumed())
+			identical := NewLimiter(keyFunc, limit)
 
-		// Need 2 tokens => expect exactly 400ms wait (2 * 200ms)
-		expected := 2 * limit.DurationPerToken()
-		require.Equal(t, expected, deniedDetails.RetryAfter(), "retryAfter should be exactly 2 * durationPerToken for 2 tokens")
+			// Test that Limiters with single Limiter behaves identically to direct Limiter usage
+
+			// First request - both should allow
+			allowed1, details1 := limiters.allowNWithDetails("test", now, 1)
+			allowedDirect1, detailsDirect1 := identical.allowNWithDetails("test", now, 1)
+
+			require.Equal(t, allowedDirect1, allowed1, "allow result should be identical")
+			require.Equal(t, detailsDirect1.Allowed(), details1.Allowed(), "details.Allowed should be identical")
+			require.Equal(t, detailsDirect1.TokensRequested(), details1.TokensRequested(), "tokensRequested should be identical")
+			require.Equal(t, detailsDirect1.TokensConsumed(), details1.TokensConsumed(), "tokensConsumed should be identical")
+			require.Equal(t, detailsDirect1.TokensRemaining(), details1.TokensRemaining(), "tokensRemaining should be identical")
+			require.Equal(t, detailsDirect1.RetryAfter(), details1.RetryAfter(), "retryAfter should be identical")
+
+			// Second request - both should allow
+			allowed2, details2 := limiters.allowNWithDetails("test", now, 2)
+			allowedDirect2, detailsDirect2 := identical.allowNWithDetails("test", now, 2)
+
+			require.Equal(t, allowedDirect2, allowed2, "allow result should be identical for multi-token request")
+			require.Equal(t, detailsDirect2.Allowed(), details2.Allowed(), "details.Allowed should be identical")
+			require.Equal(t, detailsDirect2.TokensConsumed(), details2.TokensConsumed(), "tokensConsumed should be identical")
+			require.Equal(t, detailsDirect2.TokensRemaining(), details2.TokensRemaining(), "tokensRemaining should be identical")
+			require.Equal(t, detailsDirect2.RetryAfter(), details2.RetryAfter(), "retryAfter should be identical")
+
+			// Third request - both should deny (bucket exhausted)
+			allowed3, details3 := limiters.allowNWithDetails("test", now, 1)
+			allowedDirect3, detailsDirect3 := identical.allowNWithDetails("test", now, 1)
+
+			require.Equal(t, allowedDirect3, allowed3, "deny result should be identical")
+			require.Equal(t, detailsDirect3.Allowed(), details3.Allowed(), "details.Allowed should be identical when denied")
+			require.Equal(t, detailsDirect3.TokensConsumed(), details3.TokensConsumed(), "tokensConsumed should be identical when denied")
+			require.Equal(t, detailsDirect3.TokensRemaining(), details3.TokensRemaining(), "tokensRemaining should be identical when denied")
+			require.Equal(t, detailsDirect3.RetryAfter(), details3.RetryAfter(), "retryAfter should be identical when denied")
+		})
 	})
 
 	t.Run("MultipleLimiters", func(t *testing.T) {
 		t.Parallel()
+
+		now := time.Now()
 
 		// Limiter1: more restrictive per-second, generous per-minute
 		perSecond1 := NewLimit(2, time.Second)  // 500ms/token
@@ -85,7 +107,6 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 		limiter2 := NewLimiter(keyFunc, perSecond2, perMinute2)
 
 		limiters := NewLimiters(limiter1, limiter2)
-		now := time.Now()
 
 		// First allow
 		allowed1, d1 := limiters.allowNWithDetails("acct", now, 1)
@@ -108,15 +129,13 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 		require.Equal(t, time.Duration(0), d2.RetryAfter())
 
 		// Third allow denied (per-second bucket in limiter1 exhausted)
-		deniedTime := now // same time => no refill yet
-		allowed3, d3 := limiters.allowNWithDetails("acct", deniedTime, 1)
+		allowed3, d3 := limiters.allowNWithDetails("acct", now, 1)
 		require.False(t, allowed3, "should be denied due to exhausted fastest bucket")
 		require.False(t, d3.Allowed())
 		require.Equal(t, int64(0), d3.TokensConsumed(), "no tokens consumed on denial")
 
 		// RetryAfter should be max(next token wait across buckets). Per-second exhausted needs 500ms.
 		// Other buckets still have tokens so their retryAfter <=0. Expect 500ms.
-		// Since we're using deterministic time (no real clock), this should be exact.
 		perSecWait := perSecond1.DurationPerToken()
 		require.Equal(t, perSecWait, d3.RetryAfter(), "retryAfter should be exactly one token duration for exhausted per-second bucket")
 	})

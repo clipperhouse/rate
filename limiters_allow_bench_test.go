@@ -21,7 +21,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 			b.Run("SingleLimit", func(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ReportAllocs()
 				for b.Loop() {
@@ -32,7 +32,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				limit1 := NewLimit(1_000_000, time.Second)
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ReportAllocs()
 				for b.Loop() {
@@ -47,7 +47,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 			b.Run("SingleLimit", func(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -63,7 +63,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				limit1 := NewLimit(1_000_000, time.Second)
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -85,7 +85,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -95,7 +95,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -109,7 +109,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -124,7 +124,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -146,7 +146,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -156,7 +156,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc2, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -171,7 +171,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -186,7 +186,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc2, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -212,7 +212,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 			b.Run("SingleLimit", func(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ReportAllocs()
 				for b.Loop() {
@@ -223,7 +223,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				limit1 := NewLimit(1_000_000, time.Second)
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ReportAllocs()
 				for b.Loop() {
@@ -238,7 +238,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 			b.Run("SingleLimit", func(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -254,7 +254,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				limit1 := NewLimit(1_000_000, time.Second)
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -276,7 +276,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -286,7 +286,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -300,7 +300,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -315,7 +315,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -336,7 +336,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -346,7 +346,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc2, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -361,7 +361,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -376,7 +376,7 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc2, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -402,7 +402,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 			b.Run("SingleLimit", func(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ReportAllocs()
 				for b.Loop() {
@@ -413,7 +413,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				limit1 := NewLimit(1_000_000, time.Second)
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ReportAllocs()
 				for b.Loop() {
@@ -428,7 +428,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 			b.Run("SingleLimit", func(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -444,7 +444,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				limit1 := NewLimit(1_000_000, time.Second)
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 				now := time.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -466,7 +466,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -476,7 +476,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -490,7 +490,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -505,7 +505,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -526,7 +526,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -536,7 +536,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc2, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
 					for b.Loop() {
@@ -551,7 +551,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
@@ -566,7 +566,7 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc2, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
-					limiters := NewLimiters(l1, l2)
+					limiters := Combine(l1, l2)
 					now := time.Now()
 					b.ResetTimer()
 					b.ReportAllocs()

@@ -28,7 +28,7 @@ func TestLimiters_AllowN(t *testing.T) {
 				limit := NewLimit(5, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
 
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 
 				now := time.Now()
 
@@ -55,7 +55,7 @@ func TestLimiters_AllowN(t *testing.T) {
 				limit := NewLimit(10, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
 
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 
 				now := time.Now()
 				const concurrency = 20
@@ -95,7 +95,7 @@ func TestLimiters_AllowN(t *testing.T) {
 				limit2 := NewLimit(50, time.Minute)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
 
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 
 				now := time.Now()
 
@@ -143,7 +143,7 @@ func TestLimiters_AllowN(t *testing.T) {
 				limit2 := NewLimit(30, time.Minute) // 30 requests per minute
 				limiter := NewLimiter(keyFunc, limit1, limit2)
 
-				limiters := NewLimiters(limiter)
+				limiters := Combine(limiter)
 
 				now := time.Now()
 				const concurrency = 20
@@ -222,7 +222,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					limiter2 := NewLimiter(keyFunc, limit2)
 
 					// Create Limiters with both limiters
-					limiters := NewLimiters(limiter1, limiter2)
+					limiters := Combine(limiter1, limiter2)
 
 					now := time.Now()
 
@@ -251,7 +251,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					limiter2 := NewLimiter(keyFunc, limit2)
 
 					// Create Limiters with both limiters
-					limiters := NewLimiters(limiter1, limiter2)
+					limiters := Combine(limiter1, limiter2)
 
 					now := time.Now()
 					const concurrency = 10
@@ -296,7 +296,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					limit2b := NewLimit(50, time.Minute)
 					limiter2 := NewLimiter(keyFunc, limit2a, limit2b)
 
-					limiters := NewLimiters(limiter1, limiter2)
+					limiters := Combine(limiter1, limiter2)
 
 					now := time.Now()
 
@@ -344,7 +344,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					limit2b := NewLimit(40, time.Minute) // 40 requests per minute (more restrictive per-minute)
 					limiter2 := NewLimiter(keyFunc, limit2a, limit2b)
 
-					limiters := NewLimiters(limiter1, limiter2)
+					limiters := Combine(limiter1, limiter2)
 
 					now := time.Now()
 					const concurrency = 15
@@ -422,7 +422,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					limiter2 := NewLimiter(keyFunc2, limit2)
 
 					// Create Limiters with both limiters
-					limiters := NewLimiters(limiter1, limiter2)
+					limiters := Combine(limiter1, limiter2)
 
 					now := time.Now()
 
@@ -465,7 +465,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					limiter2 := NewLimiter(keyFunc2, limit2)
 
 					// Create Limiters with both limiters
-					limiters := NewLimiters(limiter1, limiter2)
+					limiters := Combine(limiter1, limiter2)
 
 					now := time.Now()
 					const concurrency = 10
@@ -532,7 +532,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					limit2b := NewLimit(60, time.Minute)
 					limiter2 := NewLimiter(keyFunc2, limit2a, limit2b)
 
-					limiters := NewLimiters(limiter1, limiter2)
+					limiters := Combine(limiter1, limiter2)
 
 					now := time.Now()
 
@@ -594,7 +594,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					limit2b := NewLimit(40, time.Minute) // 40 requests per minute (more restrictive per-minute)
 					limiter2 := NewLimiter(keyFunc2, limit2a, limit2b)
 
-					limiters := NewLimiters(limiter1, limiter2)
+					limiters := Combine(limiter1, limiter2)
 
 					now := time.Now()
 					const concurrency = 15
@@ -677,7 +677,7 @@ func TestLimiters_AllowN(t *testing.T) {
 		t.Parallel()
 
 		// Create Limiters with no limiters
-		limiters := NewLimiters[string, string]()
+		limiters := Combine[string, string]()
 
 		now := time.Now()
 
@@ -706,7 +706,7 @@ func TestLimiters_AllowN_MultipleTokens(t *testing.T) {
 		limiter := NewLimiter(keyFunc, limit)
 
 		// Create Limiters with the single limiter
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 
 		now := time.Now()
 
@@ -741,7 +741,7 @@ func TestLimiters_AllowN_MultipleTokens(t *testing.T) {
 		limiter2 := NewLimiter(keyFunc, limit2)
 
 		// Create Limiters with both limiters
-		limiters := NewLimiters(limiter1, limiter2)
+		limiters := Combine(limiter1, limiter2)
 
 		now := time.Now()
 
@@ -790,7 +790,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 	t.Run("NoLimiters", func(t *testing.T) {
 		t.Parallel()
 
-		limiters := NewLimiters[string, string]()
+		limiters := Combine[string, string]()
 		now := time.Now()
 
 		allowed, debugs := limiters.allowNWithDebug("test", now, 1)
@@ -806,7 +806,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 
 			limit := NewLimit(5, time.Second)
 			limiter := NewLimiter(keyFunc, limit)
-			limiters := NewLimiters(limiter)
+			limiters := Combine(limiter)
 			now := time.Now()
 
 			// First allow - should succeed
@@ -856,7 +856,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 			perSecond := NewLimit(3, time.Second)
 			perMinute := NewLimit(10, time.Minute)
 			limiter := NewLimiter(keyFunc, perSecond, perMinute)
-			limiters := NewLimiters(limiter)
+			limiters := Combine(limiter)
 			now := time.Now()
 
 			// First allow - should succeed
@@ -926,7 +926,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 				limit2 := NewLimit(5, time.Second)
 				limiter1 := NewLimiter(keyFunc, limit1)
 				limiter2 := NewLimiter(keyFunc, limit2)
-				limiters := NewLimiters(limiter1, limiter2)
+				limiters := Combine(limiter1, limiter2)
 				now := time.Now()
 
 				// Should allow first 3 requests (limited by limiter1)
@@ -979,7 +979,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 				limit2b := NewLimit(5, time.Minute)
 				limiter2 := NewLimiter(keyFunc, limit2a, limit2b)
 
-				limiters := NewLimiters(limiter1, limiter2)
+				limiters := Combine(limiter1, limiter2)
 				now := time.Now()
 
 				// Should allow first 2 requests (limited by limiter1's per-second)
@@ -1030,7 +1030,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 			limit2 := NewLimit(5, time.Second)
 			limiter1 := NewLimiter(keyFunc1, limit1)
 			limiter2 := NewLimiter(keyFunc2, limit2)
-			limiters := NewLimiters(limiter1, limiter2)
+			limiters := Combine(limiter1, limiter2)
 			now := time.Now()
 
 			// Should allow first 3 requests (limited by limiter1)
@@ -1061,7 +1061,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 		limit2 := NewLimit(8, time.Second)
 		limiter1 := NewLimiter(keyFunc, limit1)
 		limiter2 := NewLimiter(keyFunc, limit2)
-		limiters := NewLimiters(limiter1, limiter2)
+		limiters := Combine(limiter1, limiter2)
 		now := time.Now()
 
 		const concurrency = 10
@@ -1128,7 +1128,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		// Create a limiter with no limits (using NewLimiterFunc with empty function list)
 		limiter2 := NewLimiterFunc(keyFunc)
 
-		limiters := NewLimiters(limiter1, limiter2)
+		limiters := Combine(limiter1, limiter2)
 		now := time.Now()
 
 		// Should be limited by limiter1 since limiter2 has no limits
@@ -1153,7 +1153,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 
 		limit := NewLimit(5, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 		now := time.Now()
 
 		// Test requesting 0 tokens
@@ -1174,7 +1174,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 
 		limit := NewLimit(5, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 		now := time.Now()
 
 		// Test requesting more tokens than available
@@ -1205,7 +1205,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 			return NewLimit(5, time.Second) // Normal limit for other inputs
 		}
 		limiter := NewLimiterFunc(keyFunc, conditionalLimitFunc)
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 		now := time.Now()
 
 		// Test blocked input - should allow only 1 token
@@ -1247,7 +1247,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		}
 		limit := NewLimit(3, time.Second)
 		limiter := NewLimiter(emptyKeyFunc, limit)
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 		now := time.Now()
 
 		// Should work fine with empty key
@@ -1283,7 +1283,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 			return NewLimit(2, time.Second) // Basic gets lower limit
 		}
 		limiter := NewLimiterFunc(keyFunc, variableLimitFunc)
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 		now := time.Now()
 
 		// Test premium input
@@ -1320,7 +1320,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 			NewLimit(6, time.Second),
 		}
 		limiter := NewLimiter(keyFunc, limits...)
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 		now := time.Now()
 
 		allowed, debugs := limiters.allowNWithDebug("test", now, 1)
@@ -1337,7 +1337,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		// Test with more than stack threshold (7 different limits)
 		limits = append(limits, NewLimit(7, time.Second))
 		limiter = NewLimiter(keyFunc, limits...)
-		limiters = NewLimiters(limiter)
+		limiters = Combine(limiter)
 
 		allowed, debugs = limiters.allowNWithDebug("test2", now, 1)
 		require.True(t, allowed, "should allow with 7 limits (above stack threshold)")
@@ -1350,7 +1350,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		fastLimit := NewLimit(2, 100*time.Millisecond) // Very fast refill
 		slowLimit := NewLimit(2, 10*time.Second)       // Very slow refill
 		limiter := NewLimiter(keyFunc, fastLimit, slowLimit)
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 
 		baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -1399,7 +1399,7 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 	t.Run("NoLimiters", func(t *testing.T) {
 		t.Parallel()
 
-		limiters := NewLimiters[string, string]()
+		limiters := Combine[string, string]()
 		now := time.Now()
 
 		allowed, d := limiters.allowNWithDetails("test", now, 1)
@@ -1416,7 +1416,7 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 
 		limit := NewLimit(5, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		limiters := NewLimiters(limiter)
+		limiters := Combine(limiter)
 		now := time.Now()
 
 		allowed, d := limiters.allowNWithDetails("test", now, 1)
@@ -1433,7 +1433,7 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 			now := time.Now()
 
 			limiter := NewLimiter(keyFunc, limit)
-			limiters := NewLimiters(limiter)
+			limiters := Combine(limiter)
 
 			identical := NewLimiter(keyFunc, limit)
 
@@ -1487,7 +1487,7 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 		perMinute2 := NewLimit(10, time.Minute) // 6s/token
 		limiter2 := NewLimiter(keyFunc, perSecond2, perMinute2)
 
-		limiters := NewLimiters(limiter1, limiter2)
+		limiters := Combine(limiter1, limiter2)
 
 		// First allow
 		allowed1, d1 := limiters.allowNWithDetails("acct", now, 1)

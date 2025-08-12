@@ -140,12 +140,12 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 		})
 
 		b.Run("DifferentKeyers", func(b *testing.B) {
-			keyFunc1 := func(s string) string { return "limiter1-" + s }
-			keyFun2 := func(s string) string { return "limiter2-" + s }
+			keyFunc1 := func(_ string) int64 { return 1 }
+			keyFunc2 := func(_ string) int64 { return 2 }
 			b.Run("SingleBucket", func(b *testing.B) {
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
-					l2 := NewLimiter(keyFun2, NewLimit(1_000_000, time.Second))
+					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))
 					limiters := NewLimiters(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
@@ -155,7 +155,7 @@ func BenchmarkLimiters_Allow(b *testing.B) {
 				})
 				b.Run("MultipleLimits", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
-					l2 := NewLimiter(keyFun2, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
+					l2 := NewLimiter(keyFunc2, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
 					limiters := NewLimiters(l1, l2)
 					now := time.Now()
 					b.ReportAllocs()
@@ -331,8 +331,8 @@ func BenchmarkLimiters_AllowWithDetails(b *testing.B) {
 		})
 		b.Run("DifferentKeyers", func(b *testing.B) {
 			b.Run("SingleBucket", func(b *testing.B) {
-				keyFunc1 := func(_ string) string { return "multi-limiters-different-keyFunc1-single-bucket" }
-				keyFunc2 := func(_ string) string { return "multi-limiters-different-keyFunc2-single-bucket" }
+				keyFunc1 := func(_ string) int64 { return 1 }
+				keyFunc2 := func(_ string) int64 { return 2 }
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))
@@ -521,8 +521,8 @@ func BenchmarkLimiters_AllowWithDebug(b *testing.B) {
 		})
 		b.Run("DifferentKeyers", func(b *testing.B) {
 			b.Run("SingleBucket", func(b *testing.B) {
-				keyFunc1 := func(_ string) string { return "multi-limiters-different-keyFunc1-single-bucket" }
-				keyFunc2 := func(_ string) string { return "multi-limiters-different-keyFunc2-single-bucket" }
+				keyFunc1 := func(_ string) int64 { return 1 }
+				keyFunc2 := func(_ string) int64 { return 2 }
 				b.Run("SingleLimit", func(b *testing.B) {
 					l1 := NewLimiter(keyFunc1, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc2, NewLimit(1_000_000, time.Second))

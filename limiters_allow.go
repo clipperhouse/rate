@@ -13,8 +13,11 @@ import (
 // and `n` tokens will be consumed against each limit. If any limit
 // would be exceeded, no token will be consumed against from any Limiter.
 func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
-	if len(rs.limiters) == 0 {
+	switch len(rs.limiters) {
+	case 0:
 		return true
+	case 1:
+		return rs.limiters[0].allowN(input, executionTime, n)
 	}
 
 	// Optimization: use stack allocation for small number of limiters

@@ -555,7 +555,8 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 		require.Equal(t, int64(3), details.TokensRequested())
 		require.Equal(t, int64(0), details.TokensConsumed())
 		require.Equal(t, int64(2), details.TokensRemaining(), "should show actual remaining tokens")
-		require.Greater(t, details.RetryAfter(), time.Duration(0), "should show retry after when denied")
+		// requested 3, 2 are available, so wait for 1
+		require.Equal(t, details.RetryAfter(), limit.DurationPerToken(), "should show retry after when denied")
 	})
 
 	t.Run("MultipleLimiters", func(t *testing.T) {
@@ -571,35 +572,46 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 
 		// Should allow peeking up to the most restrictive limit (3)
 		allowed, details := limiters.peekNWithDetails("test", now, 3)
-		require.True(t, allowed, "should allow peeking up to most restrictive limit")
-		require.Equal(t, int64(3), details.TokensRequested())
-		require.Equal(t, int64(0), details.TokensConsumed())
-		require.Equal(t, int64(3), details.TokensRemaining(), "should show minimum remaining across limiters")
-		require.Equal(t, time.Duration(0), details.RetryAfter(), "should show 0 retry after when available")
+		{
+			require.True(t, allowed, "should allow peeking up to most restrictive limit")
+			require.Equal(t, int64(3), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed())
+			require.Equal(t, int64(3), details.TokensRemaining(), "should show minimum remaining across limiters")
+			require.Equal(t, time.Duration(0), details.RetryAfter(), "should show 0 retry after when available")
+		}
 
 		allowed, details = limiters.peekNWithDetails("test", now, 4)
-		require.False(t, allowed, "should not allow peeking beyond most restrictive limit")
-		require.Equal(t, int64(4), details.TokensRequested())
-		require.Equal(t, int64(0), details.TokensConsumed())
-		require.Equal(t, int64(3), details.TokensRemaining(), "should show minimum remaining across limiters")
-		require.Greater(t, details.RetryAfter(), time.Duration(0), "should show retry after when denied")
-
+		{
+			require.False(t, allowed, "should not allow peeking beyond most restrictive limit")
+			require.Equal(t, int64(4), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed())
+			require.Equal(t, int64(3), details.TokensRemaining(), "should show minimum remaining across limiters")
+			// 3 available, 4 requested, so wait for 1. rounding factor for rounding.
+			rounding := time.Nanosecond
+			require.Equal(t, limit1.DurationPerToken(), details.RetryAfter()+rounding, "should show retry after when denied")
+		}
 		// Consume tokens from both limiters
 		require.True(t, limiters.allowN("test", now, 2))
 
 		// Peek should now show reduced availability
 		allowed, details = limiters.peekNWithDetails("test", now, 1)
-		require.True(t, allowed, "should allow peeking remaining tokens")
-		require.Equal(t, int64(1), details.TokensRequested())
-		require.Equal(t, int64(0), details.TokensConsumed())
-		require.Equal(t, int64(1), details.TokensRemaining(), "should show minimum remaining across limiters")
+		{
+			require.True(t, allowed, "should allow peeking remaining tokens")
+			require.Equal(t, int64(1), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed())
+			require.Equal(t, int64(1), details.TokensRemaining(), "should show minimum remaining across limiters")
+		}
 
 		allowed, details = limiters.peekNWithDetails("test", now, 2)
-		require.False(t, allowed, "should not allow peeking more than remaining")
-		require.Equal(t, int64(2), details.TokensRequested())
-		require.Equal(t, int64(0), details.TokensConsumed())
-		require.Equal(t, int64(1), details.TokensRemaining(), "should show minimum remaining across limiters")
-		require.Greater(t, details.RetryAfter(), time.Duration(0), "should show retry after when denied")
+		{
+			require.False(t, allowed, "should not allow peeking more than remaining")
+			require.Equal(t, int64(2), details.TokensRequested())
+			require.Equal(t, int64(0), details.TokensConsumed())
+			require.Equal(t, int64(1), details.TokensRemaining(), "should show minimum remaining across limiters")
+			// per-second exceeded by 1, so wait for 1
+			rounding := time.Nanosecond
+			require.Equal(t, limit1.DurationPerToken(), details.RetryAfter()+rounding, "should show retry after when denied")
+		}
 	})
 
 	t.Run("DifferentKeyers", func(t *testing.T) {

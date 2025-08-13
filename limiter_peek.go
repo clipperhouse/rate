@@ -5,13 +5,7 @@ import "time"
 // Peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
-	return r.peek(input, time.Now())
-}
-
-// peek returns true if tokens are available for the given key,
-// but without consuming any tokens.
-func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
-	return r.peekN(input, executionTime, 1)
+	return r.PeekN(input, 1)
 }
 
 // PeekN returns true if tokens are available for the given key,
@@ -22,8 +16,13 @@ func (r *Limiter[TInput, TKey]) PeekN(input TInput, n int64) bool {
 
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
-func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n int64) bool {
+func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
+	return r.peekN(input, executionTime, 1)
+}
 
+// peek returns true if tokens are available for the given key,
+// but without consuming any tokens.
+func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n int64) bool {
 	limits := r.getLimits(input)
 	if len(limits) == 0 {
 		// No limits defined, so we allow everything
@@ -66,11 +65,7 @@ func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n i
 //
 // No tokens are consumed.
 func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, Details[TInput, TKey]) {
-	return r.peekWithDetails(input, time.Now())
-}
-
-func (r *Limiter[TInput, TKey]) peekWithDetails(input TInput, executionTime time.Time) (bool, Details[TInput, TKey]) {
-	return r.peekNWithDetails(input, executionTime, 1)
+	return r.PeekNWithDetails(input, 1)
 }
 
 // PeekNWithDetails returns true if `n` tokens are available for the given key,
@@ -162,11 +157,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 //
 // No tokens are consumed.
 func (r *Limiter[TInput, TKey]) PeekWithDebug(input TInput) (bool, []Debug[TInput, TKey]) {
-	return r.peekWithDebug(input, time.Now())
-}
-
-func (r *Limiter[TInput, TKey]) peekWithDebug(input TInput, executionTime time.Time) (bool, []Debug[TInput, TKey]) {
-	return r.peekNWithDebug(input, executionTime, 1)
+	return r.PeekNWithDebug(input, 1)
 }
 
 // PeekNWithDebug returns true if `n` tokens are available for the given key,
@@ -179,6 +170,10 @@ func (r *Limiter[TInput, TKey]) peekWithDebug(input TInput, executionTime time.T
 // No tokens are consumed.
 func (r *Limiter[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, []Debug[TInput, TKey]) {
 	return r.peekNWithDebug(input, time.Now(), n)
+}
+
+func (r *Limiter[TInput, TKey]) peekWithDebug(input TInput, executionTime time.Time) (bool, []Debug[TInput, TKey]) {
+	return r.peekNWithDebug(input, executionTime, 1)
 }
 
 func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {

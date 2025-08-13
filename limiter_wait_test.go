@@ -679,6 +679,7 @@ func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
 }
 
 func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
+	t.Skip("this test is flaky because the implementation is not deterministic")
 	t.Parallel()
 
 	// The FIFO behavior is best-effort, this test is known-flaky

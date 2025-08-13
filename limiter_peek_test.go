@@ -333,9 +333,8 @@ func TestLimiter_PeekWithDebug_AllowedAndDenied(t *testing.T) {
 		require.Equal(t, int64(0), d.TokensRemaining(), "should have 0 tokens remaining")
 		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
 		require.Equal(t, int64(0), d.TokensConsumed(), "should consume 0 tokens for peek even when denied")
-		// RetryAfter should be > 0 for denied requests
-		expectedRetryAfter := limit.durationPerToken
-		require.InDelta(t, float64(expectedRetryAfter), float64(d.RetryAfter()), float64(time.Nanosecond), "retry after should be duration per token for denied request")
+		// wait should be for one token
+		require.Equal(t, limit.durationPerToken, d.RetryAfter(), "retry after should be duration per token for denied request")
 	}
 }
 

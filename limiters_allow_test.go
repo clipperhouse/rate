@@ -897,8 +897,8 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 			require.False(t, d0.Allowed(), "per-second limit should deny")
 			require.Equal(t, int64(0), d0.TokensConsumed(), "no tokens consumed when denied")
 			require.Equal(t, int64(0), d0.TokensRemaining(), "per-second should be exhausted")
-			expectedRetryAfter := perSecond.DurationPerToken()
-			require.InDelta(t, float64(expectedRetryAfter), float64(d0.RetryAfter()), float64(time.Nanosecond), "per-second retry after should be token duration")
+			rounding := time.Nanosecond
+			require.Equal(t, perSecond.DurationPerToken(), d0.RetryAfter()+rounding, "per-second retry after should be token duration")
 
 			// Check per-minute limit debug (would allow but overall denied)
 			d1 = debugs[1]

@@ -38,6 +38,7 @@ When I ask you write tests, I am looking for bugs in my implementation. Try to d
 - Format error messages with variable interpolation: `"bucket %d should allow request", bucketID`
 - Test both success and failure paths for all rate limiting operations
 - Always verify state after operations (remaining tokens, bucket exhaustion, etc.)
+- The use of `require.InDelta` is a sign of a bad test. Figure out the source of the non-determinism. It might simply be a rounding issue, especially when dividing by 3 or 9.
 
 ## Code Structure
 

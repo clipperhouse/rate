@@ -415,8 +415,8 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.Equal(t, d0.TokensConsumed(), int64(0))
 		require.Equal(t, d0.TokensRemaining(), perSecond.count-consumed)
 		// per-second limit is exhausted, so we need to wait for 2 tokens to refill
-		expectedRetryAfter := time.Duration(consume) * perSecond.durationPerToken
-		require.InDelta(t, float64(expectedRetryAfter), float64(d0.RetryAfter()), float64(time.Nanosecond), "per-second RetryAfter should be time to refill %d tokens", consume)
+		rounding := time.Nanosecond
+		require.Equal(t, 2*perSecond.durationPerToken, d0.RetryAfter()+rounding, "per-second RetryAfter should be time to refill %d tokens", consume)
 
 		d1 := debugs[1]
 		require.True(t, d1.Allowed())
@@ -629,8 +629,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			require.Equal(t, expectedKey, d0.Key(), "bucket %d key should match", bucketID)
 			require.Equal(t, int64(1), d0.TokensRequested(), "bucket %d should request 1 token", bucketID)
 			require.Equal(t, int64(0), d0.TokensConsumed(), "bucket %d should consume 0 tokens when denied", bucketID)
-			expectedRetryAfter := perSecond.durationPerToken
-			require.InDelta(t, float64(expectedRetryAfter), float64(d0.RetryAfter()), float64(time.Nanosecond), "bucket %d RetryAfter should be approximately time to refill 1 token", bucketID)
+			require.Equal(t, perSecond.durationPerToken, d0.RetryAfter(), "bucket %d RetryAfter should be time to refill 1 token", bucketID)
 
 			// per-minute still has 1 token
 			d1 := debugs[1]
@@ -696,9 +695,9 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 
 	// Now all buckets should be exhausted on per-minute limit
 	{
-		var wg sync.WaitGroup
 		results := make([][]Debug[int, string], buckets)
 
+		var wg sync.WaitGroup
 		for bucketID := range buckets {
 			wg.Add(1)
 			go func(bucketID int) {
@@ -737,9 +736,9 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			require.Equal(t, expectedKey, d1.Key(), "bucket %d key should match", bucketID)
 			require.Equal(t, int64(1), d1.TokensRequested(), "bucket %d should request 1 token", bucketID)
 			require.Equal(t, int64(0), d1.TokensConsumed(), "bucket %d should consume 0 tokens when denied", bucketID)
-			// Use InDelta for retry after comparison to handle timing precision
-			expectedRetryAfter := perMinute.durationPerToken
-			require.InDelta(t, float64(expectedRetryAfter), float64(d1.RetryAfter()), float64(time.Second), "bucket %d per-minute RetryAfter should be approximately time to refill 1 token", bucketID)
+			// we moved forward by one second above, so the per-minute limit should be
+			// 20s - 1s = 19s from its next token
+			require.Equal(t, perMinute.durationPerToken-time.Second, d1.RetryAfter(), "bucket %d per-minute RetryAfter should be time to refill 1 token", bucketID)
 		}
 	}
 

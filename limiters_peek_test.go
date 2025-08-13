@@ -1022,36 +1022,36 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 		require.Equal(t, int64(6), debugs[0].TokensRequested())
 		require.Equal(t, int64(0), debugs[0].TokensConsumed(), "peek never consumes tokens")
 		require.Equal(t, int64(5), debugs[0].TokensRemaining(), "should show current remaining tokens")
-
-		// Calculate expected RetryAfter: requesting 6 tokens when only 5 available
-		// means we need 1 more token, which takes 1 * durationPerToken
-		expectedRetryAfter := limit.DurationPerToken()
-		require.InDelta(t, float64(expectedRetryAfter), float64(debugs[0].RetryAfter()), float64(time.Microsecond),
-			"RetryAfter should be approximately duration per token for 1 additional token needed")
+		// 5 available, 6 requested, so wait for 1
+		require.Equal(t, limit.DurationPerToken(), debugs[0].RetryAfter(), "RetryAfter should be duration per token for 1 additional token needed")
 
 		// Consume some tokens
 		require.True(t, limiters.allowN("test", now, 3))
 
 		// Peek should now show reduced availability
 		allowed, debugs = limiters.peekNWithDebug("test", now, 2)
-		require.True(t, allowed, "should allow peeking remaining tokens")
-		require.Len(t, debugs, 1, "should have debug info for single limit")
-		require.Equal(t, int64(2), debugs[0].TokensRequested())
-		require.Equal(t, int64(0), debugs[0].TokensConsumed())
-		require.Equal(t, int64(2), debugs[0].TokensRemaining(), "should show remaining tokens after consumption")
+		{
+			d0 := debugs[0]
+			require.True(t, allowed, "should allow peeking remaining tokens")
+			require.Len(t, debugs, 1, "should have debug info for single limit")
+			require.Equal(t, int64(2), d0.TokensRequested())
+			require.Equal(t, int64(0), d0.TokensConsumed())
+			require.Equal(t, int64(2), d0.TokensRemaining(), "should show remaining tokens after consumption")
+			require.Equal(t, time.Duration(0), d0.RetryAfter(), "should show 0 retry after when available")
+		}
 
 		allowed, debugs = limiters.peekNWithDebug("test", now, 3)
-		require.False(t, allowed, "should not allow peeking more than remaining")
-		require.Len(t, debugs, 1, "should have debug info for single limit")
-		require.Equal(t, int64(3), debugs[0].TokensRequested())
-		require.Equal(t, int64(0), debugs[0].TokensConsumed())
-		require.Equal(t, int64(2), debugs[0].TokensRemaining(), "should show actual remaining tokens")
+		{
+			d0 := debugs[0]
+			require.False(t, allowed, "should not allow peeking more than remaining")
+			require.Len(t, debugs, 1, "should have debug info for single limit")
+			require.Equal(t, int64(3), d0.TokensRequested())
+			require.Equal(t, int64(0), d0.TokensConsumed())
+			require.Equal(t, int64(2), d0.TokensRemaining(), "should show actual remaining tokens")
+			// 2 available, 3 requested, so wait for 1
+			require.Equal(t, limit.DurationPerToken(), debugs[0].RetryAfter(), "RetryAfter should be duration per token for 1 additional token needed")
+		}
 
-		// Calculate expected RetryAfter: requesting 3 tokens when only 2 available
-		// means we need 1 more token, which takes 1 * durationPerToken
-		expectedRetryAfter2 := limit.DurationPerToken()
-		require.InDelta(t, float64(expectedRetryAfter2), float64(debugs[0].RetryAfter()), float64(time.Microsecond),
-			"RetryAfter should be approximately duration per token for 1 additional token needed")
 	})
 
 	t.Run("MultipleLimiters", func(t *testing.T) {
@@ -1279,33 +1279,41 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 
 		// Test PeekWithDebug (single token)
 		allowed, debugs := limiters.PeekWithDebug("test")
-		require.True(t, allowed, "PeekWithDebug should return true when tokens available")
-		require.Len(t, debugs, 1, "should have debug info for single limit")
-		require.Equal(t, int64(1), debugs[0].TokensRequested())
-		require.Equal(t, int64(0), debugs[0].TokensConsumed(), "peek never consumes tokens")
-		require.Equal(t, int64(5), debugs[0].TokensRemaining(), "should show all tokens remaining")
+		{
+			require.True(t, allowed, "PeekWithDebug should return true when tokens available")
+			require.Len(t, debugs, 1, "should have debug info for single limit")
 
+			d0 := debugs[0]
+			require.Equal(t, int64(1), d0.TokensRequested())
+			require.Equal(t, int64(0), d0.TokensConsumed(), "peek never consumes tokens")
+			require.Equal(t, int64(5), d0.TokensRemaining(), "should show all tokens remaining")
+			require.Equal(t, time.Duration(0), d0.RetryAfter(), "should show 0 retry after when available")
+		}
 		// Test PeekNWithDebug (multiple tokens)
 		allowed, debugs = limiters.PeekNWithDebug("test", 3)
-		require.True(t, allowed, "PeekNWithDebug should return true for 3 tokens")
-		require.Len(t, debugs, 1, "should have debug info for single limit")
-		require.Equal(t, int64(3), debugs[0].TokensRequested())
-		require.Equal(t, int64(0), debugs[0].TokensConsumed())
-		require.Equal(t, int64(5), debugs[0].TokensRemaining())
+		{
+			require.True(t, allowed, "PeekNWithDebug should return true for 3 tokens")
+			require.Len(t, debugs, 1, "should have debug info for single limit")
+
+			d0 := debugs[0]
+			require.Equal(t, int64(3), d0.TokensRequested())
+			require.Equal(t, int64(0), d0.TokensConsumed())
+			require.Equal(t, int64(5), d0.TokensRemaining())
+			require.Equal(t, time.Duration(0), d0.RetryAfter(), "should show 0 retry after when available")
+		}
 
 		allowed, debugs = limiters.PeekNWithDebug("test", 6)
-		require.False(t, allowed, "PeekNWithDebug should return false for 6 tokens when limit is 5")
-		require.Len(t, debugs, 1, "should have debug info for single limit")
-		require.Equal(t, int64(6), debugs[0].TokensRequested())
-		require.Equal(t, int64(0), debugs[0].TokensConsumed())
-		require.Equal(t, int64(5), debugs[0].TokensRemaining())
+		{
+			require.False(t, allowed, "PeekNWithDebug should return false for 6 tokens when limit is 5")
+			require.Len(t, debugs, 1, "should have debug info for single limit")
 
-		// Calculate expected RetryAfter: requesting 6 tokens when only 5 available
-		// means we need 1 more token, which takes 1 * durationPerToken
-		expectedRetryAfterPublic := limit.DurationPerToken()
-		require.InDelta(t, float64(expectedRetryAfterPublic), float64(debugs[0].RetryAfter()), float64(time.Microsecond),
-			"RetryAfter should be exactly duration per token for 1 additional token needed")
-
+			d0 := debugs[0]
+			require.Equal(t, int64(6), d0.TokensRequested())
+			require.Equal(t, int64(0), d0.TokensConsumed())
+			require.Equal(t, int64(5), d0.TokensRemaining())
+			// 5 available, 6 requested, so wait for 1
+			require.Equal(t, limit.DurationPerToken(), d0.RetryAfter(), "RetryAfter should be duration per token for 1 additional token needed")
+		}
 		// Peeks should not consume tokens - verify by consuming with allow
 		for i := range 5 {
 			allowed := limiters.allowN("test", time.Now(), 1)

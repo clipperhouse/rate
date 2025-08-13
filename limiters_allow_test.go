@@ -1604,7 +1604,7 @@ func TestLimiters_PublicMethods(t *testing.T) {
 
 		// Exhaust bucket
 		for i := range 3 {
-			allowed, details = limiters.AllowWithDetails("test")
+			allowed, _ = limiters.AllowWithDetails("test")
 			require.True(t, allowed, "request %d should be allowed", i+1)
 		}
 
@@ -1682,10 +1682,11 @@ func TestLimiters_PublicMethods(t *testing.T) {
 		require.True(t, d.Allowed(), "debug should show allowed")
 		require.Equal(t, int64(1), d.TokensConsumed(), "should consume 1 token")
 		require.Equal(t, limit.Count()-2, d.TokensRemaining(), "remaining should decrease further")
+		require.Equal(t, time.Duration(0), d.RetryAfter(), "retry after should be 0 when allowed")
 
 		// Exhaust bucket
 		for i := range 2 {
-			allowed, debugs = limiters.AllowWithDebug("test")
+			allowed, _ = limiters.AllowWithDebug("test")
 			require.True(t, allowed, "request %d should be allowed", i+1)
 		}
 
@@ -1698,7 +1699,9 @@ func TestLimiters_PublicMethods(t *testing.T) {
 		require.False(t, d.Allowed(), "debug should show denied")
 		require.Equal(t, int64(0), d.TokensConsumed(), "no tokens consumed when denied")
 		require.Equal(t, int64(0), d.TokensRemaining(), "remaining should be 0")
-		require.Greater(t, d.RetryAfter(), time.Duration(0), "retry after should be positive when denied")
+		// bit of a fudge factor here since we are depending on a real system clock
+		require.Greater(t, d.RetryAfter(), time.Duration(248*time.Millisecond), "retry after should be greater than 248ms when denied")
+		require.Less(t, d.RetryAfter(), time.Duration(252*time.Millisecond), "retry after should be less than 252ms when denied")
 	})
 
 	t.Run("AllowNWithDebug", func(t *testing.T) {

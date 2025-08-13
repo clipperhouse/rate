@@ -6,13 +6,13 @@ import (
 )
 
 func BenchmarkLimiter_Peek_SingleBucket(b *testing.B) {
-	keyer := func(id int) string {
+	keyFunc := func(id int) string {
 		return "peek-single-bucket"
 	}
 
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
-		limiter := NewLimiter(keyer, limit)
+		limiter := NewLimiter(keyFunc, limit)
 		now := time.Now()
 
 		b.ReportAllocs()
@@ -25,7 +25,7 @@ func BenchmarkLimiter_Peek_SingleBucket(b *testing.B) {
 	b.Run("MultipleLimits", func(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
-		limiter := NewLimiter(keyer, limit1, limit2)
+		limiter := NewLimiter(keyFunc, limit1, limit2)
 		now := time.Now()
 
 		b.ReportAllocs()
@@ -38,13 +38,13 @@ func BenchmarkLimiter_Peek_SingleBucket(b *testing.B) {
 
 func BenchmarkLimiter_Peek_MultipleBuckets(b *testing.B) {
 	const buckets = 1000
-	keyer := func(id int) int {
+	keyFunc := func(id int) int {
 		return id
 	}
 
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
-		limiter := NewLimiter(keyer, limit)
+		limiter := NewLimiter(keyFunc, limit)
 		now := time.Now()
 
 		b.ResetTimer()
@@ -58,7 +58,7 @@ func BenchmarkLimiter_Peek_MultipleBuckets(b *testing.B) {
 	b.Run("MultipleLimits", func(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
-		limiter := NewLimiter(keyer, limit1, limit2)
+		limiter := NewLimiter(keyFunc, limit1, limit2)
 		now := time.Now()
 
 		b.ResetTimer()
@@ -71,13 +71,13 @@ func BenchmarkLimiter_Peek_MultipleBuckets(b *testing.B) {
 }
 
 func BenchmarkLimiter_PeekWithDetails_SingleBucket(b *testing.B) {
-	keyer := func(id int) string {
+	keyFunc := func(id int) string {
 		return "peek-single-bucket"
 	}
 
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
-		limiter := NewLimiter(keyer, limit)
+		limiter := NewLimiter(keyFunc, limit)
 		now := time.Now()
 
 		b.ReportAllocs()
@@ -90,7 +90,7 @@ func BenchmarkLimiter_PeekWithDetails_SingleBucket(b *testing.B) {
 	b.Run("MultipleLimits", func(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
-		limiter := NewLimiter(keyer, limit1, limit2)
+		limiter := NewLimiter(keyFunc, limit1, limit2)
 		now := time.Now()
 
 		b.ReportAllocs()
@@ -103,13 +103,13 @@ func BenchmarkLimiter_PeekWithDetails_SingleBucket(b *testing.B) {
 
 func BenchmarkLimiter_PeekWithDetails_MultipleBuckets(b *testing.B) {
 	const buckets = 1000
-	keyer := func(id int) int {
+	keyFunc := func(id int) int {
 		return id
 	}
 
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
-		limiter := NewLimiter(keyer, limit)
+		limiter := NewLimiter(keyFunc, limit)
 		now := time.Now()
 
 		b.ResetTimer()
@@ -123,7 +123,7 @@ func BenchmarkLimiter_PeekWithDetails_MultipleBuckets(b *testing.B) {
 	b.Run("MultipleLimits", func(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
-		limiter := NewLimiter(keyer, limit1, limit2)
+		limiter := NewLimiter(keyFunc, limit1, limit2)
 		now := time.Now()
 
 		b.ResetTimer()
@@ -136,13 +136,13 @@ func BenchmarkLimiter_PeekWithDetails_MultipleBuckets(b *testing.B) {
 }
 
 func BenchmarkLimiter_PeekWithDebug_SingleBucket(b *testing.B) {
-	keyer := func(id int) string {
+	keyFunc := func(id int) string {
 		return "peek-debug-single-bucket"
 	}
 
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
-		limiter := NewLimiter(keyer, limit)
+		limiter := NewLimiter(keyFunc, limit)
 		now := time.Now()
 
 		b.ReportAllocs()
@@ -155,7 +155,7 @@ func BenchmarkLimiter_PeekWithDebug_SingleBucket(b *testing.B) {
 	b.Run("MultipleLimits", func(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
-		limiter := NewLimiter(keyer, limit1, limit2)
+		limiter := NewLimiter(keyFunc, limit1, limit2)
 		now := time.Now()
 
 		b.ReportAllocs()
@@ -168,13 +168,13 @@ func BenchmarkLimiter_PeekWithDebug_SingleBucket(b *testing.B) {
 
 func BenchmarkLimiter_PeekWithDebug_MultipleBuckets(b *testing.B) {
 	const buckets = 1000
-	keyer := func(id int) int {
+	keyFunc := func(id int) int {
 		return id
 	}
 
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
-		limiter := NewLimiter(keyer, limit)
+		limiter := NewLimiter(keyFunc, limit)
 		now := time.Now()
 
 		b.ResetTimer()
@@ -188,7 +188,7 @@ func BenchmarkLimiter_PeekWithDebug_MultipleBuckets(b *testing.B) {
 	b.Run("MultipleLimits", func(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
-		limiter := NewLimiter(keyer, limit1, limit2)
+		limiter := NewLimiter(keyFunc, limit1, limit2)
 		now := time.Now()
 
 		b.ResetTimer()

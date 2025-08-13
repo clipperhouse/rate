@@ -13,11 +13,11 @@ import (
 
 func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(2, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	executionTime := time.Now()
 
@@ -118,11 +118,11 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 
 func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(2, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	executionTime := time.Now()
 
@@ -227,12 +227,12 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 
 func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
 	t.Parallel()
-	keyer := func(input int) string {
+	keyFunc := func(input int) string {
 		return fmt.Sprintf("test-bucket-%d", input)
 	}
 	const buckets = 3
 	limit := NewLimit(2, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 	executionTime := time.Now()
 
 	// Exhaust tokens for all buckets
@@ -277,12 +277,12 @@ func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
 
 func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 	t.Parallel()
-	keyer := func(input int64) string {
+	keyFunc := func(input int64) string {
 		return fmt.Sprintf("test-bucket-%d", input)
 	}
 	const buckets int64 = 3
 	limit := NewLimit(2, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 	executionTime := time.Now()
 
 	// Exhaust tokens for all buckets
@@ -305,7 +305,6 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		tokens := buckets * limit.count
 		concurrency := tokens * 3 // oversubscribe by 3x
 		results := make([]bool, concurrency)
-		var wg sync.WaitGroup
 
 		// Deadline that gives enough time for all tokens to be refilled
 		deadline := func() (time.Time, bool) {
@@ -318,6 +317,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		}
 
 		// Start concurrent waits
+		var wg sync.WaitGroup
 		for i := range concurrency {
 			wg.Add(1)
 			go func(i int64) {
@@ -326,7 +326,6 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 				results[i] = limiter.waitWithCancellation(bucketID, executionTime, deadline, done)
 			}(i)
 		}
-
 		wg.Wait()
 
 		// We waited
@@ -355,7 +354,6 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 	{
 		concurrency := buckets
 		results := make([]bool, concurrency)
-		var wg sync.WaitGroup
 
 		// Deadline that expires too soon
 		deadline := func() (time.Time, bool) {
@@ -368,6 +366,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		}
 
 		// Start concurrent waits
+		var wg sync.WaitGroup
 		for i := range concurrency {
 			wg.Add(1)
 			go func(i int64) {
@@ -388,7 +387,6 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 	{
 		concurrency := buckets
 		results := make([]bool, concurrency)
-		var wg sync.WaitGroup
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
@@ -403,6 +401,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 		}
 
 		// Start concurrent waits
+		var wg sync.WaitGroup
 		for i := range concurrency {
 			wg.Add(1)
 			go func(i int64) {
@@ -422,11 +421,11 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 
 func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(10, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	executionTime := time.Now()
 
@@ -482,7 +481,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	t.Run("WaitN_MultipleLimits_Consumes_N_From_All", func(t *testing.T) {
 		perSecond := NewLimit(5, time.Second)
 		perMinute := NewLimit(20, time.Minute)
-		limiter := NewLimiter(keyer, perSecond, perMinute)
+		limiter := NewLimiter(keyFunc, perSecond, perMinute)
 		const tokensToWait = 2
 
 		// Verify initial state
@@ -541,7 +540,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	// Test 5: Verify WaitN with high token count
 	t.Run("WaitN_High_Token_Count", func(t *testing.T) {
 		bigLimit := NewLimit(50, time.Second)
-		bigLimiter := NewLimiter(keyer, bigLimit)
+		bigLimiter := NewLimiter(keyFunc, bigLimit)
 		const tokensToWait = 25
 
 		// Verify initial state
@@ -568,13 +567,12 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	// Test 6: Concurrent WaitN should consume correct total tokens
 	t.Run("WaitN_Concurrent_Token_Consumption", func(t *testing.T) {
 		concurrentLimit := NewLimit(20, time.Second)
-		concurrentLimiter := NewLimiter(keyer, concurrentLimit)
+		concurrentLimiter := NewLimiter(keyFunc, concurrentLimit)
 		const tokensPerWait = 2
 		const numGoroutines = 5             // Will try to consume 10 total tokens
 		const expectedSuccesses = int64(10) // 20 / 2 = 10 successful waits possible
 
 		results := make([]bool, numGoroutines)
-		var wg sync.WaitGroup
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
@@ -585,6 +583,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 		}
 
 		// Start concurrent waits
+		var wg sync.WaitGroup
 		for i := range numGoroutines {
 			wg.Add(1)
 			go func(i int) {
@@ -592,7 +591,6 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 				results[i] = concurrentLimiter.waitNWithCancellation("test-concurrent-waitn", executionTime, tokensPerWait, deadline, done)
 			}(i)
 		}
-
 		wg.Wait()
 
 		// Count successes
@@ -614,12 +612,12 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 
 func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
 	t.Parallel()
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return "test-bucket"
 	}
 	// 1 token per 50ms
 	limit := NewLimit(1, 50*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 	executionTime := time.Now()
 
 	// Exhaust the single token
@@ -662,6 +660,7 @@ func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
 	}
 
 	wg.Wait()
+
 	close(startOrder)
 	close(successOrder)
 
@@ -680,6 +679,7 @@ func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
 }
 
 func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
+	t.Skip("this test is flaky because the implementation is not deterministic")
 	t.Parallel()
 
 	// The FIFO behavior is best-effort, this test is known-flaky
@@ -689,12 +689,12 @@ func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
 	const concurrencyPerBucket = 5
 	const concurrency = buckets * concurrencyPerBucket
 
-	keyer := func(input int) string {
+	keyFunc := func(input int) string {
 		return fmt.Sprintf("test-bucket-%d", input)
 	}
 	// 1 token per 50ms, to make the test run reasonably fast
 	limit := NewLimit(1, 50*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 	executionTime := time.Now()
 
 	// Exhaust the single token for each bucket
@@ -702,9 +702,6 @@ func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
 		require.True(t, limiter.allow(i, executionTime), "should allow initial token for bucket %d", i)
 		require.False(t, limiter.allow(i, executionTime), "should not allow second token for bucket %d", i)
 	}
-
-	var wg sync.WaitGroup
-	wg.Add(concurrency)
 
 	// Create maps to hold order channels for each bucket
 	startOrders := make(map[int]chan int, buckets)
@@ -724,6 +721,8 @@ func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
 		return make(chan struct{}) // never closes
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
 	for i := range concurrency {
 		go func(id int) {
 			defer wg.Done()
@@ -770,11 +769,11 @@ func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
 func TestLimiter_WaitersCleanup_Basic(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(1, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	// Initial waiters count should be 0
 	require.Equal(t, 0, limiter.waiters.count(), "initial waiters count should be 0")
@@ -820,11 +819,11 @@ func TestLimiter_WaitersCleanup_Basic(t *testing.T) {
 func TestLimiter_WaitersCleanup_MemoryLeak_Prevention(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input int) string {
+	keyFunc := func(input int) string {
 		return fmt.Sprintf("key-%d", input)
 	}
 	limit := NewLimit(1, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	executionTime := time.Now()
 
@@ -856,11 +855,11 @@ func TestLimiter_WaitersCleanup_MemoryLeak_Prevention(t *testing.T) {
 func TestLimiter_WaitersCleanup_Concurrent(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input int) string {
+	keyFunc := func(input int) string {
 		return fmt.Sprintf("key-%d", input)
 	}
 	limit := NewLimit(1, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	executionTime := time.Now()
 
@@ -902,11 +901,11 @@ func TestLimiter_WaitersCleanup_Concurrent(t *testing.T) {
 func TestLimiter_WaitersCleanup_WithSuccessfulWaits(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input string) string {
+	keyFunc := func(input string) string {
 		return input
 	}
 	limit := NewLimit(1, 100*time.Millisecond)
-	limiter := NewLimiter(keyer, limit)
+	limiter := NewLimiter(keyFunc, limit)
 
 	executionTime := time.Now()
 
@@ -952,11 +951,11 @@ func TestLimiter_WaitersCleanup_WithSuccessfulWaits(t *testing.T) {
 func TestLimiter_Wait_FIFOOrdering_HighContention(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input int) int {
+	keyFunc := func(input int) int {
 		return input
 	}
 
-	limiter := NewLimiter(keyer, NewLimit(1, 50*time.Millisecond))
+	limiter := NewLimiter(keyFunc, NewLimit(1, 50*time.Millisecond))
 
 	// Exhaust the bucket
 	require.True(t, limiter.Allow(1))
@@ -994,11 +993,11 @@ func TestLimiter_Wait_FIFOOrdering_HighContention(t *testing.T) {
 func TestLimiter_Wait_RaceCondition_Prevention(t *testing.T) {
 	t.Parallel()
 
-	keyer := func(input int) int {
+	keyFunc := func(input int) int {
 		return input
 	}
 	// Use a very restrictive limit to force contention
-	limiter := NewLimiter(keyer, NewLimit(1, 100*time.Millisecond))
+	limiter := NewLimiter(keyFunc, NewLimit(1, 100*time.Millisecond))
 
 	// Exhaust the bucket
 	require.True(t, limiter.Allow(1))

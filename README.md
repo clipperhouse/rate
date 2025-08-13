@@ -1,12 +1,12 @@
 [![Tests](https://github.com/clipperhouse/rate/actions/workflows/tests.yml/badge.svg)](https://github.com/clipperhouse/rate/actions/workflows/tests.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/clipperhouse/rate.svg)](https://pkg.go.dev/github.com/clipperhouse/rate)
 
-I am designing a new, composable rate limiter for Go, with an emphasis on clean API and low overhead.
+A new, composable rate limiter for Go, with an emphasis on clean API and low overhead.
 
-Rate limiters are typically an expression of several layers of policy. You might limit by user, by product, or by URL, or all of the above. You might allow short spikes; you might apply dynamic limits; you may want to stack several limits on top of one another.
+Rate limiters are typically an expression of several layers of policy. You might limit by user, or by resource, or both. You might allow short spikes; you might apply dynamic limits; you may want to stack several limits on top of one another.
 
-This library intends to make all the above use cases expressible, readable and easy to reason about.
+This library intends to make the above use cases expressible, readable and easy to reason about.
 
-Early days! I want your feedback, here on GitHub or [on 𝕏](https://x.com/clipperhouse).
+Early days! I want your feedback, on GitHub or [on 𝕏](https://x.com/clipperhouse).
 
 ## Quick start
 
@@ -40,10 +40,7 @@ in production -- layered policies, dynamic policies, etc.
 
 So, let’s make easy things easy and hard things possible.
 
-#### One or many
-
-My first concept of composability is that you can have one or many of anything, and
-the library will do the right thing.
+#### One or many limits
 
 You might wish to allow short spikes while preventing sustained load. So a `Limiter`
 can accept any number of `Limit`’s:
@@ -61,12 +58,36 @@ limiter := rate.NewLimiter(byIP, perSecond, perMinute)
 ```
 
 The `limiter.Allow()` call checks both limits; all must allow or the request is denied.
-And, it will only consume tokens when _all_ limits allow.
+If denied, it will deduct no tokens from any limit.
 
-#### Dynamic
+#### One or many limiters
 
-Rate limiters often need arbitrary logic, depending on your app. The best way to express
-this is funcs, instead of some sort of config.
+```go
+func byUser(req *http.Request) string {
+    return getTheUserID()
+}
+
+userLimit := rate.NewLimit(100, time.Minute)
+userLimiter := rate.NewLimiter(byUser, userLimit)
+
+func byResource(req *http.Request) string {
+    return req.Path
+}
+
+resourceLimit := rate.NewLimit(5, time.Second)
+resourceLimiter := rate.NewLimiter(byResource, resourceLimit)
+
+combined := rate.Combine(userLimiter, resourceLimiter)
+
+// in your app, a single transactional allow call:
+
+if combined.Allow(r)...
+
+```
+
+#### Dynamic limits
+
+Dynamic == funcs.
 
 ```go
 // Dynamic based on customer
@@ -105,16 +126,16 @@ limitFunc := func(r *http.Request) Limit {
     }
     return writeLimit
 }
-limiter := rate.NewLimiterFunc(keyer, limitFunc)
+limiter := rate.NewLimiterFunc(keyFunc, limitFunc)
 ```
 
+#### Dynamic costs
 
 ```go
-// Dynamic based on expense, another way
 
 // think of 100 as "a dollar"
 limit := rate.NewLimit(100, time.Second)
-limiter := rate.NewLimiter(keyer, limit)
+limiter := rate.NewLimiter(keyFunc, limit)
 
 // somewhere in the app:
 
@@ -143,20 +164,20 @@ For a soft definition of “transactional”. Tokens are only deducted when all
 limits pass, otherwise no tokens are deducted. I think this is the right semantics,
 but perhaps more importantly, it mitigates noisy-neighbor DOS attempts.
 
-There is only one call to `time.Now()`, and all subsequent logic uses that time
--- instead of calling `time.Now()` again a millisecond later. Inspired by databases,
-where a transaction has a consistent snapshot view that applies throughout.
+There is only one call to `time.Now()`, and all subsequent logic uses that time.
+Inspired by databases, where a transaction has a consistent snapshot view that
+applies throughout.
 
 #### Efficient
 
-We’ve worked hard to have minimal (often zero) allocations, minimize branching,
-etc. An `Allow()` call takes around 60ns on my machine. Here are some [benchmarks
-of other Go rate limiters](https://github.com/sethvargo/go-limiter#speed-and-performance).
+You should usually see zero allocations. An `Allow()` call takes
+around 60ns on my machine. Here are some
+[benchmarks of other Go rate limiters](https://github.com/sethvargo/go-limiter#speed-and-performance).
 
 At scale, one might create millions of buckets, so we’ve minimized the [data
 size of that struct](https://github.com/clipperhouse/rate/blob/main/bucket.go).
 
-I had an insight that the state of a bucket is completely expressed by a `time` field
+I had the insight that the state of a bucket is completely expressed by a `time` field
 (in combination with a `Limit`). There is no `token` type or field.
 Calculating the available tokens is just arithmetic on time.
 
@@ -168,11 +189,4 @@ detailed logging.
 
 ## Roadmap
 
-First and foremost, I want some feedback. Please try it and open an issue, or [ping me](https://x.com/clipperhouse).
-
-I’d like to be able to stack multiple `Limiter`s into a single `Limiter`.
-Maybe you want to limit first by customer, then by path, then by region,
-then globally. [TODO open an issue]
-
-We may wish to have a shared store (e.g. Redis) to allow multiple machines to share limits,
-or have persistence. The current implementation is a map in memory.
+First and foremost, I want some feedback. Try it, open an issue, or [ping me](https://x.com/clipperhouse).

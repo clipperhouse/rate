@@ -1,6 +1,8 @@
 package rate
 
-import "time"
+import (
+	"time"
+)
 
 // Allow returns true if one or more tokens are available for the given key.
 // If true, it will consume a token from the key's bucket. If false,
@@ -34,6 +36,23 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
+	// Optimization for single-limit case, likely common
+	if len(r.limits) == 1 {
+		limit := r.limits[0]
+		userKey := r.keyFunc(input)
+		b := r.buckets.loadOrStore(userKey, executionTime, limit)
+
+		b.mu.Lock()
+		defer b.mu.Unlock()
+
+		if !b.hasTokens(executionTime, limit, n) {
+			return false
+		}
+
+		b.consumeTokens(executionTime, limit, n)
+		return true
+	}
+
 	limits := r.getLimits(input)
 	if len(limits) == 0 {
 		// No limits defined, so we allow everything
@@ -54,7 +73,7 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 		buckets = make([]*bucket, 0, len(limits))
 	}
 
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	// We need to collect all buckets and lock them together
 	for _, limit := range limits {
@@ -70,25 +89,21 @@ func (r *Limiter[TInput, TKey]) allowN(input TInput, executionTime time.Time, n 
 	}()
 
 	// Check if all buckets allow
-	allowAll := true
 	for i, b := range buckets {
 		limit := limits[i]
 		if !b.hasTokens(executionTime, limit, n) {
-			allowAll = false
-			break
+			return false
 		}
 	}
 
 	// Consume tokens only when all buckets allow
-	if allowAll {
-		for i := range buckets {
-			b := buckets[i]
-			limit := limits[i]
-			b.consumeTokens(executionTime, limit, n)
-		}
+	for i := range buckets {
+		b := buckets[i]
+		limit := limits[i]
+		b.consumeTokens(executionTime, limit, n)
 	}
 
-	return allowAll
+	return true
 }
 
 // AllowWithDetails returns true if a token is available for the given key,
@@ -125,7 +140,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 	// Allow must be true for all limits, a strict AND operation.
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	limits := r.getLimits(input)
 	if len(limits) == 0 {
@@ -133,8 +148,6 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		details := Details[TInput, TKey]{
 			allowed:         true,
 			executionTime:   executionTime,
-			input:           input,
-			key:             userKey,
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -247,8 +260,6 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 	details := Details[TInput, TKey]{
 		allowed:         allowAll,
 		executionTime:   executionTime,
-		input:           input,
-		key:             userKey,
 		tokensRequested: n,
 		tokensConsumed:  consumed,
 		tokensRemaining: remainingTokens,
@@ -301,7 +312,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime time
 	// If any limit is not allowed, the overall allow is false and
 	// no token is consumed from any bucket.
 
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	limits := r.getLimits(input)
 	if len(limits) == 0 {

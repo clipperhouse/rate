@@ -30,7 +30,7 @@ func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n i
 		return true
 	}
 
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	// For peek operation, we can check each bucket individually
 	// without needing to collect and lock them all together
@@ -83,20 +83,18 @@ func (r *Limiter[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool, D
 }
 
 func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, Details[TInput, TKey]) {
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	limits := r.getLimits(input)
 	if len(limits) == 0 {
 		// No limits defined, so we allow everything
 		return true, Details[TInput, TKey]{
 			allowed:         true,
+			executionTime:   executionTime,
 			tokensRequested: n,
 			tokensConsumed:  0,
-			executionTime:   executionTime,
 			tokensRemaining: 0,
 			retryAfter:      0,
-			input:           input,
-			key:             userKey,
 		}
 	}
 
@@ -147,13 +145,11 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 
 	return allowAll, Details[TInput, TKey]{
 		allowed:         allowAll,
+		executionTime:   executionTime,
 		tokensRequested: n,
 		tokensConsumed:  0,
-		executionTime:   executionTime,
 		tokensRemaining: remainingTokens,
 		retryAfter:      retryAfter,
-		input:           input,
-		key:             userKey,
 	}
 }
 
@@ -186,7 +182,7 @@ func (r *Limiter[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, []D
 }
 
 func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {
-	userKey := r.keyer(input)
+	userKey := r.keyFunc(input)
 
 	limits := r.getLimits(input)
 	if len(limits) == 0 {

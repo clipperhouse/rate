@@ -1,3 +1,7 @@
+---
+alwaysApply: true
+---
+
 # Go Rate Limiter Library - Coding Instructions
 
 ## Design goals

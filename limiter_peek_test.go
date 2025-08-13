@@ -571,8 +571,6 @@ func TestLimiter_PeekWithDebug_Func(t *testing.T) {
 	require.Equal(t, time.Duration(0), d.RetryAfter(), "retry after should be 0 for allowed request")
 }
 
-// TestLimiter_PeekWithDetails provides comprehensive test coverage for peekNWithDetails
-// focusing on RetryAfter behavior similar to allowNWithDetails tests
 func TestLimiter_PeekWithDetails(t *testing.T) {
 	t.Parallel()
 	keyFunc := func(input string) string { return input }

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLimiters_PeekN tests the new peekN functionality for multiple limiters
 func TestLimiters_PeekN(t *testing.T) {
 	t.Parallel()
 
@@ -493,7 +492,6 @@ func TestLimiters_PeekN(t *testing.T) {
 	})
 }
 
-// TestLimiters_PeekNWithDetails tests the new peekNWithDetails functionality for multiple limiters
 func TestLimiters_PeekNWithDetails(t *testing.T) {
 	t.Parallel()
 
@@ -984,7 +982,6 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 	})
 }
 
-// TestLimiters_PeekNWithDebug tests the new peekNWithDebug functionality for multiple limiters
 func TestLimiters_PeekNWithDebug(t *testing.T) {
 	t.Parallel()
 

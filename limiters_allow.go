@@ -4,6 +4,14 @@ import (
 	"time"
 )
 
+func (rs *Limiters[TInput, TKey]) Allow(input TInput) bool {
+	return rs.AllowN(input, 1)
+}
+
+func (rs *Limiters[TInput, TKey]) AllowN(input TInput, n int64) bool {
+	return rs.allowN(input, time.Now(), n)
+}
+
 // allowN returns true if at least `n` tokens are available for the given input,
 // across all Limiters.
 //
@@ -93,6 +101,14 @@ func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime time.Time, 
 		b.consumeTokens(executionTime, limits[i], n)
 	}
 	return true
+}
+
+func (rs *Limiters[TInput, TKey]) AllowWithDetails(input TInput) (bool, Details[TInput, TKey]) {
+	return rs.AllowNWithDetails(input, 1)
+}
+
+func (rs *Limiters[TInput, TKey]) AllowNWithDetails(input TInput, n int64) (bool, Details[TInput, TKey]) {
+	return rs.allowNWithDetails(input, time.Now(), n)
 }
 
 func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime time.Time, n int64) (bool, Details[TInput, TKey]) {
@@ -219,6 +235,14 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 		tokensRemaining: remainingTokens,
 		retryAfter:      retryAfter,
 	}
+}
+
+func (rs *Limiters[TInput, TKey]) AllowWithDebug(input TInput) (bool, []Debug[TInput, TKey]) {
+	return rs.AllowNWithDebug(input, 1)
+}
+
+func (rs *Limiters[TInput, TKey]) AllowNWithDebug(input TInput, n int64) (bool, []Debug[TInput, TKey]) {
+	return rs.allowNWithDebug(input, time.Now(), n)
 }
 
 func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {

@@ -45,28 +45,28 @@ func (b *bucket) hasTokens(executionTime time.Time, limit Limit, n int64) bool {
 //
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) consumeTokens(executionTime time.Time, limit Limit, n int64) {
-	b.checkCutoff(executionTime, limit)
-	b.time = b.time.Add(limit.durationPerToken * time.Duration(n))
+	cutoff := b.cutoff(executionTime, limit)
+	b.time = cutoff.Add(limit.durationPerToken * time.Duration(n))
 }
 
-func (b *bucket) checkCutoff(executionTime time.Time, limit Limit) (updated bool) {
-	// If the bucket is old, it should not mistakenly be interpreted as having too many tokens
+// cutoff checks if the bucket is old, and if so, returns its
+// maximum legitimate value, which is its "full" state.
+//
+// ⚠️ caller is responsible for locking appropriately
+func (b *bucket) cutoff(executionTime time.Time, limit Limit) time.Time {
 	cutoff := executionTime.Add(-limit.period)
 	if b.time.Before(cutoff) {
-		b.time = cutoff
-		return true
+		return cutoff
 	}
-	return false
+	return b.time
 }
 
 // remainingTokens returns the number of tokens remaining in the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) remainingTokens(executionTime time.Time, limit Limit) int64 {
-	// TODO: not sure I love this, maybe should not mutate the bucket
-	// for this read-only operation.
-	b.checkCutoff(executionTime, limit)
-	return remainingTokens(executionTime, b.time, limit)
+	cutoff := b.cutoff(executionTime, limit)
+	return remainingTokens(executionTime, cutoff, limit)
 }
 
 // remainingTokens returns the number of tokens based on the difference
@@ -83,8 +83,6 @@ func remainingTokens(executionTime time.Time, bucketTime time.Time, limit Limit)
 //
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) nextTokensTime(executionTime time.Time, limit Limit, n int64) time.Time {
-	// TODO: not sure I love this, maybe should not mutate the bucket
-	// for this read-only operation.
-	b.checkCutoff(executionTime, limit)
-	return b.time.Add(limit.durationPerToken * time.Duration(n))
+	cutoff := b.cutoff(executionTime, limit)
+	return cutoff.Add(limit.durationPerToken * time.Duration(n))
 }

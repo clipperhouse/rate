@@ -7,31 +7,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBucket_HasEnoughTokens(t *testing.T) {
+func TestBucket_HasTokens(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now()
 	// One token at a time
 	{
+		now := time.Now()
+		const n = 1
 		limit := NewLimit(9, time.Second)
 		bucket := newBucket(now, limit)
+		remaining := bucket.remainingTokens(now, limit)
 
 		for range limit.count {
-			actual := bucket.hasTokens(now, limit, 1)
+			actual := bucket.hasTokens(now, limit, n)
 			require.True(t, actual, "expected to have enough tokens initially")
 		}
 
+		// any number of hasTokens should not mutate the bucket
+		require.Equal(t, remaining, bucket.remainingTokens(now, limit), "remaining tokens should not change")
+
 		// Consume all tokens
 		for range limit.count {
-			bucket.consumeTokens(now, limit, 1)
+			bucket.consumeTokens(now, limit, n)
 		}
 
-		actual := bucket.hasTokens(now, limit, 1)
+		actual := bucket.hasTokens(now, limit, n)
 		require.False(t, actual, "expected to have no tokens after consuming all")
+
+		// refill one token
+		now = now.Add(limit.durationPerToken)
+		actual = bucket.hasTokens(now, limit, n)
+		require.True(t, actual, "expected to have one token after refilling")
 	}
 
 	// Multiple tokens
 	{
+		now := time.Now()
 		limit := NewLimit(9, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -48,6 +59,20 @@ func TestBucket_HasEnoughTokens(t *testing.T) {
 		bucket.consumeTokens(now, limit, 5)
 		require.False(t, bucket.hasTokens(now, limit, 1), "expected to have no tokens after consuming 5")
 		require.False(t, bucket.hasTokens(now, limit, 2), "expected not to have 2 tokens after consuming 5")
+
+		// now we're in debt by 4 tokens. not something one should do, but
+		// bucket.consumeTokens is a simple primitive, it's up to the caller.
+
+		// refill 6 tokens, netting +2 tokens
+		now = now.Add(6 * limit.durationPerToken)
+		require.True(t, bucket.hasTokens(now, limit, 1), "expected to have one token after refilling")
+		require.True(t, bucket.hasTokens(now, limit, 2), "expected to have two tokens after refilling")
+		require.False(t, bucket.hasTokens(now, limit, 3), "expected not to have 3 tokens after refilling")
+
+		// consume 2 tokens
+		bucket.consumeTokens(now, limit, 2)
+		require.False(t, bucket.hasTokens(now, limit, 1), "expected not to have one token after consuming 2")
+		require.False(t, bucket.hasTokens(now, limit, 2), "expected not to have 2 tokens after consuming 2")
 	}
 }
 
@@ -73,27 +98,6 @@ func TestBucket_RemainingTokens(t *testing.T) {
 	}
 }
 
-func TestBucket_ConsumeToken(t *testing.T) {
-	t.Parallel()
-	now := time.Now()
-	limit := NewLimit(11, time.Second)
-	bucket := newBucket(now, limit)
-
-	for i := range limit.count {
-		{
-			actual := bucket.remainingTokens(now, limit)
-			expected := limit.count - i
-			require.Equal(t, expected, actual, "remaining tokens expected consumption")
-		}
-		bucket.consumeTokens(now, limit, 1)
-		{
-			actual := bucket.remainingTokens(now, limit)
-			expected := limit.count - i - 1
-			require.Equal(t, expected, actual, "remaining tokens should be one less after consumption")
-		}
-	}
-}
-
 func TestBucket_ConsumeTokens(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -108,76 +112,185 @@ func TestBucket_ConsumeTokens(t *testing.T) {
 		expected := n
 		require.Equal(t, expected, actual, "remaining tokens should be decremented by the number of consumed tokens")
 	}
-}
 
-func TestBucket_ConsumeToken_OldBucket(t *testing.T) {
-	// ensure that an old bucket does proper accounting of consumed tokens
-	// if the arithmetic is too naive, and old bucket would be mistakenly
-	// interpreted as having more tokens that the limit
-	t.Parallel()
-	executionTime := time.Now()
-	limit := NewLimit(11, time.Second)
-	bucket := newBucket(executionTime, limit)
+	t.Run("old bucket", func(t *testing.T) {
+		t.Parallel()
+		executionTime := time.Now()
+		limit := NewLimit(11, time.Second)
+		bucket := newBucket(executionTime, limit)
 
-	// exhaust the bucket
-	for range limit.count {
+		// exhaust the bucket
+		for range limit.count {
+			bucket.consumeTokens(executionTime, limit, 1)
+		}
+		require.False(t, bucket.hasTokens(executionTime, limit, 1), "expected to have no tokens after exhausting the bucket")
+
+		// age the bucket
+		executionTime = executionTime.Add(time.Hour)
+
+		// almost exhaust it
+		for range limit.count - 1 {
+			bucket.consumeTokens(executionTime, limit, 1)
+		}
+		require.True(t, bucket.hasTokens(executionTime, limit, 1), "expected to have one token after exhausting the old bucket")
+
+		// consume the last token
 		bucket.consumeTokens(executionTime, limit, 1)
-	}
-	require.False(t, bucket.hasTokens(executionTime, limit, 1), "expected to have no tokens after exhausting the bucket")
-
-	// age the bucket
-	executionTime = executionTime.Add(time.Hour)
-
-	// exhaust it quickly again
-	for range limit.count {
-		bucket.consumeTokens(executionTime, limit, 1)
-	}
-	require.False(t, bucket.hasTokens(executionTime, limit, 1), "expected to have no tokens after exhausting the old bucket")
+		require.False(t, bucket.hasTokens(executionTime, limit, 1), "expected to have no tokens after consuming the last token")
+	})
 }
 
-func TestBucket_CheckCutoff(t *testing.T) {
+func TestBucket_NextTokensTime(t *testing.T) {
 	t.Parallel()
-	now := time.Now()
-	limit := NewLimit(13, time.Second)
-	bucket := newBucket(now, limit)
 
-	require.False(t, bucket.checkCutoff(now, limit), "expected no cutoff update on fresh bucket")
+	t.Run("basic single token", func(t *testing.T) {
+		t.Parallel()
+		now := time.Now()
+		limit := NewLimit(10, time.Second)
+		bucket := newBucket(now, limit)
 
-	bucket.consumeTokens(now, limit, 1)
-	require.False(t, bucket.checkCutoff(now, limit), "expected no cutoff update bucket after consumption")
+		// Initially should have all tokens available
+		// The bucket starts at (now - period), so 1 token is available immediately
+		nextTime := bucket.nextTokensTime(now, limit, 1)
+		expected := now.Add(-limit.period).Add(limit.durationPerToken)
+		require.Equal(t, expected, nextTime, "next tokens time should be calculated from bucket's full state")
 
-	now = now.Add(time.Hour)
-	require.True(t, bucket.checkCutoff(now, limit), "expected cutoff update on old bucket")
-}
+		// Consume all tokens
+		for range limit.count {
+			bucket.consumeTokens(now, limit, 1)
+		}
 
-func TestBucket_HasToken(t *testing.T) {
-	t.Parallel()
-	now := time.Now()
+		// After consuming all 10 tokens, bucket.time = now - period + 10*durationPerToken
+		// Next token should be available at bucket.time + 1*durationPerToken
+		nextTime = bucket.nextTokensTime(now, limit, 1)
+		expected = now.Add(-limit.period).Add(11 * limit.durationPerToken) // 10 consumed + 1 requested
+		require.Equal(t, expected, nextTime, "next token should be available after one duration per token from bucket time")
 
-	// Tokens refill at ~111ms intervals
-	limit := NewLimit(9, time.Second)
-	bucket := newBucket(now, limit)
+		// Next 5 tokens should be available at bucket.time + 5*durationPerToken
+		nextTime = bucket.nextTokensTime(now, limit, 5)
+		expected = now.Add(-limit.period).Add(15 * limit.durationPerToken) // 10 consumed + 5 requested
+		require.Equal(t, expected, nextTime, "next 5 tokens should be available after 5 * duration per token from bucket time")
+	})
 
-	for range limit.count * 2 {
-		// any number of hasToken should return true, not mutate the bucket
-		actual := bucket.hasTokens(now, limit, 1)
-		require.True(t, actual, "expected to allow request with any number of hasToken calls")
-	}
+	t.Run("multiple tokens", func(t *testing.T) {
+		t.Parallel()
+		now := time.Now()
+		limit := NewLimit(10, time.Second)
+		bucket := newBucket(now, limit)
 
-	// Consume all the tokens
-	for range limit.count {
-		bucket.consumeTokens(now, limit, 1)
-	}
+		// Consume 3 tokens
+		bucket.consumeTokens(now, limit, 3)
 
-	require.False(t, bucket.hasTokens(now, limit, 1), "should have exhausted tokens")
+		// After consuming 3 tokens, the bucket time is now at (now - period + 3*durationPerToken)
+		// When nextTokensTime is called, cutoff() returns bucket.time (since it's not before cutoff)
+		// So nextTokensTime returns bucket.time + n*durationPerToken
+		nextTime := bucket.nextTokensTime(now, limit, 1)
+		expected := now.Add(-limit.period).Add(4 * limit.durationPerToken) // 3 consumed + 1 requested
+		require.Equal(t, expected, nextTime, "next 1 token should be calculated from bucket time after consuming 3")
 
-	for range limit.count * 2 {
-		// any number of hasToken should return false with no remaining tokens
-		actual := bucket.hasTokens(now, limit, 1)
-		require.False(t, actual, "expected all tokens to be gone")
-	}
+		// Next 7 tokens should be available at bucket.time + 7*durationPerToken
+		nextTime = bucket.nextTokensTime(now, limit, 7)
+		expected = now.Add(-limit.period).Add(10 * limit.durationPerToken) // 3 consumed + 7 requested
+		require.Equal(t, expected, nextTime, "next 7 tokens should be calculated from bucket time after consuming 3")
 
-	// Refill one token
-	now = now.Add(limit.durationPerToken)
-	require.True(t, bucket.hasTokens(now, limit, 1), "hasToken should return true after token refill")
+		// Next 8 tokens should be available at bucket.time + 8*durationPerToken
+		nextTime = bucket.nextTokensTime(now, limit, 8)
+		expected = now.Add(-limit.period).Add(11 * limit.durationPerToken) // 3 consumed + 8 requested
+		require.Equal(t, expected, nextTime, "next 8 tokens should be calculated from bucket time after consuming 3")
+
+		// Next 10 tokens should be available at bucket.time + 10*durationPerToken
+		nextTime = bucket.nextTokensTime(now, limit, 10)
+		expected = now.Add(-limit.period).Add(13 * limit.durationPerToken) // 3 consumed + 10 requested
+		require.Equal(t, expected, nextTime, "next 10 tokens should be calculated from bucket time after consuming 3")
+	})
+
+	t.Run("aging bucket respects cutoff", func(t *testing.T) {
+		t.Parallel()
+		now := time.Now()
+		limit := NewLimit(10, time.Second)
+		bucket := newBucket(now, limit)
+
+		// Consume all tokens
+		for range limit.count {
+			bucket.consumeTokens(now, limit, 1)
+		}
+
+		// Age the bucket significantly (more than the period)
+		agedNow := now.Add(2 * limit.period)
+
+		// Even though the bucket is old, nextTokensTime should respect the cutoff
+		// and calculate from the cutoff time, not return spurious values.
+		// The bucket should be considered "full" at the cutoff time.
+		// For aged buckets, cutoff() returns (agedNow - period) since bucket.time is before cutoff
+		nextTime := bucket.nextTokensTime(agedNow, limit, 1)
+		expected := agedNow.Add(-limit.period).Add(limit.durationPerToken)
+		require.Equal(t, expected, nextTime, "next token should be calculated from cutoff for aged bucket")
+
+		nextTime = bucket.nextTokensTime(agedNow, limit, 5)
+		expected = agedNow.Add(-limit.period).Add(5 * limit.durationPerToken)
+		require.Equal(t, expected, nextTime, "next 5 tokens should be calculated from cutoff for aged bucket")
+
+		nextTime = bucket.nextTokensTime(agedNow, limit, 10)
+		expected = agedNow.Add(-limit.period).Add(10 * limit.durationPerToken)
+		require.Equal(t, expected, nextTime, "next 10 tokens should be calculated from cutoff for aged bucket")
+
+		// Even requesting more tokens than the limit should be calculated from cutoff
+		nextTime = bucket.nextTokensTime(agedNow, limit, 15)
+		expected = agedNow.Add(-limit.period).Add(15 * limit.durationPerToken)
+		require.Equal(t, expected, nextTime, "next 15 tokens should be calculated from cutoff for aged bucket")
+	})
+
+	t.Run("partially aged bucket", func(t *testing.T) {
+		t.Parallel()
+		now := time.Now()
+		limit := NewLimit(10, time.Second)
+		bucket := newBucket(now, limit)
+
+		// Consume all tokens
+		for range limit.count {
+			bucket.consumeTokens(now, limit, 1)
+		}
+
+		// Age the bucket by half the period
+		halfAgedNow := now.Add(limit.period / 2)
+
+		// Should still calculate from the bucket time, which is (now - period + 10*durationPerToken)
+		// since the bucket is not old enough to trigger cutoff
+		nextTime := bucket.nextTokensTime(halfAgedNow, limit, 1)
+		expected := now.Add(-limit.period).Add(11 * limit.durationPerToken) // 10 consumed + 1 requested
+		require.Equal(t, expected, nextTime, "next token should be calculated from bucket time for partially aged bucket")
+
+		// Age the bucket by exactly the period
+		exactlyAgedNow := now.Add(limit.period)
+
+		// Now the bucket should be considered "full" at the cutoff
+		// cutoff() returns (exactlyAgedNow - period) since bucket.time is before cutoff
+		nextTime = bucket.nextTokensTime(exactlyAgedNow, limit, 1)
+		expected = exactlyAgedNow.Add(-limit.period).Add(limit.durationPerToken)
+		require.Equal(t, expected, nextTime, "next token should be calculated from cutoff for exactly aged bucket")
+	})
+
+	t.Run("negative token consumption", func(t *testing.T) {
+		t.Parallel()
+		now := time.Now()
+		limit := NewLimit(10, time.Second)
+		bucket := newBucket(now, limit)
+
+		// Consume some tokens first
+		bucket.consumeTokens(now, limit, 5)
+
+		// Then "add" tokens back with negative consumption
+		bucket.consumeTokens(now, limit, -2)
+
+		// After consuming 5 tokens and then adding 2 back, bucket.time = now - period + 3*durationPerToken
+		// Should now have 7 tokens available at bucket.time + 7*durationPerToken
+		nextTime := bucket.nextTokensTime(now, limit, 7)
+		expected := now.Add(-limit.period).Add(10 * limit.durationPerToken) // 3 consumed + 7 requested
+		require.Equal(t, expected, nextTime, "next 7 tokens should be calculated from bucket time after adding tokens back")
+
+		// But 8 tokens should be available at bucket.time + 8*durationPerToken
+		nextTime = bucket.nextTokensTime(now, limit, 8)
+		expected = now.Add(-limit.period).Add(11 * limit.durationPerToken) // 3 consumed + 8 requested
+		require.Equal(t, expected, nextTime, "next 8 tokens should be calculated from bucket time after adding tokens back")
+	})
 }

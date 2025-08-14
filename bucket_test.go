@@ -10,8 +10,8 @@ import (
 func TestBucket_HasTokens(t *testing.T) {
 	t.Parallel()
 
-	// One token at a time
-	{
+	t.Run("SingleToken", func(t *testing.T) {
+		t.Parallel()
 		now := time.Now()
 		const n = 1
 		limit := NewLimit(9, time.Second)
@@ -38,10 +38,10 @@ func TestBucket_HasTokens(t *testing.T) {
 		now = now.Add(limit.durationPerToken)
 		actual = bucket.hasTokens(now, limit, n)
 		require.True(t, actual, "expected to have one token after refilling")
-	}
+	})
 
-	// Multiple tokens
-	{
+	t.Run("MultipleTokens", func(t *testing.T) {
+		t.Parallel()
 		now := time.Now()
 		limit := NewLimit(9, time.Second)
 		bucket := newBucket(now, limit)
@@ -73,7 +73,36 @@ func TestBucket_HasTokens(t *testing.T) {
 		bucket.consumeTokens(now, limit, 2)
 		require.False(t, bucket.hasTokens(now, limit, 1), "expected not to have one token after consuming 2")
 		require.False(t, bucket.hasTokens(now, limit, 2), "expected not to have 2 tokens after consuming 2")
-	}
+	})
+
+	t.Run("AgingBucket", func(t *testing.T) {
+		t.Parallel()
+		now := time.Now()
+		limit := NewLimit(9, time.Second)
+		bucket := newBucket(now, limit)
+
+		// Initially bucket should have 9 tokens
+		require.True(t, bucket.hasTokens(now, limit, 9), "expected to have 9 tokens initially")
+		require.False(t, bucket.hasTokens(now, limit, 10), "expected not to have 10 tokens initially")
+
+		// Age the bucket by more than the period (1 second)
+		// This should trigger the cutoff logic
+		later := now.Add(2 * time.Second)
+
+		// After aging, bucket should be reset to full state due to cutoff
+		require.True(t, bucket.hasTokens(later, limit, 9), "expected to have 9 tokens after aging (cutoff respected)")
+		require.False(t, bucket.hasTokens(later, limit, 10), "expected not to have 10 tokens after aging (cutoff respected)")
+
+		// Consume some tokens and verify cutoff still works
+		bucket.consumeTokens(later, limit, 3)
+		require.True(t, bucket.hasTokens(later, limit, 6), "expected to have 6 tokens after consuming 3")
+		require.False(t, bucket.hasTokens(later, limit, 7), "expected not to have 7 tokens after consuming 3")
+
+		// Age again and verify the bucket is reset to full state due to cutoff
+		later = later.Add(2 * time.Second)
+		require.True(t, bucket.hasTokens(later, limit, 9), "expected to have 9 tokens after second aging (cutoff respected)")
+		require.False(t, bucket.hasTokens(later, limit, 10), "expected not to have 10 tokens after second aging (cutoff respected)")
+	})
 }
 
 func TestBucket_RemainingTokens(t *testing.T) {

@@ -32,8 +32,9 @@ func newBucket(executionTime time.Time, limit Limit) bucket {
 //
 // ⚠️ caller is responsible for locking appropriately
 func (b *bucket) hasTokens(executionTime time.Time, limit Limit, n int64) bool {
+	cutoff := b.cutoff(executionTime, limit)
 	// "not after" is "before or equal"
-	return !b.time.After(executionTime.Add(-limit.durationPerToken * time.Duration(n)))
+	return !cutoff.After(executionTime.Add(-limit.durationPerToken * time.Duration(n)))
 }
 
 // consumeTokens removes `n` tokens from the bucket

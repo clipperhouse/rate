@@ -190,7 +190,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 
 	allowAll := buckets[0].hasTokens(executionTime, limits[0], n)
 	remainingTokens := buckets[0].remainingTokens(executionTime, limits[0])
-	retryAfter := buckets[0].nextTokensTime(executionTime, limits[0], n).Sub(executionTime)
+	retryAfter := buckets[0].retryAfter(executionTime, limits[0], n)
 	for i := 1; i < len(buckets); i++ {
 		b := buckets[i]
 		limit := limits[i]
@@ -201,11 +201,12 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 		if rt < remainingTokens {
 			remainingTokens = rt
 		}
-		ra := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+		ra := b.retryAfter(executionTime, limit, n)
 		if ra > retryAfter {
 			retryAfter = ra
 		}
 	}
+
 	if remainingTokens < 0 {
 		remainingTokens = 0
 	}
@@ -224,9 +225,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 			remainingTokens = 0
 		}
 	}
-	if retryAfter < 0 {
-		retryAfter = 0
-	}
+
 	return allowAll, Details[TInput, TKey]{
 		allowed:         allowAll,
 		executionTime:   executionTime,
@@ -350,8 +349,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime ti
 		limit := limits[i]
 		debugs[i].tokensConsumed = 0
 		debugs[i].tokensRemaining = b.remainingTokens(executionTime, limit)
-		retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
-		debugs[i].retryAfter = max(0, retryAfter)
+		debugs[i].retryAfter = b.retryAfter(executionTime, limit, n)
 	}
 
 	return false, debugs

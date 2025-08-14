@@ -86,3 +86,17 @@ func (b *bucket) nextTokensTime(executionTime time.Time, limit Limit, n int64) t
 	cutoff := b.cutoff(executionTime, limit)
 	return cutoff.Add(limit.durationPerToken * time.Duration(n))
 }
+
+// retryAfter returns the duration until `n` tokens might be available,
+// due to the passage of time.
+//
+// Note "might", because concurrent access by other goroutines might
+// consume (or add!) tokens. Treat retryAfter as a prediction, not a guarantee.
+//
+// It returns 0 if the bucket has enough tokens, rather than a spurious negative
+// duration.
+//
+// ⚠️ caller is responsible for locking appropriately
+func (b *bucket) retryAfter(executionTime time.Time, limit Limit, n int64) time.Duration {
+	return max(0, b.nextTokensTime(executionTime, limit, n).Sub(executionTime))
+}

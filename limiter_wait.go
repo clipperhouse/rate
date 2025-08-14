@@ -124,11 +124,11 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 			return true
 		}
 
-		wait := max(details.RetryAfter(), 0)
+		retryAfter := details.RetryAfter()
 
 		// if we can't possibly get a token, fail fast
 		if deadline, ok := deadline(); ok {
-			if deadline.Before(currentTime.Add(wait)) {
+			if deadline.Before(currentTime.Add(retryAfter)) {
 				return false
 			}
 		}
@@ -136,8 +136,8 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 		select {
 		case <-done():
 			return false
-		case <-time.After(wait):
-			currentTime = currentTime.Add(wait)
+		case <-time.After(retryAfter):
+			currentTime = currentTime.Add(retryAfter)
 		}
 	}
 }

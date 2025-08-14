@@ -155,7 +155,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime t
 				// Then get details (these might modify state, but we accept the race condition)
 				// since the important thing is the allowed result
 				rt := b.remainingTokens(executionTime, limit)
-				ra := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+				ra := b.retryAfter(executionTime, limit, n)
 				b.mu.Unlock()
 
 				if remainingTokens == -1 || rt < remainingTokens { // min
@@ -174,7 +174,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime t
 			allowAll = allowAll && allowed
 
 			rt := b.remainingTokens(executionTime, limit)
-			ra := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+			ra := b.retryAfter(executionTime, limit, n)
 
 			if remainingTokens == -1 || rt < remainingTokens { // min
 				remainingTokens = rt
@@ -183,11 +183,6 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime t
 				retryAfter = ra
 			}
 		}
-	}
-
-	// if the request was allowed, retryAfter will be negative
-	if retryAfter < 0 {
-		retryAfter = 0
 	}
 
 	if remainingTokens < 0 {
@@ -291,7 +286,6 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime tim
 				b.mu.Lock()
 
 				allow := b.hasTokens(executionTime, limit, n)
-				retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 				debugs = append(debugs, Debug[TInput, TKey]{
 					allowed:         allow,
 					executionTime:   executionTime,
@@ -301,7 +295,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime tim
 					tokensRequested: n,
 					tokensConsumed:  0, // Never consume tokens in peek
 					tokensRemaining: b.remainingTokens(executionTime, limit),
-					retryAfter:      max(0, retryAfter),
+					retryAfter:      b.retryAfter(executionTime, limit, n),
 				})
 
 				b.mu.Unlock()
@@ -313,7 +307,6 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime tim
 			// Use stack-allocated bucket for missing buckets
 			b := newBucket(executionTime, limit)
 			allow := b.hasTokens(executionTime, limit, n)
-			retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 			debugs = append(debugs, Debug[TInput, TKey]{
 				allowed:         allow,
 				input:           input,
@@ -323,7 +316,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime tim
 				tokensRequested: n,
 				tokensConsumed:  0,
 				tokensRemaining: b.remainingTokens(executionTime, limit),
-				retryAfter:      max(0, retryAfter),
+				retryAfter:      b.retryAfter(executionTime, limit, n),
 			})
 			allowAll = allowAll && allow
 		}

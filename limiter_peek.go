@@ -102,7 +102,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 			if remainingTokens == -1 || rt < remainingTokens { // min
 				remainingTokens = rt
 			}
-			r := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+			r := b.retryAfter(executionTime, limit, n)
 			if r > retryAfter { // max
 				retryAfter = r
 			}
@@ -119,7 +119,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 		if remainingTokens == -1 || rt < remainingTokens { // min
 			remainingTokens = rt
 		}
-		r := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
+		r := b.retryAfter(executionTime, limit, n)
 		if r > retryAfter { // max
 			retryAfter = r
 		}
@@ -199,7 +199,6 @@ func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.
 			b.mu.RLock()
 
 			allow := b.hasTokens(executionTime, limit, n)
-			retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 			debugs = append(debugs, Debug[TInput, TKey]{
 				allowed:         allow,
 				executionTime:   executionTime,
@@ -209,7 +208,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.
 				tokensRequested: n,
 				tokensConsumed:  0, // Never consume tokens in peek
 				tokensRemaining: b.remainingTokens(executionTime, limit),
-				retryAfter:      max(0, retryAfter),
+				retryAfter:      b.retryAfter(executionTime, limit, n),
 			})
 
 			b.mu.RUnlock()
@@ -221,7 +220,6 @@ func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.
 		// Use stack-allocated bucket for missing buckets
 		b := newBucket(executionTime, limit)
 		allow := b.hasTokens(executionTime, limit, n)
-		retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 		debugs = append(debugs, Debug[TInput, TKey]{
 			allowed:         allow,
 			input:           input,
@@ -231,7 +229,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: b.remainingTokens(executionTime, limit),
-			retryAfter:      max(0, retryAfter),
+			retryAfter:      b.retryAfter(executionTime, limit, n),
 		})
 		allowAll = allowAll && allow
 	}

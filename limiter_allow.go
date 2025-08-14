@@ -216,9 +216,9 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		}
 
 		// Calculate retry-after from this bucket's next tokens time
-		r := b.retryAfter(executionTime, limit, n)
-		if r > retryAfter { // max
-			retryAfter = r
+		ra := b.retryAfter(executionTime, limit, n)
+		if ra > retryAfter { // max
+			retryAfter = ra
 		}
 	}
 
@@ -246,11 +246,6 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime ti
 		if remainingTokens < 0 {
 			remainingTokens = 0
 		}
-	}
-
-	// if the request was allowed, retryAfter will be negative
-	if retryAfter < 0 {
-		retryAfter = 0
 	}
 
 	details := Details[TInput, TKey]{

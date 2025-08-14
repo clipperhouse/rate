@@ -102,9 +102,9 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 			if remainingTokens == -1 || rt < remainingTokens { // min
 				remainingTokens = rt
 			}
-			r := b.retryAfter(executionTime, limit, n)
-			if r > retryAfter { // max
-				retryAfter = r
+			ra := b.retryAfter(executionTime, limit, n)
+			if ra > retryAfter { // max
+				retryAfter = ra
 			}
 
 			b.mu.RUnlock()
@@ -119,15 +119,10 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 		if remainingTokens == -1 || rt < remainingTokens { // min
 			remainingTokens = rt
 		}
-		r := b.retryAfter(executionTime, limit, n)
-		if r > retryAfter { // max
-			retryAfter = r
+		ra := b.retryAfter(executionTime, limit, n)
+		if ra > retryAfter { // max
+			retryAfter = ra
 		}
-	}
-
-	// if the request was allowed, retryAfter will be negative
-	if retryAfter < 0 {
-		retryAfter = 0
 	}
 
 	return allowAll, Details[TInput, TKey]{

@@ -31,14 +31,14 @@ func NewLimiterFunc[TInput any, TKey comparable](keyFunc KeyFunc[TInput, TKey], 
 }
 
 func (r *Limiter[TInput, TKey]) getLimits(input TInput) []Limit {
-	limits := r.limits
+	if len(r.limits) > 0 {
+		return r.limits
+	}
 
 	// limits and limitFuncs are mutually exclusive.
-	if len(r.limitFuncs) > 0 {
-		limits = make([]Limit, 0, len(r.limitFuncs))
-		for _, limitFunc := range r.limitFuncs {
-			limits = append(limits, limitFunc(input))
-		}
+	limits := make([]Limit, len(r.limitFuncs))
+	for i, limitFunc := range r.limitFuncs {
+		limits[i] = limitFunc(input)
 	}
 	return limits
 }

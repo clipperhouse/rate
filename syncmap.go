@@ -62,9 +62,9 @@ func (bm *bucketMap[TKey]) loadOrStore(userKey TKey, executionTime time.Time, li
 	if loaded, ok := bm.m.Load(spec); ok {
 		return loaded.(*bucket)
 	}
-	// Only create the value if we didn't find an existing one
-	value := newBucket(executionTime, limit)
-	actual, _ := bm.m.LoadOrStore(spec, value)
+	// Only create the b if we didn't find an existing one
+	b := newBucket(executionTime, limit)
+	actual, _ := bm.m.LoadOrStore(spec, &b)
 	return actual.(*bucket)
 }
 
@@ -79,7 +79,8 @@ func (bm *bucketMap[TKey]) loadOrGet(userKey TKey, executionTime time.Time, limi
 	if ok {
 		return loaded.(*bucket)
 	}
-	return newBucket(executionTime, limit)
+	b := newBucket(executionTime, limit)
+	return &b
 }
 
 func (bm *bucketMap[TKey]) load(userKey TKey, limit Limit) (*bucket, bool) {

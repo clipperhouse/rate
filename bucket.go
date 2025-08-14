@@ -21,8 +21,8 @@ type bucket struct {
 	mu   sync.RWMutex
 }
 
-func newBucket(executionTime time.Time, limit Limit) *bucket {
-	return &bucket{
+func newBucket(executionTime time.Time, limit Limit) bucket {
+	return bucket{
 		// subtracting the period represents filling it with tokens
 		time: executionTime.Add(-limit.period),
 	}

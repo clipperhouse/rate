@@ -45,13 +45,7 @@ func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n i
 		}
 
 		// Use stack-allocated bucket for missing buckets
-
-		// We might just return true here, since any new
-		// bucket will allow, but going through the
-		// formality just in case something changes
-		b := bucket{
-			time: executionTime.Add(-limit.period),
-		}
+		b := newBucket(executionTime, limit)
 		if !b.hasTokens(executionTime, limit, n) {
 			return false
 		}
@@ -119,9 +113,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime tim
 		}
 
 		// Use stack-allocated bucket for missing buckets
-		b := bucket{
-			time: executionTime.Add(-limit.period),
-		}
+		b := newBucket(executionTime, limit)
 		allowAll = allowAll && b.hasTokens(executionTime, limit, n)
 		rt := b.remainingTokens(executionTime, limit)
 		if remainingTokens == -1 || rt < remainingTokens { // min
@@ -227,9 +219,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.
 		}
 
 		// Use stack-allocated bucket for missing buckets
-		b := bucket{
-			time: executionTime.Add(-limit.period),
-		}
+		b := newBucket(executionTime, limit)
 		allow := b.hasTokens(executionTime, limit, n)
 		retryAfter := b.nextTokensTime(executionTime, limit, n).Sub(executionTime)
 		debugs = append(debugs, Debug[TInput, TKey]{

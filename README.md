@@ -15,7 +15,7 @@ go get github.com/clipperhouse/rate
 ```
 
 ```go
-// Define a getter for the rate limiter “bucket”
+// Define a “KeyFunc”, which defines the bucket. It’s generic, doesn't have to be HTTP.
 func byIP(req *http.Request) string {
     // You can put arbitrary logic in here. In this case, we’ll just use IP address.
     return req.RemoteAddr
@@ -64,7 +64,7 @@ If denied, it will deduct no tokens from any limit.
 
 ```go
 func byUser(req *http.Request) string {
-    return getTheUserID()
+    return getTheUserID(req)
 }
 
 userLimit := rate.NewLimit(100, time.Minute)
@@ -137,8 +137,6 @@ limiter := rate.NewLimiterFunc(keyFunc, limitFunc)
 limit := rate.NewLimit(100, time.Second)
 limiter := rate.NewLimiter(keyFunc, limit)
 
-// somewhere in the app:
-
 // decide how many "cents" a given request costs
 tokens := decideThePriceOfThisRequest()
 
@@ -183,9 +181,14 @@ Calculating the available tokens is just arithmetic on time.
 
 #### Inspectable
 
-You’ll find `*WithDetails` and `*WithDebug` methods, which give you the information
-you’ll need to return “retry after” or “remaining tokens” headers, or do
+You’ll find `Peek`, and `*WithDetails` and `*WithDebug` methods, which give you the
+information you’ll need to return “retry after” or “remaining tokens” headers, or do
 detailed logging.
+
+#### Generic
+
+The `Limiter` type is generic. You'll define the type via the `KeyFunc` that you pass to `NewLimiter`.
+HTTP is the common case, but you can use whatever your app needs.
 
 ## Roadmap
 

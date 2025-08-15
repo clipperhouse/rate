@@ -82,10 +82,11 @@ func (rs *Limiters[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool,
 //
 // No tokens are consumed.
 //
-// Note: This implementation uses write locks (b.mu.Lock()) instead of read locks because
-// the bucket methods remainingTokens and nextTokensTime can modify bucket state via checkCutoff.
-// This ensures thread-safety but makes the operation more blocking than a pure read operation.
-// The trade-off is necessary to provide accurate details while maintaining correctness.
+// Note: This implementation uses read locks (b.mu.RLock()) because the bucket methods
+// are designed to handle concurrent access gracefully. While concurrent calls to consumeTokens
+// might cause slight inconsistencies between hasTokens and remainingTokens results, this is
+// acceptable for peek operations where the main result (allowed) is the primary concern
+// and details are treated as predictions rather than guarantees.
 func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, Details[TInput, TKey]) {
 	switch len(rs.limiters) {
 	case 0:
@@ -232,10 +233,11 @@ func (rs *Limiters[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, [
 //
 // No tokens are consumed.
 //
-// Note: This implementation uses write locks (b.mu.Lock()) instead of read locks because
-// the bucket methods remainingTokens and nextTokensTime can modify bucket state via checkCutoff.
-// This ensures thread-safety but makes the operation more blocking than a pure read operation.
-// The trade-off is necessary to provide accurate debug information while maintaining correctness.
+// Note: This implementation uses read locks (b.mu.RLock()) because the bucket methods
+// are designed to handle concurrent access gracefully. While concurrent calls to consumeTokens
+// might cause slight inconsistencies between hasTokens and remainingTokens results, this is
+// acceptable for peek operations where the main result (allowed) is the primary concern
+// and details are treated as predictions rather than guarantees.
 func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {
 	switch len(rs.limiters) {
 	case 0:
@@ -283,7 +285,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime tim
 		// Check each limit for this limiter
 		for _, limit := range lims {
 			if b, ok := r.buckets.load(userKey, limit); ok {
-				b.mu.Lock()
+				b.mu.RLock()
 
 				allow := b.hasTokens(executionTime, limit, n)
 				debugs = append(debugs, Debug[TInput, TKey]{
@@ -298,7 +300,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime tim
 					retryAfter:      b.retryAfter(executionTime, limit, n),
 				})
 
-				b.mu.Unlock()
+				b.mu.RUnlock()
 				allowAll = allowAll && allow
 
 				continue

@@ -147,7 +147,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime t
 		// Check each limit for this limiter
 		for _, limit := range lims {
 			if b, ok := r.buckets.load(userKey, limit); ok {
-				b.mu.Lock()
+				b.mu.RLock()
 				// First check if allowed (this doesn't modify state)
 				allowed := b.hasTokens(executionTime, limit, n)
 				allowAll = allowAll && allowed
@@ -156,7 +156,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime t
 				// since the important thing is the allowed result
 				rt := b.remainingTokens(executionTime, limit)
 				ra := b.retryAfter(executionTime, limit, n)
-				b.mu.Unlock()
+				b.mu.RUnlock()
 
 				if remainingTokens == -1 || rt < remainingTokens { // min
 					remainingTokens = rt

@@ -3,6 +3,8 @@ package rate
 import (
 	"testing"
 	"time"
+
+	"github.com/clipperhouse/rate/ntime"
 )
 
 func BenchmarkLimiter_Peek_SingleBucket(b *testing.B) {
@@ -13,7 +15,7 @@ func BenchmarkLimiter_Peek_SingleBucket(b *testing.B) {
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ReportAllocs()
 
@@ -26,7 +28,7 @@ func BenchmarkLimiter_Peek_SingleBucket(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
 		limiter := NewLimiter(keyFunc, limit1, limit2)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ReportAllocs()
 
@@ -45,7 +47,7 @@ func BenchmarkLimiter_Peek_MultipleBuckets(b *testing.B) {
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -59,7 +61,7 @@ func BenchmarkLimiter_Peek_MultipleBuckets(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
 		limiter := NewLimiter(keyFunc, limit1, limit2)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -78,7 +80,7 @@ func BenchmarkLimiter_PeekWithDetails_SingleBucket(b *testing.B) {
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ReportAllocs()
 
@@ -91,7 +93,7 @@ func BenchmarkLimiter_PeekWithDetails_SingleBucket(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
 		limiter := NewLimiter(keyFunc, limit1, limit2)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ReportAllocs()
 
@@ -110,7 +112,7 @@ func BenchmarkLimiter_PeekWithDetails_MultipleBuckets(b *testing.B) {
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -124,7 +126,7 @@ func BenchmarkLimiter_PeekWithDetails_MultipleBuckets(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
 		limiter := NewLimiter(keyFunc, limit1, limit2)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -143,7 +145,7 @@ func BenchmarkLimiter_PeekWithDebug_SingleBucket(b *testing.B) {
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ReportAllocs()
 
@@ -156,7 +158,7 @@ func BenchmarkLimiter_PeekWithDebug_SingleBucket(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
 		limiter := NewLimiter(keyFunc, limit1, limit2)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ReportAllocs()
 
@@ -175,7 +177,7 @@ func BenchmarkLimiter_PeekWithDebug_MultipleBuckets(b *testing.B) {
 	b.Run("SingleLimit", func(b *testing.B) {
 		limit := NewLimit(1000000, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -189,7 +191,7 @@ func BenchmarkLimiter_PeekWithDebug_MultipleBuckets(b *testing.B) {
 		limit1 := NewLimit(1000000, time.Second)
 		limit2 := NewLimit(500000, time.Second/2)
 		limiter := NewLimiter(keyFunc, limit1, limit2)
-		now := bnow()
+		now := ntime.Now()
 
 		b.ResetTimer()
 		b.ReportAllocs()

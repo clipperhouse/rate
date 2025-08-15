@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/clipperhouse/rate/ntime"
 )
 
 // Wait will poll [Allow] for a period of time,
@@ -33,7 +35,7 @@ import (
 // mutex starvation mode ensures strict FIFO ordering. Under light load,
 // ordering may be less strict but performance is optimized.
 func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
-	return r.waitN(ctx, input, bnow(), 1)
+	return r.waitN(ctx, input, ntime.Now(), 1)
 }
 
 // WaitN will poll [Limiter.AllowN] for a period of time,
@@ -62,10 +64,10 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 // mutex starvation mode ensures strict FIFO ordering. Under light load,
 // ordering may be less strict but performance is optimized.
 func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
-	return r.waitN(ctx, input, bnow(), n)
+	return r.waitN(ctx, input, ntime.Now(), n)
 }
 
-func (r *Limiter[TInput, TKey]) waitN(ctx context.Context, input TInput, executionTime btime, n int64) bool {
+func (r *Limiter[TInput, TKey]) waitN(ctx context.Context, input TInput, executionTime ntime.Time, n int64) bool {
 	return r.waitNWithCancellation(
 		input,
 		executionTime,
@@ -77,7 +79,7 @@ func (r *Limiter[TInput, TKey]) waitN(ctx context.Context, input TInput, executi
 
 func (r *Limiter[TInput, TKey]) waitWithCancellation(
 	input TInput,
-	startTime btime,
+	startTime ntime.Time,
 	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
@@ -88,7 +90,7 @@ func (r *Limiter[TInput, TKey]) waitWithCancellation(
 // deadline and done functions instead of a context, allowing for deterministic testing.
 func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	input TInput,
-	startTime btime,
+	startTime ntime.Time,
 	n int64,
 	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
@@ -100,7 +102,7 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	// currentTime is an approximation of the real clock moving forward
 	// it's imprecise because it depends on time.After below.
 	// For testing purposes, I want startTime (execution time) to
-	// be a parameter. The alternative is calling bnow().
+	// be a parameter. The alternative is calling btime.Now().
 	currentTime := startTime
 
 	userKey := r.keyFunc(input)
@@ -128,7 +130,7 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 
 		// if we can't possibly get a token, fail fast
 		if deadline, ok := deadline(); ok {
-			if deadline.Before(currentTime.Add(retryAfter).Time()) {
+			if deadline.Before(currentTime.Add(retryAfter).ToSystemTime()) {
 				return false
 			}
 		}

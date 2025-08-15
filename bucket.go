@@ -3,6 +3,8 @@ package rate
 import (
 	"sync"
 	"time"
+
+	"github.com/clipperhouse/rate/ntime"
 )
 
 // bucket is a primitive for tracking tokens.
@@ -17,11 +19,11 @@ import (
 // trusting the caller ([Limiter], mainly) to do
 // the right thing.
 type bucket struct {
-	time btime
+	time ntime.Time
 	mu   sync.RWMutex
 }
 
-func newBucket(executionTime btime, limit Limit) bucket {
+func newBucket(executionTime ntime.Time, limit Limit) bucket {
 	return bucket{
 		// subtracting the period represents filling it with tokens
 		time: executionTime.Add(-limit.period),
@@ -31,7 +33,7 @@ func newBucket(executionTime btime, limit Limit) bucket {
 // hasTokens checks if there are at least `n` tokens in the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) hasTokens(executionTime btime, limit Limit, n int64) bool {
+func (b *bucket) hasTokens(executionTime ntime.Time, limit Limit, n int64) bool {
 	cutoff := b.cutoff(executionTime, limit)
 	// "not after" is "before or equal"
 	return !cutoff.After(executionTime.Add(-limit.durationPerToken * time.Duration(n)))
@@ -45,7 +47,7 @@ func (b *bucket) hasTokens(executionTime btime, limit Limit, n int64) bool {
 // n can be negative, which has the effect of adding tokens to the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) consumeTokens(executionTime btime, limit Limit, n int64) {
+func (b *bucket) consumeTokens(executionTime ntime.Time, limit Limit, n int64) {
 	cutoff := b.cutoff(executionTime, limit)
 	b.time = cutoff.Add(limit.durationPerToken * time.Duration(n))
 }
@@ -54,7 +56,7 @@ func (b *bucket) consumeTokens(executionTime btime, limit Limit, n int64) {
 // maximum legitimate value, which is its "full" state.
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) cutoff(executionTime btime, limit Limit) btime {
+func (b *bucket) cutoff(executionTime ntime.Time, limit Limit) ntime.Time {
 	cutoff := executionTime.Add(-limit.period)
 	if b.time.Before(cutoff) {
 		return cutoff
@@ -65,14 +67,14 @@ func (b *bucket) cutoff(executionTime btime, limit Limit) btime {
 // remainingTokens returns the number of tokens remaining in the bucket
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) remainingTokens(executionTime btime, limit Limit) int64 {
+func (b *bucket) remainingTokens(executionTime ntime.Time, limit Limit) int64 {
 	cutoff := b.cutoff(executionTime, limit)
 	return remainingTokens(executionTime, cutoff, limit)
 }
 
 // remainingTokens returns the number of tokens based on the difference
 // between the execution time and the bucket time, divided by the duration per token.
-func remainingTokens(executionTime btime, bucketTime btime, limit Limit) int64 {
+func remainingTokens(executionTime ntime.Time, bucketTime ntime.Time, limit Limit) int64 {
 	return int64(executionTime.Sub(bucketTime) / limit.durationPerToken)
 }
 
@@ -83,7 +85,7 @@ func remainingTokens(executionTime btime, bucketTime btime, limit Limit) int64 {
 // treat nextTokensTime as a prediction, not a guarantee.
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) nextTokensTime(executionTime btime, limit Limit, n int64) btime {
+func (b *bucket) nextTokensTime(executionTime ntime.Time, limit Limit, n int64) ntime.Time {
 	cutoff := b.cutoff(executionTime, limit)
 	return cutoff.Add(limit.durationPerToken * time.Duration(n))
 }
@@ -98,6 +100,6 @@ func (b *bucket) nextTokensTime(executionTime btime, limit Limit, n int64) btime
 // duration.
 //
 // ⚠️ caller is responsible for locking appropriately
-func (b *bucket) retryAfter(executionTime btime, limit Limit, n int64) time.Duration {
+func (b *bucket) retryAfter(executionTime ntime.Time, limit Limit, n int64) time.Duration {
 	return max(0, b.nextTokensTime(executionTime, limit, n).Sub(executionTime))
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/clipperhouse/rate/ntime"
 	"github.com/stretchr/testify/require"
 )
 
@@ -12,7 +13,7 @@ func TestBucket_HasTokens(t *testing.T) {
 
 	t.Run("SingleToken", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		const n = 1
 		limit := NewLimit(9, time.Second)
 		bucket := newBucket(now, limit)
@@ -42,7 +43,7 @@ func TestBucket_HasTokens(t *testing.T) {
 
 	t.Run("MultipleTokens", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(9, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -77,7 +78,7 @@ func TestBucket_HasTokens(t *testing.T) {
 
 	t.Run("AgingBucket", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(9, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -107,7 +108,7 @@ func TestBucket_HasTokens(t *testing.T) {
 
 func TestBucket_RemainingTokens(t *testing.T) {
 	t.Parallel()
-	now := bnow()
+	now := ntime.Now()
 	limit := NewLimit(9, time.Second)
 	bucket := newBucket(now, limit)
 
@@ -129,7 +130,7 @@ func TestBucket_RemainingTokens(t *testing.T) {
 
 func TestBucket_ConsumeTokens(t *testing.T) {
 	t.Parallel()
-	now := bnow()
+	now := ntime.Now()
 	limit := NewLimit(11, time.Second)
 	bucket := newBucket(now, limit)
 
@@ -144,7 +145,7 @@ func TestBucket_ConsumeTokens(t *testing.T) {
 
 	t.Run("old bucket", func(t *testing.T) {
 		t.Parallel()
-		executionTime := bnow()
+		executionTime := ntime.Now()
 		limit := NewLimit(11, time.Second)
 		bucket := newBucket(executionTime, limit)
 
@@ -174,7 +175,7 @@ func TestBucket_NextTokensTime(t *testing.T) {
 
 	t.Run("SingleToken", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -203,7 +204,7 @@ func TestBucket_NextTokensTime(t *testing.T) {
 
 	t.Run("MultipleTokens", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -235,7 +236,7 @@ func TestBucket_NextTokensTime(t *testing.T) {
 
 	t.Run("AgingBucket", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -271,7 +272,7 @@ func TestBucket_NextTokensTime(t *testing.T) {
 
 	t.Run("PartiallyAgingBucket", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -301,7 +302,7 @@ func TestBucket_NextTokensTime(t *testing.T) {
 
 	t.Run("NegativeTokens", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -329,7 +330,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("SingleToken", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -355,7 +356,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("MultipleTokens", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -382,7 +383,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("AgingBucket", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -422,7 +423,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("PartiallyAgingBucket", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -456,7 +457,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("NegativeTokens", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -481,7 +482,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("ZeroTokens", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -497,7 +498,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("NegativeTokens", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -513,7 +514,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("TokensAvailable", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 
@@ -545,7 +546,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 
 	t.Run("ConcurrentTime", func(t *testing.T) {
 		t.Parallel()
-		now := bnow()
+		now := ntime.Now()
 		limit := NewLimit(10, time.Second)
 		bucket := newBucket(now, limit)
 

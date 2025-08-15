@@ -2,6 +2,8 @@ package rate
 
 import (
 	"sync"
+
+	"github.com/clipperhouse/rate/ntime"
 )
 
 // syncMap is a typed wrapper around sync.Map for our specific use case
@@ -52,7 +54,7 @@ type bucketSpec[TKey comparable] struct {
 // loadOrStore returns the existing bucket for the key if present.
 // Otherwise, it creates a new bucket, stores it, and returns it.
 // This is specialized to avoid a closure allocation for the getter.
-func (bm *bucketMap[TKey]) loadOrStore(userKey TKey, executionTime btime, limit Limit) *bucket {
+func (bm *bucketMap[TKey]) loadOrStore(userKey TKey, executionTime ntime.Time, limit Limit) *bucket {
 	spec := bucketSpec[TKey]{
 		limit:   limit,
 		userKey: userKey,
@@ -69,7 +71,7 @@ func (bm *bucketMap[TKey]) loadOrStore(userKey TKey, executionTime btime, limit 
 
 // loadOrGet returns the existing value for the key if present.
 // Otherwise, it returns a new (temporary) value.
-func (bm *bucketMap[TKey]) loadOrGet(userKey TKey, executionTime btime, limit Limit) *bucket {
+func (bm *bucketMap[TKey]) loadOrGet(userKey TKey, executionTime ntime.Time, limit Limit) *bucket {
 	spec := bucketSpec[TKey]{
 		limit:   limit,
 		userKey: userKey,

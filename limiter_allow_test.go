@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/clipperhouse/rate/ntime"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +27,7 @@ func TestLimiter_Allow(t *testing.T) {
 				limit := NewLimit(9, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
 
-				now := bnow()
+				now := ntime.Now()
 
 				for range limit.count {
 					require.True(t, limiter.allow("test", now))
@@ -49,7 +50,7 @@ func TestLimiter_Allow(t *testing.T) {
 				limitFunc := func(input string) Limit { return limit }
 				limiter := NewLimiterFunc(keyFunc, limitFunc)
 
-				now := bnow()
+				now := ntime.Now()
 
 				for range limit.count {
 					require.True(t, limiter.allow("test", now))
@@ -81,7 +82,7 @@ func TestLimiter_Allow(t *testing.T) {
 				perMinute := NewLimit(3, time.Minute)
 				limiter := NewLimiter(keyFunc, perSecond, perMinute)
 
-				now := bnow()
+				now := ntime.Now()
 
 				// Consume tokens up to the per-second limit
 				calls := perSecond.Count() // 2
@@ -143,7 +144,7 @@ func TestLimiter_Allow(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit1, limit2)
 			const buckets = 3
 
-			now := bnow()
+			now := ntime.Now()
 
 			for bucketID := range buckets {
 				limiter.allow(bucketID, now)
@@ -169,7 +170,7 @@ func TestLimiter_Allow(t *testing.T) {
 
 				limit := NewLimit(9, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				now := bnow()
+				now := ntime.Now()
 
 				for bucketID := range buckets {
 					for range 9 {
@@ -188,7 +189,7 @@ func TestLimiter_Allow(t *testing.T) {
 				limit := NewLimit(9, time.Second)
 				limitFunc := func(input string) Limit { return limit }
 				limiter := NewLimiterFunc(keyFunc, limitFunc)
-				now := bnow()
+				now := ntime.Now()
 
 				for i := range buckets {
 					for range 9 {
@@ -206,7 +207,7 @@ func TestLimiter_Allow(t *testing.T) {
 				const buckets = 3
 				limit := NewLimit(9, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				start := bnow()
+				start := ntime.Now()
 
 				// Enough concurrent processes for each bucket to precisely exhaust the limit
 				{
@@ -255,7 +256,7 @@ func TestLimiter_Allow(t *testing.T) {
 					limit := NewLimit(9, time.Second)
 					limitFunc := func(input int) Limit { return limit }
 					limiter := NewLimiterFunc(keyFunc, limitFunc)
-					start := bnow()
+					start := ntime.Now()
 
 					// Enough concurrent processes for each bucket to precisely exhaust the limit
 					{
@@ -320,7 +321,7 @@ func TestLimiter_Allow(t *testing.T) {
 				perSecond := NewLimit(2, time.Second)
 				perMinute := NewLimit(3, time.Minute)
 				limiter := NewLimiter(keyFunc, perSecond, perMinute)
-				executionTime := bnow()
+				executionTime := ntime.Now()
 
 				for bucketID := range buckets {
 					for range perSecond.Count() {
@@ -349,7 +350,7 @@ func TestLimiter_Allow(t *testing.T) {
 				perSecond := NewLimit(2, time.Second)
 				perMinute := NewLimit(3, time.Minute)
 				limiter := NewLimiter(keyFunc, perSecond, perMinute)
-				executionTime := bnow()
+				executionTime := ntime.Now()
 
 				// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
 				{
@@ -444,7 +445,7 @@ func TestLimiter_AllowN_SingleBucket(t *testing.T) {
 	limit := NewLimit(9, time.Second)
 	limiter := NewLimiter(keyFunc, limit)
 
-	now := bnow()
+	now := ntime.Now()
 	require.True(t, limiter.allowN("test", now, 1))
 	require.True(t, limiter.allowN("test", now, 8))
 	require.False(t, limiter.allowN("test", now, 1))
@@ -464,7 +465,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 	perHour := NewLimit(99, time.Hour)
 	limiter := NewLimiter(keyFunc, perSecond, perHour)
 
-	now := bnow()
+	now := ntime.Now()
 
 	// previously consumed, running tally
 	consumed := int64(0)
@@ -479,7 +480,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.True(t, d0.Allowed())
 		require.Equal(t, d0.Input(), "test-allow-with-debug")
 		require.Equal(t, d0.Key(), "test-allow-with-debug-key")
-		require.Equal(t, d0.ExecutionTime(), now.Time())
+		require.Equal(t, d0.ExecutionTime(), now.ToSystemTime())
 		require.Equal(t, d0.TokensRequested(), consume)
 		require.Equal(t, d0.TokensConsumed(), consume)
 		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume)
@@ -489,7 +490,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.True(t, d1.Allowed())
 		require.Equal(t, d1.Input(), "test-allow-with-debug")
 		require.Equal(t, d1.Key(), "test-allow-with-debug-key")
-		require.Equal(t, d1.ExecutionTime(), now.Time())
+		require.Equal(t, d1.ExecutionTime(), now.ToSystemTime())
 		require.Equal(t, d1.TokensRequested(), consume)
 		require.Equal(t, d1.TokensConsumed(), consume)
 		require.Equal(t, d1.TokensRemaining(), perHour.count-consume)
@@ -509,7 +510,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.True(t, d0.Allowed())
 		require.Equal(t, d0.Input(), "test-allow-with-debug")
 		require.Equal(t, d0.Key(), "test-allow-with-debug-key")
-		require.Equal(t, d0.ExecutionTime(), now.Time())
+		require.Equal(t, d0.ExecutionTime(), now.ToSystemTime())
 		require.Equal(t, d0.TokensRequested(), consume)
 		require.Equal(t, d0.TokensConsumed(), consume)
 		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume-consumed)
@@ -519,7 +520,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.True(t, d1.Allowed())
 		require.Equal(t, d1.Input(), "test-allow-with-debug")
 		require.Equal(t, d1.Key(), "test-allow-with-debug-key")
-		require.Equal(t, d1.ExecutionTime(), now.Time())
+		require.Equal(t, d1.ExecutionTime(), now.ToSystemTime())
 		require.Equal(t, d1.TokensRequested(), consume)
 		require.Equal(t, d1.TokensConsumed(), consume)
 		require.Equal(t, d1.TokensRemaining(), perHour.count-consume-consumed)
@@ -539,7 +540,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.False(t, d0.Allowed())
 		require.Equal(t, d0.Input(), "test-allow-with-debug")
 		require.Equal(t, d0.Key(), "test-allow-with-debug-key")
-		require.Equal(t, d0.ExecutionTime(), now.Time())
+		require.Equal(t, d0.ExecutionTime(), now.ToSystemTime())
 		require.Equal(t, d0.TokensRequested(), consume)
 		require.Equal(t, d0.TokensConsumed(), int64(0))
 		require.Equal(t, d0.TokensRemaining(), perSecond.count-consumed)
@@ -551,7 +552,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.True(t, d1.Allowed())
 		require.Equal(t, d1.Input(), "test-allow-with-debug")
 		require.Equal(t, d1.Key(), "test-allow-with-debug-key")
-		require.Equal(t, d1.ExecutionTime(), now.Time())
+		require.Equal(t, d1.ExecutionTime(), now.ToSystemTime())
 		require.Equal(t, d1.TokensRequested(), consume)
 		require.Equal(t, d1.TokensConsumed(), int64(0))
 		require.Equal(t, d1.TokensRemaining(), perHour.count-consumed)
@@ -574,7 +575,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.True(t, d0.Allowed())
 		require.Equal(t, d0.Input(), "test-allow-with-debug")
 		require.Equal(t, d0.Key(), "test-allow-with-debug-key")
-		require.Equal(t, d0.ExecutionTime(), now.Time())
+		require.Equal(t, d0.ExecutionTime(), now.ToSystemTime())
 		require.Equal(t, d0.TokensRequested(), consume)
 		require.Equal(t, d0.TokensConsumed(), consume)
 		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume-consumed+refilled)
@@ -584,7 +585,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		require.True(t, d1.Allowed())
 		require.Equal(t, d1.Input(), "test-allow-with-debug")
 		require.Equal(t, d1.Key(), "test-allow-with-debug-key")
-		require.Equal(t, d1.ExecutionTime(), now.Time())
+		require.Equal(t, d1.ExecutionTime(), now.ToSystemTime())
 		require.Equal(t, d1.TokensRequested(), consume)
 		require.Equal(t, d1.TokensConsumed(), consume)
 		require.Equal(t, d1.TokensRemaining(), perHour.count-consume-consumed+0) // time passing not enough to refill per-hour
@@ -603,7 +604,7 @@ func TestLimiter_AllowWithDebug_SingleBucket_MultipleLimits(t *testing.T) {
 
 	const bucketID = "test-allow-with-debug"
 
-	executionTime := bnow()
+	executionTime := ntime.Now()
 	{
 		// exhaust the per-second limit, but per-minute should still have 1 token
 		for i := range perSecond.Count() {
@@ -614,7 +615,7 @@ func TestLimiter_AllowWithDebug_SingleBucket_MultipleLimits(t *testing.T) {
 			d0 := debugs[0]
 			require.Equal(t, perSecond, d0.Limit(), "should have per-second limit in debug")
 			require.Equal(t, allowed, d0.Allowed(), "allowed should match for per-second limit")
-			require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "execution time should match for per-second limit")
+			require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "execution time should match for per-second limit")
 			require.Equal(t, bucketID, d0.Input(), "input should match for per-second limit")
 			require.Equal(t, bucketID, d0.Key(), "bucket key should match for per-second limit")
 			require.Equal(t, int64(1), d0.TokensRequested(), "per-second limit should request 1 token")
@@ -625,7 +626,7 @@ func TestLimiter_AllowWithDebug_SingleBucket_MultipleLimits(t *testing.T) {
 			d1 := debugs[1]
 			require.Equal(t, perMinute, d1.Limit(), "should have per-minute limit in debug")
 			require.Equal(t, allowed, d1.Allowed(), "allowed should match for per-minute limit")
-			require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "execution time should match for per-minute limit")
+			require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "execution time should match for per-minute limit")
 			require.Equal(t, bucketID, d1.Input(), "input should match for per-minute limit")
 			require.Equal(t, bucketID, d1.Key(), "bucket key should match for per-minute limit")
 			require.Equal(t, int64(1), d1.TokensRequested(), "per-minute limit should request 1 token")
@@ -645,7 +646,7 @@ func TestLimiter_AllowWithDebug_SingleBucket_MultipleLimits(t *testing.T) {
 		require.False(t, d0.Allowed(), "allowed should match for per-second limit")
 		require.Equal(t, int64(0), d0.TokensRemaining(), "remaining tokens should match for per-second limit")
 		require.Equal(t, perSecond, d0.Limit(), "should have per-second limit in debug")
-		require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "execution time should match for per-second limit")
+		require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "execution time should match for per-second limit")
 		require.Equal(t, bucketID, d0.Input(), "input should match for per-second limit")
 		require.Equal(t, bucketID, d0.Key(), "bucket key should match for per-second limit")
 		require.Equal(t, int64(1), d0.TokensRequested(), "per-second limit should request 1 token")
@@ -659,7 +660,7 @@ func TestLimiter_AllowWithDebug_SingleBucket_MultipleLimits(t *testing.T) {
 		require.True(t, d1.Allowed(), "allowed should match for per-minute limit")
 		require.Equal(t, int64(1), d1.TokensRemaining(), "per-minute limit should have 1 remaining token")
 		require.Equal(t, perMinute, d1.Limit(), "should have per-minute limit in debug")
-		require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "execution time should match for per-minute limit")
+		require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "execution time should match for per-minute limit")
 		require.Equal(t, bucketID, d1.Input(), "input should match for per-minute limit")
 		require.Equal(t, bucketID, d1.Key(), "bucket key should match for per-minute limit")
 		require.Equal(t, int64(1), d1.TokensRequested(), "per-minute limit should request 1 token")
@@ -677,7 +678,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	perSecond := NewLimit(2, time.Second)
 	perMinute := NewLimit(3, time.Minute)
 	limiter := NewLimiter(keyFunc, perSecond, perMinute)
-	executionTime := bnow()
+	executionTime := ntime.Now()
 
 	// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
 	{
@@ -708,7 +709,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			d0 := debugs[0]
 			require.Equal(t, perSecond, d0.Limit(), "debug %d should have per-second limit", i)
 			require.True(t, d0.Allowed(), "debug %d per-second should be allowed", i)
-			require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "debug %d execution time should match", i)
+			require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "debug %d execution time should match", i)
 			require.Equal(t, bucketID, d0.Input(), "debug %d input should match", i)
 			require.Equal(t, expectedKey, d0.Key(), "debug %d key should match", i)
 			require.Equal(t, int64(1), d0.TokensRequested(), "debug %d should request 1 token", i)
@@ -718,7 +719,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			d1 := debugs[1]
 			require.Equal(t, perMinute, d1.Limit(), "debug %d should have per-minute limit", i)
 			require.True(t, d1.Allowed(), "debug %d per-minute should be allowed", i)
-			require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "debug %d execution time should match", i)
+			require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "debug %d execution time should match", i)
 			require.Equal(t, bucketID, d1.Input(), "debug %d input should match", i)
 			require.Equal(t, expectedKey, d1.Key(), "debug %d key should match", i)
 			require.Equal(t, int64(1), d1.TokensRequested(), "debug %d should request 1 token", i)
@@ -753,7 +754,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			require.False(t, d0.Allowed(), "bucket %d per-second should be denied", bucketID)
 			require.Equal(t, int64(0), d0.TokensRemaining(), "bucket %d per-second should have 0 tokens", bucketID)
 			require.Equal(t, perSecond, d0.Limit(), "bucket %d should have per-second limit", bucketID)
-			require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "bucket %d execution time should match", bucketID)
+			require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "bucket %d execution time should match", bucketID)
 			require.Equal(t, bucketID, d0.Input(), "bucket %d input should match", bucketID)
 			require.Equal(t, expectedKey, d0.Key(), "bucket %d key should match", bucketID)
 			require.Equal(t, int64(1), d0.TokensRequested(), "bucket %d should request 1 token", bucketID)
@@ -765,7 +766,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			require.True(t, d1.Allowed(), "bucket %d per-minute should still allow", bucketID)
 			require.Equal(t, int64(1), d1.TokensRemaining(), "bucket %d per-minute should have 1 token", bucketID)
 			require.Equal(t, perMinute, d1.Limit(), "bucket %d should have per-minute limit", bucketID)
-			require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "bucket %d execution time should match", bucketID)
+			require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "bucket %d execution time should match", bucketID)
 			require.Equal(t, bucketID, d1.Input(), "bucket %d input should match", bucketID)
 			require.Equal(t, expectedKey, d1.Key(), "bucket %d key should match", bucketID)
 			require.Equal(t, int64(1), d1.TokensRequested(), "bucket %d should request 1 token", bucketID)
@@ -802,7 +803,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			require.True(t, d0.Allowed(), "bucket %d per-second should allow", bucketID)
 			require.Equal(t, perSecond.Count()-1, d0.TokensRemaining(), "bucket %d per-second should have 1 token remaining", bucketID)
 			require.Equal(t, perSecond, d0.Limit(), "bucket %d should have per-second limit", bucketID)
-			require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "bucket %d execution time should match", bucketID)
+			require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "bucket %d execution time should match", bucketID)
 			require.Equal(t, bucketID, d0.Input(), "bucket %d input should match", bucketID)
 			require.Equal(t, expectedKey, d0.Key(), "bucket %d key should match", bucketID)
 			require.Equal(t, int64(1), d0.TokensRequested(), "bucket %d should request 1 token", bucketID)
@@ -813,7 +814,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			require.True(t, d1.Allowed(), "bucket %d per-minute should allow", bucketID)
 			require.Equal(t, int64(0), d1.TokensRemaining(), "bucket %d per-minute should have 0 tokens remaining", bucketID)
 			require.Equal(t, perMinute, d1.Limit(), "bucket %d should have per-minute limit", bucketID)
-			require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "bucket %d execution time should match", bucketID)
+			require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "bucket %d execution time should match", bucketID)
 			require.Equal(t, bucketID, d1.Input(), "bucket %d input should match", bucketID)
 			require.Equal(t, expectedKey, d1.Key(), "bucket %d key should match", bucketID)
 			require.Equal(t, int64(1), d1.TokensRequested(), "bucket %d should request 1 token", bucketID)
@@ -848,7 +849,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			require.True(t, d0.Allowed(), "bucket %d per-second should still allow", bucketID)
 			require.Equal(t, perSecond.Count()-1, d0.TokensRemaining(), "bucket %d per-second should have 1 token remaining", bucketID)
 			require.Equal(t, perSecond, d0.Limit(), "bucket %d should have per-second limit", bucketID)
-			require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "bucket %d execution time should match", bucketID)
+			require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "bucket %d execution time should match", bucketID)
 			require.Equal(t, bucketID, d0.Input(), "bucket %d input should match", bucketID)
 			require.Equal(t, expectedKey, d0.Key(), "bucket %d key should match", bucketID)
 			require.Equal(t, int64(1), d0.TokensRequested(), "bucket %d should request 1 token", bucketID)
@@ -860,7 +861,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			require.False(t, d1.Allowed(), "bucket %d per-minute should be denied", bucketID)
 			require.Equal(t, int64(0), d1.TokensRemaining(), "bucket %d per-minute should have 0 tokens", bucketID)
 			require.Equal(t, perMinute, d1.Limit(), "bucket %d should have per-minute limit", bucketID)
-			require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "bucket %d execution time should match", bucketID)
+			require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "bucket %d execution time should match", bucketID)
 			require.Equal(t, bucketID, d1.Input(), "bucket %d input should match", bucketID)
 			require.Equal(t, expectedKey, d1.Key(), "bucket %d key should match", bucketID)
 			require.Equal(t, int64(1), d1.TokensRequested(), "bucket %d should request 1 token", bucketID)
@@ -903,7 +904,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			d0 := debugs[0]
 			require.True(t, d0.Allowed(), "debug %d per-second should be allowed", i)
 			require.Equal(t, perSecond, d0.Limit(), "debug %d should have per-second limit", i)
-			require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "debug %d execution time should match", i)
+			require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "debug %d execution time should match", i)
 			require.Equal(t, bucketID, d0.Input(), "debug %d input should match", i)
 			require.Equal(t, expectedKey, d0.Key(), "debug %d key should match", i)
 			require.Equal(t, int64(1), d0.TokensRequested(), "debug %d should request 1 token", i)
@@ -913,7 +914,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			d1 := debugs[1]
 			require.True(t, d1.Allowed(), "debug %d per-minute should be allowed", i)
 			require.Equal(t, perMinute, d1.Limit(), "debug %d should have per-minute limit", i)
-			require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "debug %d execution time should match", i)
+			require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "debug %d execution time should match", i)
 			require.Equal(t, bucketID, d1.Input(), "debug %d input should match", i)
 			require.Equal(t, expectedKey, d1.Key(), "debug %d key should match", i)
 			require.Equal(t, int64(1), d1.TokensRequested(), "debug %d should request 1 token", i)
@@ -940,7 +941,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 
 			const bucketID = "test-allow-with-debug"
 
-			executionTime := bnow()
+			executionTime := ntime.Now()
 			{
 				// exhaust the per-second limit, but per-minute should still have 1 token
 				for i := range perSecond.Count() {
@@ -951,7 +952,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 					d0 := debugs[0]
 					require.Equal(t, perSecond, d0.Limit(), "should have per-second limit in debug")
 					require.Equal(t, allowed, d0.Allowed(), "allowed should match for per-second limit")
-					require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "execution time should match for per-second limit")
+					require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "execution time should match for per-second limit")
 					require.Equal(t, bucketID, d0.Input(), "input should match for per-second limit")
 					require.Equal(t, bucketID, d0.Key(), "bucket key should match for per-second limit")
 					require.Equal(t, int64(1), d0.TokensRequested(), "per-second limit should request 1 token")
@@ -962,7 +963,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 					d1 := debugs[1]
 					require.Equal(t, perMinute, d1.Limit(), "should have per-minute limit in debug")
 					require.Equal(t, allowed, d1.Allowed(), "allowed should match for per-minute limit")
-					require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "execution time should match for per-minute limit")
+					require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "execution time should match for per-minute limit")
 					require.Equal(t, bucketID, d1.Input(), "input should match for per-minute limit")
 					require.Equal(t, bucketID, d1.Key(), "bucket key should match for per-minute limit")
 					require.Equal(t, int64(1), d1.TokensRequested(), "per-minute limit should request 1 token")
@@ -982,7 +983,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 				require.False(t, d0.Allowed(), "allowed should match for per-second limit")
 				require.Equal(t, int64(0), d0.TokensRemaining(), "remaining tokens should match for per-second limit")
 				require.Equal(t, perSecond, d0.Limit(), "should have per-second limit in debug")
-				require.Equal(t, executionTime.Time(), d0.ExecutionTime(), "execution time should match for per-second limit")
+				require.Equal(t, executionTime.ToSystemTime(), d0.ExecutionTime(), "execution time should match for per-second limit")
 				require.Equal(t, bucketID, d0.Input(), "input should match for per-second limit")
 				require.Equal(t, bucketID, d0.Key(), "bucket key should match for per-second limit")
 				require.Equal(t, int64(1), d0.TokensRequested(), "per-second limit should request 1 token")
@@ -996,7 +997,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 				require.True(t, d1.Allowed(), "allowed should match for per-minute limit")
 				require.Equal(t, int64(1), d1.TokensRemaining(), "per-minute limit should have 1 remaining token")
 				require.Equal(t, perMinute, d1.Limit(), "should have per-minute limit in debug")
-				require.Equal(t, executionTime.Time(), d1.ExecutionTime(), "execution time should match for per-minute limit")
+				require.Equal(t, executionTime.ToSystemTime(), d1.ExecutionTime(), "execution time should match for per-minute limit")
 				require.Equal(t, bucketID, d1.Input(), "input should match for per-minute limit")
 				require.Equal(t, bucketID, d1.Key(), "bucket key should match for per-minute limit")
 				require.Equal(t, int64(1), d1.TokensRequested(), "per-minute limit should request 1 token")
@@ -1015,14 +1016,14 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 		limitFunc := func(input string) Limit { return limit }
 		limiter := NewLimiterFunc(keyFunc, limitFunc)
 
-		now := bnow()
+		now := ntime.Now()
 
 		allow, details := limiter.allowWithDebug("test-details", now)
 		require.True(t, allow)
 		d := details[0]
 		require.True(t, d.Allowed(), "should be allowed")
 		require.Equal(t, limit, d.Limit())
-		require.Equal(t, now.Time(), d.ExecutionTime())
+		require.Equal(t, now.ToSystemTime(), d.ExecutionTime())
 		require.Equal(t, "test-details", d.Input(), "input should match")
 		require.Equal(t, "test-details", d.Key())
 		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
@@ -1096,7 +1097,7 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 			limiter := NewLimiterFunc(keyFunc, limitFunc)
 
 			for i := range 3 {
-				allow, details := limiter.allowWithDebug(i+1, bnow())
+				allow, details := limiter.allowWithDebug(i+1, ntime.Now())
 				require.True(t, allow)
 				d := details[0]
 				require.Equal(t, limitFunc(i+1), d.Limit())
@@ -1107,7 +1108,7 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 
 			for i := range 3 {
-				allow, details := limiter.allowWithDebug(i+1, bnow())
+				allow, details := limiter.allowWithDebug(i+1, ntime.Now())
 				require.True(t, allow)
 				d := details[0]
 				require.Equal(t, limit, d.Limit())
@@ -1176,7 +1177,7 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 		slow := NewLimit(6, time.Minute)  // 6 per minute = 10s per token
 		limiter := NewLimiter(keyFunc, fast, slow)
 
-		baseTime := bnow()
+		baseTime := ntime.Now()
 
 		// Test when both buckets are exhausted - RetryAfter should be max across buckets
 		t.Run("BothBucketsExhausted", func(t *testing.T) {
@@ -1380,7 +1381,7 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 			slow := NewLimit(5, time.Minute)  // 12s per token
 			limiter := NewLimiter(keyFunc, fast, slow)
 
-			baseTime := bnow()
+			baseTime := ntime.Now()
 
 			// Consume 3 tokens
 			allowed, details := limiter.allowNWithDetails("test-remaining", baseTime, 3)
@@ -1408,7 +1409,7 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 
 			// Start at a base time
-			oldTime := bnow()
+			oldTime := ntime.Now()
 
 			// Use up some tokens at old time
 			allowed := limiter.allowN("test-cutoff", oldTime, 3)

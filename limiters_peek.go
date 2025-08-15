@@ -1,11 +1,15 @@
 package rate
 
-import "time"
+import (
+	"time"
+
+	"github.com/clipperhouse/rate/ntime"
+)
 
 // peekN returns true if tokens are available for the given input across all limiters,
 // but without consuming any tokens. This method efficiently checks multiple limiters
 // by testing each one individually and returning early if any limit is exceeded.
-func (rs *Limiters[TInput, TKey]) peekN(input TInput, executionTime btime, n int64) bool {
+func (rs *Limiters[TInput, TKey]) peekN(input TInput, executionTime ntime.Time, n int64) bool {
 	switch len(rs.limiters) {
 	case 0:
 		return true
@@ -49,7 +53,7 @@ func (rs *Limiters[TInput, TKey]) peekN(input TInput, executionTime btime, n int
 // PeekN returns true if `n` tokens are available for the given input across all limiters,
 // but without consuming any tokens.
 func (rs *Limiters[TInput, TKey]) PeekN(input TInput, n int64) bool {
-	return rs.peekN(input, bnow(), n)
+	return rs.peekN(input, ntime.Now(), n)
 }
 
 // Peek returns true if tokens are available for the given input across all limiters,
@@ -73,7 +77,7 @@ func (rs *Limiters[TInput, TKey]) PeekWithDetails(input TInput) (bool, Details[T
 //
 // No tokens are consumed.
 func (rs *Limiters[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool, Details[TInput, TKey]) {
-	return rs.peekNWithDetails(input, bnow(), n)
+	return rs.peekNWithDetails(input, ntime.Now(), n)
 }
 
 // peekNWithDetails returns true if `n` tokens are available for the given input across all limiters,
@@ -87,12 +91,12 @@ func (rs *Limiters[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool,
 // might cause slight inconsistencies between hasTokens and remainingTokens results, this is
 // acceptable for peek operations where the main result (allowed) is the primary concern
 // and details are treated as predictions rather than guarantees.
-func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime btime, n int64) (bool, Details[TInput, TKey]) {
+func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime ntime.Time, n int64) (bool, Details[TInput, TKey]) {
 	switch len(rs.limiters) {
 	case 0:
 		return true, Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime.Time(),
+			executionTime:   executionTime.ToSystemTime(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -122,7 +126,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime b
 	if totalLimits == 0 { // all limiters had zero limits
 		return true, Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime.Time(),
+			executionTime:   executionTime.ToSystemTime(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -192,7 +196,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime b
 
 	return allowAll, Details[TInput, TKey]{
 		allowed:         allowAll,
-		executionTime:   executionTime.Time(),
+		executionTime:   executionTime.ToSystemTime(),
 		tokensRequested: n,
 		tokensConsumed:  0, // Never consume tokens in peek
 		tokensRemaining: remainingTokens,
@@ -221,7 +225,7 @@ func (rs *Limiters[TInput, TKey]) PeekWithDebug(input TInput) (bool, []Debug[TIn
 //
 // No tokens are consumed.
 func (rs *Limiters[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, []Debug[TInput, TKey]) {
-	return rs.peekNWithDebug(input, bnow(), n)
+	return rs.peekNWithDebug(input, ntime.Now(), n)
 }
 
 // peekNWithDebug returns true if `n` tokens are available for the given input across all limiters,
@@ -238,7 +242,7 @@ func (rs *Limiters[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, [
 // might cause slight inconsistencies between hasTokens and remainingTokens results, this is
 // acceptable for peek operations where the main result (allowed) is the primary concern
 // and details are treated as predictions rather than guarantees.
-func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime btime, n int64) (bool, []Debug[TInput, TKey]) {
+func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime ntime.Time, n int64) (bool, []Debug[TInput, TKey]) {
 	switch len(rs.limiters) {
 	case 0:
 		// No limiters, return empty debug info
@@ -290,7 +294,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime bti
 				allow := b.hasTokens(executionTime, limit, n)
 				debugs = append(debugs, Debug[TInput, TKey]{
 					allowed:         allow,
-					executionTime:   executionTime.Time(),
+					executionTime:   executionTime.ToSystemTime(),
 					input:           input,
 					key:             userKey,
 					limit:           limit,
@@ -313,7 +317,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime bti
 				allowed:         allow,
 				input:           input,
 				key:             userKey,
-				executionTime:   executionTime.Time(),
+				executionTime:   executionTime.ToSystemTime(),
 				limit:           limit,
 				tokensRequested: n,
 				tokensConsumed:  0,

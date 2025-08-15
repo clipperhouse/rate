@@ -1,11 +1,13 @@
 package rate
 
+import "github.com/clipperhouse/rate/ntime"
+
 func (rs *Limiters[TInput, TKey]) Allow(input TInput) bool {
 	return rs.AllowN(input, 1)
 }
 
 func (rs *Limiters[TInput, TKey]) AllowN(input TInput, n int64) bool {
-	return rs.allowN(input, bnow(), n)
+	return rs.allowN(input, ntime.Now(), n)
 }
 
 // allowN returns true if at least `n` tokens are available for the given input,
@@ -16,7 +18,7 @@ func (rs *Limiters[TInput, TKey]) AllowN(input TInput, n int64) bool {
 // allowN will return true only if all Limiters allow the request,
 // and `n` tokens will be consumed against each limit. If any limit
 // would be exceeded, no token will be consumed against from any Limiter.
-func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime btime, n int64) bool {
+func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime ntime.Time, n int64) bool {
 	switch len(rs.limiters) {
 	case 0:
 		return true
@@ -104,14 +106,14 @@ func (rs *Limiters[TInput, TKey]) AllowWithDetails(input TInput) (bool, Details[
 }
 
 func (rs *Limiters[TInput, TKey]) AllowNWithDetails(input TInput, n int64) (bool, Details[TInput, TKey]) {
-	return rs.allowNWithDetails(input, bnow(), n)
+	return rs.allowNWithDetails(input, ntime.Now(), n)
 }
 
-func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime btime, n int64) (bool, Details[TInput, TKey]) {
+func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime ntime.Time, n int64) (bool, Details[TInput, TKey]) {
 	if len(rs.limiters) == 0 { // no limiters -> allow everything
 		return true, Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime.Time(),
+			executionTime:   executionTime.ToSystemTime(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -137,7 +139,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 	if totalLimits == 0 { // all limiters had zero limits
 		return true, Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime.Time(),
+			executionTime:   executionTime.ToSystemTime(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -224,7 +226,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 
 	return allowAll, Details[TInput, TKey]{
 		allowed:         allowAll,
-		executionTime:   executionTime.Time(),
+		executionTime:   executionTime.ToSystemTime(),
 		tokensRequested: n,
 		tokensConsumed:  consumed,
 		tokensRemaining: remainingTokens,
@@ -237,10 +239,10 @@ func (rs *Limiters[TInput, TKey]) AllowWithDebug(input TInput) (bool, []Debug[TI
 }
 
 func (rs *Limiters[TInput, TKey]) AllowNWithDebug(input TInput, n int64) (bool, []Debug[TInput, TKey]) {
-	return rs.allowNWithDebug(input, bnow(), n)
+	return rs.allowNWithDebug(input, ntime.Now(), n)
 }
 
-func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime btime, n int64) (bool, []Debug[TInput, TKey]) {
+func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime ntime.Time, n int64) (bool, []Debug[TInput, TKey]) {
 	const maxStackLimiters = 4
 	var limitsByLimiter [][]Limit
 	if len(rs.limiters) <= maxStackLimiters {
@@ -314,7 +316,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime bt
 
 			debugs[bucketIndex] = Debug[TInput, TKey]{
 				allowed:         allow,
-				executionTime:   executionTime.Time(),
+				executionTime:   executionTime.ToSystemTime(),
 				input:           input,
 				key:             userKey,
 				limit:           limit,

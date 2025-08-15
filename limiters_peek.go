@@ -92,7 +92,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime b
 	case 0:
 		return true, Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime,
+			executionTime:   executionTime.Time(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -122,7 +122,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime b
 	if totalLimits == 0 { // all limiters had zero limits
 		return true, Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime,
+			executionTime:   executionTime.Time(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -192,7 +192,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime b
 
 	return allowAll, Details[TInput, TKey]{
 		allowed:         allowAll,
-		executionTime:   executionTime,
+		executionTime:   executionTime.Time(),
 		tokensRequested: n,
 		tokensConsumed:  0, // Never consume tokens in peek
 		tokensRemaining: remainingTokens,
@@ -290,7 +290,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime bti
 				allow := b.hasTokens(executionTime, limit, n)
 				debugs = append(debugs, Debug[TInput, TKey]{
 					allowed:         allow,
-					executionTime:   executionTime,
+					executionTime:   executionTime.Time(),
 					input:           input,
 					key:             userKey,
 					limit:           limit,
@@ -313,7 +313,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime bti
 				allowed:         allow,
 				input:           input,
 				key:             userKey,
-				executionTime:   executionTime,
+				executionTime:   executionTime.Time(),
 				limit:           limit,
 				tokensRequested: n,
 				tokensConsumed:  0,

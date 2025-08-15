@@ -6,7 +6,7 @@ import "time"
 // optimized for the common use case of setting response headers without expensive allocations.
 type Details[TInput any, TKey comparable] struct {
 	allowed         bool
-	executionTime   btime
+	executionTime   time.Time
 	tokensRequested int64
 	tokensConsumed  int64
 	tokensRemaining int64         // minimum across all buckets (fewest before denial)
@@ -19,7 +19,7 @@ func (d Details[TInput, TKey]) Allowed() bool {
 }
 
 // ExecutionTime returns the time the request was executed.
-func (d Details[TInput, TKey]) ExecutionTime() btime {
+func (d Details[TInput, TKey]) ExecutionTime() time.Time {
 	return d.executionTime
 }
 

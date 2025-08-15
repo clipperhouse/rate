@@ -111,7 +111,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 	if len(rs.limiters) == 0 { // no limiters -> allow everything
 		return true, Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime,
+			executionTime:   executionTime.Time(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -137,7 +137,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 	if totalLimits == 0 { // all limiters had zero limits
 		return true, Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime,
+			executionTime:   executionTime.Time(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -224,7 +224,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime 
 
 	return allowAll, Details[TInput, TKey]{
 		allowed:         allowAll,
-		executionTime:   executionTime,
+		executionTime:   executionTime.Time(),
 		tokensRequested: n,
 		tokensConsumed:  consumed,
 		tokensRemaining: remainingTokens,
@@ -314,7 +314,7 @@ func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime bt
 
 			debugs[bucketIndex] = Debug[TInput, TKey]{
 				allowed:         allow,
-				executionTime:   executionTime,
+				executionTime:   executionTime.Time(),
 				input:           input,
 				key:             userKey,
 				limit:           limit,

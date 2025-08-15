@@ -139,7 +139,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime bt
 		// No limits defined, so we allow everything
 		details := Details[TInput, TKey]{
 			allowed:         true,
-			executionTime:   executionTime,
+			executionTime:   executionTime.Time(),
 			tokensRequested: n,
 			tokensConsumed:  0,
 			tokensRemaining: 0,
@@ -246,7 +246,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDetails(input TInput, executionTime bt
 
 	details := Details[TInput, TKey]{
 		allowed:         allowAll,
-		executionTime:   executionTime,
+		executionTime:   executionTime.Time(),
 		tokensRequested: n,
 		tokensConsumed:  consumed,
 		tokensRemaining: remainingTokens,
@@ -310,7 +310,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime btim
 				input:           input,
 				key:             userKey,
 				limit:           Limit{},
-				executionTime:   executionTime,
+				executionTime:   executionTime.Time(),
 				tokensRequested: n,
 				tokensConsumed:  0,
 				tokensRemaining: 0,
@@ -358,7 +358,7 @@ func (r *Limiter[TInput, TKey]) allowNWithDebug(input TInput, executionTime btim
 		// after we know if we are allowing all, see below
 		debugs[i] = Debug[TInput, TKey]{
 			allowed:         allow,
-			executionTime:   executionTime,
+			executionTime:   executionTime.Time(),
 			input:           input,
 			key:             userKey,
 			limit:           limit,

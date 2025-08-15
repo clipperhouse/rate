@@ -819,7 +819,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 			require.Equal(t, "test", d.Input(), "input should match")
 			require.Equal(t, "bucket-test", d.Key(), "key should match keyFunc output")
 			require.Equal(t, limit, d.Limit(), "limit should match")
-			require.Equal(t, now, d.ExecutionTime(), "execution time should match")
+			require.Equal(t, now.Time(), d.ExecutionTime(), "execution time should match")
 			require.Equal(t, int64(1), d.TokensRequested(), "tokens requested should be 1")
 			require.Equal(t, int64(1), d.TokensConsumed(), "tokens consumed should be 1 when allowed")
 			require.Equal(t, limit.Count()-1, d.TokensRemaining(), "tokens remaining should decrease by 1")

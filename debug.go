@@ -8,7 +8,7 @@ import (
 // Used by debug APIs that return per-bucket information.
 type Debug[TInput any, TKey comparable] struct {
 	allowed         bool
-	executionTime   btime
+	executionTime   time.Time
 	input           TInput
 	key             TKey
 	limit           Limit
@@ -29,7 +29,7 @@ func (d Debug[TInput, TKey]) Limit() Limit {
 }
 
 // ExecutionTime returns the time the request was executed.
-func (d Debug[TInput, TKey]) ExecutionTime() btime {
+func (d Debug[TInput, TKey]) ExecutionTime() time.Time {
 	return d.executionTime
 }
 

@@ -1,15 +1,11 @@
 package rate
 
-import (
-	"time"
-)
-
 func (rs *Limiters[TInput, TKey]) Allow(input TInput) bool {
 	return rs.AllowN(input, 1)
 }
 
 func (rs *Limiters[TInput, TKey]) AllowN(input TInput, n int64) bool {
-	return rs.allowN(input, time.Now(), n)
+	return rs.allowN(input, bnow(), n)
 }
 
 // allowN returns true if at least `n` tokens are available for the given input,
@@ -20,7 +16,7 @@ func (rs *Limiters[TInput, TKey]) AllowN(input TInput, n int64) bool {
 // allowN will return true only if all Limiters allow the request,
 // and `n` tokens will be consumed against each limit. If any limit
 // would be exceeded, no token will be consumed against from any Limiter.
-func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime time.Time, n int64) bool {
+func (rs *Limiters[TInput, TKey]) allowN(input TInput, executionTime btime, n int64) bool {
 	switch len(rs.limiters) {
 	case 0:
 		return true
@@ -108,10 +104,10 @@ func (rs *Limiters[TInput, TKey]) AllowWithDetails(input TInput) (bool, Details[
 }
 
 func (rs *Limiters[TInput, TKey]) AllowNWithDetails(input TInput, n int64) (bool, Details[TInput, TKey]) {
-	return rs.allowNWithDetails(input, time.Now(), n)
+	return rs.allowNWithDetails(input, bnow(), n)
 }
 
-func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime time.Time, n int64) (bool, Details[TInput, TKey]) {
+func (rs *Limiters[TInput, TKey]) allowNWithDetails(input TInput, executionTime btime, n int64) (bool, Details[TInput, TKey]) {
 	if len(rs.limiters) == 0 { // no limiters -> allow everything
 		return true, Details[TInput, TKey]{
 			allowed:         true,
@@ -241,10 +237,10 @@ func (rs *Limiters[TInput, TKey]) AllowWithDebug(input TInput) (bool, []Debug[TI
 }
 
 func (rs *Limiters[TInput, TKey]) AllowNWithDebug(input TInput, n int64) (bool, []Debug[TInput, TKey]) {
-	return rs.allowNWithDebug(input, time.Now(), n)
+	return rs.allowNWithDebug(input, bnow(), n)
 }
 
-func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {
+func (rs *Limiters[TInput, TKey]) allowNWithDebug(input TInput, executionTime btime, n int64) (bool, []Debug[TInput, TKey]) {
 	const maxStackLimiters = 4
 	var limitsByLimiter [][]Limit
 	if len(rs.limiters) <= maxStackLimiters {

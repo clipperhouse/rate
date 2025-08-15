@@ -27,7 +27,7 @@ func TestLimiters_PeekN(t *testing.T) {
 		limiter := NewLimiter(keyFunc, limit)
 		limiters := Combine(limiter)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the limit
 		require.True(t, limiters.peekN("test", now, 5), "should allow peeking up to limit")
@@ -50,7 +50,7 @@ func TestLimiters_PeekN(t *testing.T) {
 		limiter2 := NewLimiter(keyFunc, limit2)
 		limiters := Combine(limiter1, limiter2)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the most restrictive limit (3)
 		require.True(t, limiters.peekN("test", now, 3), "should allow peeking up to most restrictive limit")
@@ -76,7 +76,7 @@ func TestLimiters_PeekN(t *testing.T) {
 		limiter2 := NewLimiter(keyFunc2, limit2)
 		limiters := Combine(limiter1, limiter2)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the most restrictive limit (3)
 		require.True(t, limiters.peekN("test", now, 3), "should allow peeking up to most restrictive limit")
@@ -105,7 +105,7 @@ func TestLimiters_PeekN(t *testing.T) {
 
 		// Peeks should not consume tokens - verify by consuming with allow
 		for i := range 5 {
-			allowed := limiters.allowN("test", time.Now(), 1)
+			allowed := limiters.allowN("test", bnow(), 1)
 			require.True(t, allowed, "allow call %d should succeed - peeks should not have consumed tokens", i)
 		}
 	})
@@ -119,7 +119,7 @@ func TestLimiters_PeekN(t *testing.T) {
 			limit := NewLimit(8, time.Second)
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
-			now := time.Now()
+			now := bnow()
 
 			const concurrency = 20
 
@@ -175,7 +175,7 @@ func TestLimiters_PeekN(t *testing.T) {
 			limiter2 := NewLimiter(keyFunc, limit2)
 			limiters := Combine(limiter1, limiter2)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 15
 
 			// All concurrent peeks should succeed when buckets are full
@@ -251,7 +251,7 @@ func TestLimiters_PeekN(t *testing.T) {
 			limiter2 := NewLimiter(keyFunc2, limit2)
 			limiters := Combine(limiter1, limiter2)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 10
 
 			// All concurrent peeks should succeed when buckets are full
@@ -318,7 +318,7 @@ func TestLimiters_PeekN(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 10
 			const buckets = 3
 
@@ -391,7 +391,7 @@ func TestLimiters_PeekN(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 50 // High concurrency to stress test
 
 			// Run many concurrent peeks
@@ -431,7 +431,7 @@ func TestLimiters_PeekN(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 20
 
 			// Test concurrent peeks for multiple tokens
@@ -521,7 +521,7 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 		limiter := NewLimiter(keyFunc, limit)
 		limiters := Combine(limiter)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the limit
 		allowed, details := limiters.peekNWithDetails("test", now, 5)
@@ -566,7 +566,7 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 		limiter2 := NewLimiter(keyFunc, limit2)
 		limiters := Combine(limiter1, limiter2)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the most restrictive limit (3)
 		allowed, details := limiters.peekNWithDetails("test", now, 3)
@@ -624,7 +624,7 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 		limiter2 := NewLimiter(keyFunc2, limit2)
 		limiters := Combine(limiter1, limiter2)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the most restrictive limit (3)
 		allowed, details := limiters.peekNWithDetails("test", now, 3)
@@ -703,7 +703,7 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 
 		// Peeks should not consume tokens - verify by consuming with allow
 		for i := range 5 {
-			allowed := limiters.allowN("test", time.Now(), 1)
+			allowed := limiters.allowN("test", bnow(), 1)
 			require.True(t, allowed, "allow call %d should succeed - peeks should not have consumed tokens", i)
 		}
 	})
@@ -717,7 +717,7 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 			limit := NewLimit(8, time.Second)
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
-			now := time.Now()
+			now := bnow()
 
 			const concurrency = 20
 
@@ -782,7 +782,7 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 			limiter2 := NewLimiter(keyFunc, limit2)
 			limiters := Combine(limiter1, limiter2)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 15
 
 			// All concurrent peeks should succeed when buckets are full
@@ -864,7 +864,7 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 50 // High concurrency to stress test
 
 			// Run many concurrent peeks
@@ -908,7 +908,7 @@ func TestLimiters_PeekNWithDetails(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 20
 
 			// Test concurrent peeks for multiple tokens
@@ -1005,7 +1005,7 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 		limiter := NewLimiter(keyFunc, limit)
 		limiters := Combine(limiter)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the limit
 		allowed, debugs := limiters.peekNWithDebug("test", now, 5)
@@ -1063,7 +1063,7 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 		limiter2 := NewLimiter(keyFunc, limit2)
 		limiters := Combine(limiter1, limiter2)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the most restrictive limit (3)
 		allowed, debugs := limiters.peekNWithDebug("test", now, 3)
@@ -1190,7 +1190,7 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 		limiter2 := NewLimiter(keyFunc2, limit2)
 		limiters := Combine(limiter1, limiter2)
 
-		now := time.Now()
+		now := bnow()
 
 		// Should allow peeking up to the most restrictive limit (3)
 		allowed, debugs := limiters.peekNWithDebug("test", now, 3)
@@ -1316,7 +1316,7 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 		}
 		// Peeks should not consume tokens - verify by consuming with allow
 		for i := range 5 {
-			allowed := limiters.allowN("test", time.Now(), 1)
+			allowed := limiters.allowN("test", bnow(), 1)
 			require.True(t, allowed, "allow call %d should succeed - peeks should not have consumed tokens", i)
 		}
 	})
@@ -1330,7 +1330,7 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 			limit := NewLimit(8, time.Second)
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
-			now := time.Now()
+			now := bnow()
 
 			const concurrency = 20
 
@@ -1402,7 +1402,7 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 			limiter2 := NewLimiter(keyFunc, limit2)
 			limiters := Combine(limiter1, limiter2)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 15
 
 			// All concurrent peeks should succeed when buckets are full
@@ -1495,7 +1495,7 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 50 // High concurrency to stress test
 
 			// Run many concurrent peeks
@@ -1543,7 +1543,7 @@ func TestLimiters_PeekNWithDebug(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
 
-			now := time.Now()
+			now := bnow()
 			const concurrency = 20
 
 			// Test concurrent peeks for multiple tokens

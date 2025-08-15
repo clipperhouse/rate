@@ -98,7 +98,7 @@ func TestBucketMap_LoadOrStore(t *testing.T) {
 	var bm bucketMap[string]
 	limit1 := NewLimit(100, time.Second)
 	limit2 := NewLimit(200, time.Second) // Different count
-	executionTime := time.Now()
+	executionTime := bnow()
 
 	// First call should create and store a new bucket
 	bucket1 := bm.loadOrStore("key1", executionTime, limit1)
@@ -122,7 +122,7 @@ func TestBucketMap_LoadOrGet(t *testing.T) {
 
 	var bm bucketMap[string]
 	limit := NewLimit(100, time.Second)
-	executionTime := time.Now()
+	executionTime := bnow()
 
 	// First call should return a temporary bucket (not stored)
 	bucket1 := bm.loadOrGet("key1", executionTime, limit)
@@ -147,7 +147,7 @@ func TestBucketMap_Load(t *testing.T) {
 
 	var bm bucketMap[string]
 	limit := NewLimit(100, time.Second)
-	executionTime := time.Now()
+	executionTime := bnow()
 
 	// Load from empty map should return nil and false
 	bucket, ok := bm.load("key1", limit)
@@ -175,7 +175,7 @@ func TestBucketMap_Count(t *testing.T) {
 	var bm bucketMap[string]
 	limit1 := NewLimit(100, time.Second)
 	limit2 := NewLimit(200, time.Second)
-	executionTime := time.Now()
+	executionTime := bnow()
 
 	// Empty map should have count 0
 	require.Equal(t, 0, bm.count(), "empty map should have count 0")
@@ -211,7 +211,7 @@ func TestBucketMap_ConcurrentAccess(t *testing.T) {
 	var bm bucketMap[string]
 
 	limit := NewLimit(100, time.Second)
-	executionTime := time.Now()
+	executionTime := bnow()
 
 	const concurrency = 100
 	const ops = 1000
@@ -253,7 +253,7 @@ func TestBucketMap_DifferentKeyTypes(t *testing.T) {
 	// Test with int keys
 	var bm bucketMap[int]
 	limit := NewLimit(100, time.Second)
-	executionTime := time.Now()
+	executionTime := bnow()
 
 	bucket1 := bm.loadOrStore(42, executionTime, limit)
 	bucket2 := bm.loadOrStore(42, executionTime, limit)

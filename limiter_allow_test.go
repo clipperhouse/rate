@@ -26,7 +26,7 @@ func TestLimiter_Allow(t *testing.T) {
 				limit := NewLimit(9, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
 
-				now := time.Now()
+				now := bnow()
 
 				for range limit.count {
 					require.True(t, limiter.allow("test", now))
@@ -49,7 +49,7 @@ func TestLimiter_Allow(t *testing.T) {
 				limitFunc := func(input string) Limit { return limit }
 				limiter := NewLimiterFunc(keyFunc, limitFunc)
 
-				now := time.Now()
+				now := bnow()
 
 				for range limit.count {
 					require.True(t, limiter.allow("test", now))
@@ -81,7 +81,7 @@ func TestLimiter_Allow(t *testing.T) {
 				perMinute := NewLimit(3, time.Minute)
 				limiter := NewLimiter(keyFunc, perSecond, perMinute)
 
-				now := time.Now()
+				now := bnow()
 
 				// Consume tokens up to the per-second limit
 				calls := perSecond.Count() // 2
@@ -143,7 +143,7 @@ func TestLimiter_Allow(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit1, limit2)
 			const buckets = 3
 
-			now := time.Now()
+			now := bnow()
 
 			for bucketID := range buckets {
 				limiter.allow(bucketID, now)
@@ -169,7 +169,7 @@ func TestLimiter_Allow(t *testing.T) {
 
 				limit := NewLimit(9, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				now := time.Now()
+				now := bnow()
 
 				for bucketID := range buckets {
 					for range 9 {
@@ -188,7 +188,7 @@ func TestLimiter_Allow(t *testing.T) {
 				limit := NewLimit(9, time.Second)
 				limitFunc := func(input string) Limit { return limit }
 				limiter := NewLimiterFunc(keyFunc, limitFunc)
-				now := time.Now()
+				now := bnow()
 
 				for i := range buckets {
 					for range 9 {
@@ -206,7 +206,7 @@ func TestLimiter_Allow(t *testing.T) {
 				const buckets = 3
 				limit := NewLimit(9, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
-				start := time.Now()
+				start := bnow()
 
 				// Enough concurrent processes for each bucket to precisely exhaust the limit
 				{
@@ -255,7 +255,7 @@ func TestLimiter_Allow(t *testing.T) {
 					limit := NewLimit(9, time.Second)
 					limitFunc := func(input int) Limit { return limit }
 					limiter := NewLimiterFunc(keyFunc, limitFunc)
-					start := time.Now()
+					start := bnow()
 
 					// Enough concurrent processes for each bucket to precisely exhaust the limit
 					{
@@ -320,7 +320,7 @@ func TestLimiter_Allow(t *testing.T) {
 				perSecond := NewLimit(2, time.Second)
 				perMinute := NewLimit(3, time.Minute)
 				limiter := NewLimiter(keyFunc, perSecond, perMinute)
-				executionTime := time.Now()
+				executionTime := bnow()
 
 				for bucketID := range buckets {
 					for range perSecond.Count() {
@@ -349,7 +349,7 @@ func TestLimiter_Allow(t *testing.T) {
 				perSecond := NewLimit(2, time.Second)
 				perMinute := NewLimit(3, time.Minute)
 				limiter := NewLimiter(keyFunc, perSecond, perMinute)
-				executionTime := time.Now()
+				executionTime := bnow()
 
 				// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
 				{
@@ -444,7 +444,7 @@ func TestLimiter_AllowN_SingleBucket(t *testing.T) {
 	limit := NewLimit(9, time.Second)
 	limiter := NewLimiter(keyFunc, limit)
 
-	now := time.Now()
+	now := bnow()
 	require.True(t, limiter.allowN("test", now, 1))
 	require.True(t, limiter.allowN("test", now, 8))
 	require.False(t, limiter.allowN("test", now, 1))
@@ -464,7 +464,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 	perHour := NewLimit(99, time.Hour)
 	limiter := NewLimiter(keyFunc, perSecond, perHour)
 
-	now := time.Now()
+	now := bnow()
 
 	// previously consumed, running tally
 	consumed := int64(0)
@@ -603,7 +603,7 @@ func TestLimiter_AllowWithDebug_SingleBucket_MultipleLimits(t *testing.T) {
 
 	const bucketID = "test-allow-with-debug"
 
-	executionTime := time.Now()
+	executionTime := bnow()
 	{
 		// exhaust the per-second limit, but per-minute should still have 1 token
 		for i := range perSecond.Count() {
@@ -677,7 +677,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	perSecond := NewLimit(2, time.Second)
 	perMinute := NewLimit(3, time.Minute)
 	limiter := NewLimiter(keyFunc, perSecond, perMinute)
-	executionTime := time.Now()
+	executionTime := bnow()
 
 	// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
 	{
@@ -940,7 +940,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 
 			const bucketID = "test-allow-with-debug"
 
-			executionTime := time.Now()
+			executionTime := bnow()
 			{
 				// exhaust the per-second limit, but per-minute should still have 1 token
 				for i := range perSecond.Count() {
@@ -1015,7 +1015,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 		limitFunc := func(input string) Limit { return limit }
 		limiter := NewLimiterFunc(keyFunc, limitFunc)
 
-		now := time.Now()
+		now := bnow()
 
 		allow, details := limiter.allowWithDebug("test-details", now)
 		require.True(t, allow)
@@ -1096,7 +1096,7 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 			limiter := NewLimiterFunc(keyFunc, limitFunc)
 
 			for i := range 3 {
-				allow, details := limiter.allowWithDebug(i+1, time.Now())
+				allow, details := limiter.allowWithDebug(i+1, bnow())
 				require.True(t, allow)
 				d := details[0]
 				require.Equal(t, limitFunc(i+1), d.Limit())
@@ -1107,7 +1107,7 @@ func TestLimiter_UsesLimitFunc(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 
 			for i := range 3 {
-				allow, details := limiter.allowWithDebug(i+1, time.Now())
+				allow, details := limiter.allowWithDebug(i+1, bnow())
 				require.True(t, allow)
 				d := details[0]
 				require.Equal(t, limit, d.Limit())
@@ -1176,7 +1176,7 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 		slow := NewLimit(6, time.Minute)  // 6 per minute = 10s per token
 		limiter := NewLimiter(keyFunc, fast, slow)
 
-		baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+		baseTime := bnow()
 
 		// Test when both buckets are exhausted - RetryAfter should be max across buckets
 		t.Run("BothBucketsExhausted", func(t *testing.T) {
@@ -1380,7 +1380,7 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 			slow := NewLimit(5, time.Minute)  // 12s per token
 			limiter := NewLimiter(keyFunc, fast, slow)
 
-			baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+			baseTime := bnow()
 
 			// Consume 3 tokens
 			allowed, details := limiter.allowNWithDetails("test-remaining", baseTime, 3)
@@ -1408,7 +1408,7 @@ func TestLimiter_AllowWithDetails(t *testing.T) {
 			limiter := NewLimiter(keyFunc, limit)
 
 			// Start at a base time
-			oldTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+			oldTime := bnow()
 
 			// Use up some tokens at old time
 			allowed := limiter.allowN("test-cutoff", oldTime, 3)

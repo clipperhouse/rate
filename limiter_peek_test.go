@@ -20,7 +20,7 @@ func TestLimiter_Peek_NeverPersists(t *testing.T) {
 	limit2 := NewLimit(rand.Int63n(99)+1, time.Second)
 	limiter := NewLimiter(keyFunc, limit1, limit2)
 
-	now := time.Now()
+	now := bnow()
 
 	// any number of peeks should be true
 	for range limit1.count * 20 {
@@ -40,7 +40,7 @@ func TestLimiter_Peek_SingleBucket(t *testing.T) {
 	limit := NewLimit(9, time.Second)
 	limiter := NewLimiter(keyFunc, limit)
 
-	now := time.Now()
+	now := bnow()
 
 	// any number of peeks should be true
 	for range limit.count * 2 {
@@ -69,7 +69,7 @@ func TestLimiter_PeekN_SingleBucket(t *testing.T) {
 	limit := NewLimit(9, time.Second)
 	limiter := NewLimiter(keyFunc, limit)
 
-	now := time.Now()
+	now := bnow()
 	require.False(t, limiter.peekN("test", now, 10))
 	require.True(t, limiter.peekN("test", now, 9))
 	require.True(t, limiter.peekN("test", now, 1))
@@ -94,7 +94,7 @@ func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
 	const buckets = 3
 	limit := NewLimit(9, time.Second)
 	limiter := NewLimiter(keyFunc, limit)
-	now := time.Now()
+	now := bnow()
 
 	// any number of peeks should be true
 	for bucketID := range buckets {
@@ -134,7 +134,7 @@ func TestLimiter_Peek_MultipleBuckets_MultipleLimits(t *testing.T) {
 	perSecond := NewLimit(2, time.Second)
 	perMinute := NewLimit(3, time.Minute)
 	limiter := NewLimiter(keyFunc, perSecond, perMinute)
-	now := time.Now()
+	now := bnow()
 
 	// any number of peeks should be true
 	for bucketID := range buckets {
@@ -177,7 +177,7 @@ func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 	const buckets = 3
 	limit := NewLimit(9, time.Second)
 	limiter := NewLimiter(keyFunc, limit)
-	now := time.Now()
+	now := bnow()
 
 	// Concurrent peeks: all should be true initially
 	{
@@ -248,7 +248,7 @@ func TestLimiter_PeekWithDebug(t *testing.T) {
 	perMinute := NewLimit(rand.Int63n(99)+1, time.Minute)
 	limiter := NewLimiter(keyFunc, perSecond, perMinute)
 
-	executionTime := time.Now()
+	executionTime := bnow()
 	input := "test-debug-peek"
 
 	// any number of peeks should be true
@@ -292,7 +292,7 @@ func TestLimiter_PeekWithDebug_AllowedAndDenied(t *testing.T) {
 	limit := NewLimit(2, time.Second)
 	limiter := NewLimiter(keyFunc, limit)
 
-	now := time.Now()
+	now := bnow()
 	input := "test-peek-debug"
 
 	{
@@ -348,7 +348,7 @@ func TestLimiter_Peek_SingleBucket_Func(t *testing.T) {
 	limitFunc := func(input string) Limit { return limit }
 	limiter := NewLimiterFunc(keyFunc, limitFunc)
 
-	now := time.Now()
+	now := bnow()
 
 	// any number of peeks should be true
 	for range limit.count * 2 {
@@ -378,7 +378,7 @@ func TestLimiter_Peek_MultipleBuckets_Func(t *testing.T) {
 	limit := NewLimit(9, time.Second)
 	limitFunc := func(input int) Limit { return limit }
 	limiter := NewLimiterFunc(keyFunc, limitFunc)
-	now := time.Now()
+	now := bnow()
 
 	// any number of peeks should be true
 	for bucketID := range buckets {
@@ -418,7 +418,7 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 	limit := NewLimit(9, time.Second)
 	limitFunc := func(input int) Limit { return limit }
 	limiter := NewLimiterFunc(keyFunc, limitFunc)
-	now := time.Now()
+	now := bnow()
 
 	// Concurrent peeks: all should be true initially
 	{
@@ -489,7 +489,7 @@ func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 	perHour := NewLimit(99, time.Hour)
 	limiter := NewLimiter(keyFunc, perSecond, perHour)
 
-	now := time.Now()
+	now := bnow()
 
 	{
 		request := int64(10)
@@ -551,7 +551,7 @@ func TestLimiter_PeekWithDebug_Func(t *testing.T) {
 	limitFunc := func(input string) Limit { return limit }
 	limiter := NewLimiterFunc(keyFunc, limitFunc)
 
-	now := time.Now()
+	now := bnow()
 	input := "test-details"
 
 	allowed, debugs := limiter.peekWithDebug(input, now)
@@ -596,7 +596,7 @@ func TestLimiter_PeekWithDetails(t *testing.T) {
 		slow := NewLimit(6, time.Minute)  // 6 per minute = 10s per token
 		limiter := NewLimiter(keyFunc, fast, slow)
 
-		baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+		baseTime := bnow()
 
 		// Test when both buckets are exhausted - RetryAfter should be max across buckets
 		t.Run("BothBucketsExhausted", func(t *testing.T) {

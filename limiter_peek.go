@@ -11,18 +11,18 @@ func (r *Limiter[TInput, TKey]) Peek(input TInput) bool {
 // PeekN returns true if tokens are available for the given key,
 // but without consuming any tokens.
 func (r *Limiter[TInput, TKey]) PeekN(input TInput, n int64) bool {
-	return r.peekN(input, time.Now(), n)
+	return r.peekN(input, bnow(), n)
 }
 
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
-func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime time.Time) bool {
+func (r *Limiter[TInput, TKey]) peek(input TInput, executionTime btime) bool {
 	return r.peekN(input, executionTime, 1)
 }
 
 // peek returns true if tokens are available for the given key,
 // but without consuming any tokens.
-func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime time.Time, n int64) bool {
+func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime btime, n int64) bool {
 	limits := r.getLimits(input)
 	if len(limits) == 0 {
 		// No limits defined, so we allow everything
@@ -68,10 +68,10 @@ func (r *Limiter[TInput, TKey]) PeekWithDetails(input TInput) (bool, Details[TIn
 //
 // No tokens are consumed.
 func (r *Limiter[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool, Details[TInput, TKey]) {
-	return r.peekNWithDetails(input, time.Now(), n)
+	return r.peekNWithDetails(input, bnow(), n)
 }
 
-func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime time.Time, n int64) (bool, Details[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime btime, n int64) (bool, Details[TInput, TKey]) {
 	userKey := r.keyFunc(input)
 
 	limits := r.getLimits(input)
@@ -156,14 +156,14 @@ func (r *Limiter[TInput, TKey]) PeekWithDebug(input TInput) (bool, []Debug[TInpu
 //
 // No tokens are consumed.
 func (r *Limiter[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, []Debug[TInput, TKey]) {
-	return r.peekNWithDebug(input, time.Now(), n)
+	return r.peekNWithDebug(input, bnow(), n)
 }
 
-func (r *Limiter[TInput, TKey]) peekWithDebug(input TInput, executionTime time.Time) (bool, []Debug[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) peekWithDebug(input TInput, executionTime btime) (bool, []Debug[TInput, TKey]) {
 	return r.peekNWithDebug(input, executionTime, 1)
 }
 
-func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime time.Time, n int64) (bool, []Debug[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime btime, n int64) (bool, []Debug[TInput, TKey]) {
 	userKey := r.keyFunc(input)
 
 	limits := r.getLimits(input)

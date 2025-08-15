@@ -162,7 +162,7 @@ For a soft definition of “transactional”. Tokens are only deducted when all
 limits pass, otherwise no tokens are deducted. I think this is the right semantics,
 but perhaps more importantly, it mitigates noisy-neighbor DOS attempts.
 
-There is only one call to `time.Now()`, and all subsequent logic uses that time.
+There is only one call to `bnow()`, and all subsequent logic uses that time.
 Inspired by databases, where a transaction has a consistent snapshot view that
 applies throughout.
 

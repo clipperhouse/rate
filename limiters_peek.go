@@ -3,7 +3,7 @@ package rate
 import (
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 // peekN returns true if tokens are available for the given input across all limiters,

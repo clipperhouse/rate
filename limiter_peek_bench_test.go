@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 func BenchmarkLimiter_Peek_SingleBucket(b *testing.B) {

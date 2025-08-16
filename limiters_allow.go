@@ -1,6 +1,6 @@
 package rate
 
-import "github.com/clipperhouse/rate/ntime"
+import "github.com/clipperhouse/ntime"
 
 func (rs *Limiters[TInput, TKey]) Allow(input TInput) bool {
 	return rs.AllowN(input, 1)

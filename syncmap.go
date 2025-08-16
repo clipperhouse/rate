@@ -3,7 +3,7 @@ package rate
 import (
 	"sync"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 // syncMap is a typed wrapper around sync.Map for our specific use case

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 // Hierarchical benchmarks for Limiters.allowN providing clearer grouping.

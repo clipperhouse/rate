@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 // Wait will poll [Allow] for a period of time,

@@ -3,7 +3,7 @@ package rate
 import (
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 // Peek returns true if tokens are available for the given key,

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 // BenchmarkLimiters_PeekN provides benchmarks for the new peekN functionality

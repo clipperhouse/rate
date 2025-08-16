@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 	"github.com/stretchr/testify/require"
 )
 

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 // bucket is a primitive for tracking tokens.

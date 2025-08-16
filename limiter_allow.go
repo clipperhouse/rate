@@ -1,6 +1,6 @@
 package rate
 
-import "github.com/clipperhouse/rate/ntime"
+import "github.com/clipperhouse/ntime"
 
 // Allow returns true if one or more tokens are available for the given key.
 // If true, it will consume a token from the key's bucket. If false,

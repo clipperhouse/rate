@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clipperhouse/rate/ntime"
+	"github.com/clipperhouse/ntime"
 )
 
 func BenchmarkLimiter_Serial_Parallel(b *testing.B) {

@@ -7,7 +7,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 )
 
-replace github.com/clipperhouse/ntime => ../ntime
+// replace github.com/clipperhouse/ntime => ../ntime
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

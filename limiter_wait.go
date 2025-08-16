@@ -101,8 +101,8 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 
 	// currentTime is an approximation of the real clock moving forward
 	// it's imprecise because it depends on time.After below.
-	// For testing purposes, I want startTime (execution time) to
-	// be a parameter. The alternative is calling btime.Now().
+	// For testing purposes, we want startTime (execution time) to
+	// be a parameter.
 	currentTime := startTime
 
 	userKey := r.keyFunc(input)

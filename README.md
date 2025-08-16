@@ -169,7 +169,7 @@ applies throughout.
 #### Efficient
 
 You should usually see zero allocations. An `Allow()` call takes
-around 60ns on my machine. Here are some
+around 50ns on my machine. Here are some
 [benchmarks of other Go rate limiters](https://github.com/sethvargo/go-limiter#speed-and-performance).
 
 At scale, one might create millions of buckets, so we’ve minimized the [data

@@ -1,5 +1,5 @@
-github.com/clipperhouse/ntime v0.0.0-20250816211937-5199c595acf1 h1:D0Byqe3dL6NcoOoL7++fTDKLsIMhxP3GcWkQ5QoRcVs=
-github.com/clipperhouse/ntime v0.0.0-20250816211937-5199c595acf1/go.mod h1:ltkB4V9vsTzh0x0qwOJPlxHHtAJJA4I+EJKjhbEktWY=
+github.com/clipperhouse/ntime v0.0.0-20250816214430-1d4877f0f24e h1:bKLWGtOfcH/6j30R1TQywnot+q44Gn+qQWvzli3LMUw=
+github.com/clipperhouse/ntime v0.0.0-20250816214430-1d4877f0f24e/go.mod h1:ltkB4V9vsTzh0x0qwOJPlxHHtAJJA4I+EJKjhbEktWY=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

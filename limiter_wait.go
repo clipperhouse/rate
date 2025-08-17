@@ -130,7 +130,7 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 
 		// if we can't possibly get a token, fail fast
 		if deadline, ok := deadline(); ok {
-			if deadline.Before(currentTime.Add(retryAfter).ToSystemTime()) {
+			if deadline.Before(currentTime.Add(retryAfter).ToTime()) {
 				return false
 			}
 		}

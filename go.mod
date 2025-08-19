@@ -2,7 +2,12 @@ module github.com/clipperhouse/rate
 
 go 1.24
 
-require github.com/stretchr/testify v1.10.0
+require (
+	github.com/clipperhouse/ntime v0.1.1
+	github.com/stretchr/testify v1.10.0
+)
+
+// replace github.com/clipperhouse/ntime => ../ntime
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

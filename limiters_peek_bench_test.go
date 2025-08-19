@@ -4,6 +4,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/clipperhouse/ntime"
 )
 
 // BenchmarkLimiters_PeekN provides benchmarks for the new peekN functionality
@@ -15,7 +17,7 @@ func BenchmarkLimiters_PeekN(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
 				limiters := Combine(limiter)
-				now := time.Now()
+				now := ntime.Now()
 				b.ReportAllocs()
 				for b.Loop() {
 					limiters.peekN("x", now, 1)
@@ -26,7 +28,7 @@ func BenchmarkLimiters_PeekN(b *testing.B) {
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
 				limiters := Combine(limiter)
-				now := time.Now()
+				now := ntime.Now()
 				b.ReportAllocs()
 				for b.Loop() {
 					limiters.peekN("x", now, 1)
@@ -41,7 +43,7 @@ func BenchmarkLimiters_PeekN(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
 				limiters := Combine(limiter)
-				now := time.Now()
+				now := ntime.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
 				i := int64(0)
@@ -57,7 +59,7 @@ func BenchmarkLimiters_PeekN(b *testing.B) {
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
 				limiters := Combine(limiter)
-				now := time.Now()
+				now := ntime.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
 				i := int64(0)
@@ -79,7 +81,7 @@ func BenchmarkLimiters_PeekN(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					limiters := Combine(l1, l2)
-					now := time.Now()
+					now := ntime.Now()
 					b.ReportAllocs()
 					for b.Loop() {
 						limiters.peekN("x", now, 1)
@@ -89,7 +91,7 @@ func BenchmarkLimiters_PeekN(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
 					limiters := Combine(l1, l2)
-					now := time.Now()
+					now := ntime.Now()
 					b.ReportAllocs()
 					for b.Loop() {
 						limiters.peekN("x", now, 1)
@@ -103,7 +105,7 @@ func BenchmarkLimiters_PeekN(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					limiters := Combine(l1, l2)
-					now := time.Now()
+					now := ntime.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
 					i := int64(0)
@@ -118,7 +120,7 @@ func BenchmarkLimiters_PeekN(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
 					limiters := Combine(l1, l2)
-					now := time.Now()
+					now := ntime.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
 					i := int64(0)
@@ -143,7 +145,7 @@ func BenchmarkLimiters_PeekNWithDetails(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
 				limiters := Combine(limiter)
-				now := time.Now()
+				now := ntime.Now()
 				b.ReportAllocs()
 				for b.Loop() {
 					limiters.peekNWithDetails("x", now, 1)
@@ -154,7 +156,7 @@ func BenchmarkLimiters_PeekNWithDetails(b *testing.B) {
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
 				limiters := Combine(limiter)
-				now := time.Now()
+				now := ntime.Now()
 				b.ReportAllocs()
 				for b.Loop() {
 					limiters.peekNWithDetails("x", now, 1)
@@ -169,7 +171,7 @@ func BenchmarkLimiters_PeekNWithDetails(b *testing.B) {
 				limit := NewLimit(1_000_000, time.Second)
 				limiter := NewLimiter(keyFunc, limit)
 				limiters := Combine(limiter)
-				now := time.Now()
+				now := ntime.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
 				i := int64(0)
@@ -185,7 +187,7 @@ func BenchmarkLimiters_PeekNWithDetails(b *testing.B) {
 				limit2 := NewLimit(500_000, time.Second/2)
 				limiter := NewLimiter(keyFunc, limit1, limit2)
 				limiters := Combine(limiter)
-				now := time.Now()
+				now := ntime.Now()
 				b.ResetTimer()
 				b.ReportAllocs()
 				i := int64(0)
@@ -207,7 +209,7 @@ func BenchmarkLimiters_PeekNWithDetails(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					limiters := Combine(l1, l2)
-					now := time.Now()
+					now := ntime.Now()
 					b.ReportAllocs()
 					for b.Loop() {
 						limiters.peekNWithDetails("x", now, 1)
@@ -217,7 +219,7 @@ func BenchmarkLimiters_PeekNWithDetails(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
 					limiters := Combine(l1, l2)
-					now := time.Now()
+					now := ntime.Now()
 					b.ReportAllocs()
 					for b.Loop() {
 						limiters.peekNWithDetails("x", now, 1)
@@ -231,7 +233,7 @@ func BenchmarkLimiters_PeekNWithDetails(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					l2 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second))
 					limiters := Combine(l1, l2)
-					now := time.Now()
+					now := ntime.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
 					i := int64(0)
@@ -246,7 +248,7 @@ func BenchmarkLimiters_PeekNWithDetails(b *testing.B) {
 					l1 := NewLimiter(keyFunc, NewLimit(1_000_000, time.Second), NewLimit(500_000, time.Second/2))
 					l2 := NewLimiter(keyFunc, NewLimit(750_000, time.Second), NewLimit(400_000, time.Second/2))
 					limiters := Combine(l1, l2)
-					now := time.Now()
+					now := ntime.Now()
 					b.ResetTimer()
 					b.ReportAllocs()
 					i := int64(0)

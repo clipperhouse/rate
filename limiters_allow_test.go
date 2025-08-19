@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/clipperhouse/ntime"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ func TestLimiters_AllowN(t *testing.T) {
 
 				limiters := Combine(limiter)
 
-				now := time.Now()
+				now := ntime.Now()
 
 				// Should allow the first 5 requests
 				for i := range 5 {
@@ -57,7 +58,7 @@ func TestLimiters_AllowN(t *testing.T) {
 
 				limiters := Combine(limiter)
 
-				now := time.Now()
+				now := ntime.Now()
 				const concurrency = 20
 
 				// Run 20 goroutines concurrently, expecting only 10 to succeed
@@ -97,7 +98,7 @@ func TestLimiters_AllowN(t *testing.T) {
 
 				limiters := Combine(limiter)
 
-				now := time.Now()
+				now := ntime.Now()
 
 				// Should allow the first 10 requests (limited by per-second limit)
 				for i := range 10 {
@@ -145,7 +146,7 @@ func TestLimiters_AllowN(t *testing.T) {
 
 				limiters := Combine(limiter)
 
-				now := time.Now()
+				now := ntime.Now()
 				const concurrency = 20
 
 				// Run 20 goroutines concurrently, expecting only 8 to succeed (limited by per-second)
@@ -224,7 +225,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					// Create Limiters with both limiters
 					limiters := Combine(limiter1, limiter2)
 
-					now := time.Now()
+					now := ntime.Now()
 
 					// Should allow the first 3 requests (limited by the more restrictive limiter1)
 					for i := range 3 {
@@ -253,7 +254,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					// Create Limiters with both limiters
 					limiters := Combine(limiter1, limiter2)
 
-					now := time.Now()
+					now := ntime.Now()
 					const concurrency = 10
 
 					// Run 10 goroutines concurrently, expecting only 3 to succeed (limited by limiter1)
@@ -298,7 +299,7 @@ func TestLimiters_AllowN(t *testing.T) {
 
 					limiters := Combine(limiter1, limiter2)
 
-					now := time.Now()
+					now := ntime.Now()
 
 					// Should allow the first 5 requests (limited by limiter1's per-second limit)
 					for i := range 5 {
@@ -346,7 +347,7 @@ func TestLimiters_AllowN(t *testing.T) {
 
 					limiters := Combine(limiter1, limiter2)
 
-					now := time.Now()
+					now := ntime.Now()
 					const concurrency = 15
 
 					// Run 15 goroutines concurrently, expecting only 4 to succeed (limited by limiter1's per-second)
@@ -424,7 +425,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					// Create Limiters with both limiters
 					limiters := Combine(limiter1, limiter2)
 
-					now := time.Now()
+					now := ntime.Now()
 
 					// Should allow the first 3 requests (limited by the more restrictive limiter1)
 					for i := range 3 {
@@ -467,7 +468,7 @@ func TestLimiters_AllowN(t *testing.T) {
 					// Create Limiters with both limiters
 					limiters := Combine(limiter1, limiter2)
 
-					now := time.Now()
+					now := ntime.Now()
 					const concurrency = 10
 
 					// Run 10 goroutines concurrently, expecting only 3 to succeed (limited by limiter1)
@@ -534,7 +535,7 @@ func TestLimiters_AllowN(t *testing.T) {
 
 					limiters := Combine(limiter1, limiter2)
 
-					now := time.Now()
+					now := ntime.Now()
 
 					// Should allow the first 4 requests (limited by limiter1's per-second limit)
 					for i := range 4 {
@@ -596,7 +597,7 @@ func TestLimiters_AllowN(t *testing.T) {
 
 					limiters := Combine(limiter1, limiter2)
 
-					now := time.Now()
+					now := ntime.Now()
 					const concurrency = 15
 
 					// Run 15 goroutines concurrently, expecting only 4 to succeed (limited by limiter1's per-second)
@@ -679,7 +680,7 @@ func TestLimiters_AllowN(t *testing.T) {
 		// Create Limiters with no limiters
 		limiters := Combine[string, string]()
 
-		now := time.Now()
+		now := ntime.Now()
 
 		// Should allow everything when no limiters are present
 		allowed := limiters.allowN("test", now, 1)
@@ -708,7 +709,7 @@ func TestLimiters_AllowN_MultipleTokens(t *testing.T) {
 		// Create Limiters with the single limiter
 		limiters := Combine(limiter)
 
-		now := time.Now()
+		now := ntime.Now()
 
 		// Should allow consuming 5 tokens at once
 		allowed := limiters.allowN("test", now, 5)
@@ -743,7 +744,7 @@ func TestLimiters_AllowN_MultipleTokens(t *testing.T) {
 		// Create Limiters with both limiters
 		limiters := Combine(limiter1, limiter2)
 
-		now := time.Now()
+		now := ntime.Now()
 
 		// Should allow consuming 4 tokens at once (limited by limiter1's 8 req/sec)
 		allowed := limiters.allowN("test", now, 4)
@@ -791,7 +792,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 		t.Parallel()
 
 		limiters := Combine[string, string]()
-		now := time.Now()
+		now := ntime.Now()
 
 		allowed, debugs := limiters.allowNWithDebug("test", now, 1)
 		require.True(t, allowed, "should allow when no limiters present")
@@ -807,7 +808,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 			limit := NewLimit(5, time.Second)
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
-			now := time.Now()
+			now := ntime.Now()
 
 			// First allow - should succeed
 			allowed, debugs := limiters.allowNWithDebug("test", now, 1)
@@ -819,7 +820,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 			require.Equal(t, "test", d.Input(), "input should match")
 			require.Equal(t, "bucket-test", d.Key(), "key should match keyFunc output")
 			require.Equal(t, limit, d.Limit(), "limit should match")
-			require.Equal(t, now, d.ExecutionTime(), "execution time should match")
+			require.Equal(t, now.ToTime(), d.ExecutionTime(), "execution time should match")
 			require.Equal(t, int64(1), d.TokensRequested(), "tokens requested should be 1")
 			require.Equal(t, int64(1), d.TokensConsumed(), "tokens consumed should be 1 when allowed")
 			require.Equal(t, limit.Count()-1, d.TokensRemaining(), "tokens remaining should decrease by 1")
@@ -857,7 +858,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 			perMinute := NewLimit(10, time.Minute)
 			limiter := NewLimiter(keyFunc, perSecond, perMinute)
 			limiters := Combine(limiter)
-			now := time.Now()
+			now := ntime.Now()
 
 			// First allow - should succeed
 			allowed, debugs := limiters.allowNWithDebug("test", now, 1)
@@ -927,7 +928,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 				limiter1 := NewLimiter(keyFunc, limit1)
 				limiter2 := NewLimiter(keyFunc, limit2)
 				limiters := Combine(limiter1, limiter2)
-				now := time.Now()
+				now := ntime.Now()
 
 				// Should allow first 3 requests (limited by limiter1)
 				allowed, debugs := limiters.allowNWithDebug("test", now, 3)
@@ -980,7 +981,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 				limiter2 := NewLimiter(keyFunc, limit2a, limit2b)
 
 				limiters := Combine(limiter1, limiter2)
-				now := time.Now()
+				now := ntime.Now()
 
 				// Should allow first 2 requests (limited by limiter1's per-second)
 				allowed, debugs := limiters.allowNWithDebug("test", now, 2)
@@ -1031,7 +1032,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 			limiter1 := NewLimiter(keyFunc1, limit1)
 			limiter2 := NewLimiter(keyFunc2, limit2)
 			limiters := Combine(limiter1, limiter2)
-			now := time.Now()
+			now := ntime.Now()
 
 			// Should allow first 3 requests (limited by limiter1)
 			allowed, debugs := limiters.allowNWithDebug("test", now, 3)
@@ -1062,7 +1063,7 @@ func TestLimiters_AllowNWithDebug(t *testing.T) {
 		limiter1 := NewLimiter(keyFunc, limit1)
 		limiter2 := NewLimiter(keyFunc, limit2)
 		limiters := Combine(limiter1, limiter2)
-		now := time.Now()
+		now := ntime.Now()
 
 		const concurrency = 10
 
@@ -1129,7 +1130,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		limiter2 := NewLimiterFunc(keyFunc)
 
 		limiters := Combine(limiter1, limiter2)
-		now := time.Now()
+		now := ntime.Now()
 
 		// Should be limited by limiter1 since limiter2 has no limits
 		allowed, debugs := limiters.allowNWithDebug("test", now, 3)
@@ -1154,7 +1155,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		limit := NewLimit(5, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
 		limiters := Combine(limiter)
-		now := time.Now()
+		now := ntime.Now()
 
 		// Test requesting 0 tokens
 		allowed, debugs := limiters.allowNWithDebug("test", now, 0)
@@ -1175,7 +1176,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		limit := NewLimit(5, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
 		limiters := Combine(limiter)
-		now := time.Now()
+		now := ntime.Now()
 
 		// Test requesting more tokens than available
 		allowed, debugs := limiters.allowNWithDebug("test", now, 10)
@@ -1206,7 +1207,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		}
 		limiter := NewLimiterFunc(keyFunc, conditionalLimitFunc)
 		limiters := Combine(limiter)
-		now := time.Now()
+		now := ntime.Now()
 
 		// Test blocked input - should allow only 1 token
 		allowed, debugs := limiters.allowNWithDebug("blocked", now, 1)
@@ -1248,7 +1249,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		limit := NewLimit(3, time.Second)
 		limiter := NewLimiter(emptyKeyFunc, limit)
 		limiters := Combine(limiter)
-		now := time.Now()
+		now := ntime.Now()
 
 		// Should work fine with empty key
 		allowed, debugs := limiters.allowNWithDebug("test", now, 1)
@@ -1284,7 +1285,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		}
 		limiter := NewLimiterFunc(keyFunc, variableLimitFunc)
 		limiters := Combine(limiter)
-		now := time.Now()
+		now := ntime.Now()
 
 		// Test premium input
 		allowed, debugs := limiters.allowNWithDebug("premium", now, 5)
@@ -1321,7 +1322,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		}
 		limiter := NewLimiter(keyFunc, limits...)
 		limiters := Combine(limiter)
-		now := time.Now()
+		now := ntime.Now()
 
 		allowed, debugs := limiters.allowNWithDebug("test", now, 1)
 		require.True(t, allowed, "should allow with exactly 6 limits")
@@ -1352,7 +1353,7 @@ func TestLimiters_AllowNWithDebug_EdgeCases(t *testing.T) {
 		limiter := NewLimiter(keyFunc, fastLimit, slowLimit)
 		limiters := Combine(limiter)
 
-		baseTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+		baseTime := ntime.Now()
 
 		// Exhaust both limits
 		allowed, debugs := limiters.allowNWithDebug("test", baseTime, 2)
@@ -1400,7 +1401,7 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 		t.Parallel()
 
 		limiters := Combine[string, string]()
-		now := time.Now()
+		now := ntime.Now()
 
 		allowed, d := limiters.allowNWithDetails("test", now, 1)
 		require.True(t, allowed, "should allow when no limiters present")
@@ -1417,7 +1418,7 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 		limit := NewLimit(5, time.Second)
 		limiter := NewLimiter(keyFunc, limit)
 		limiters := Combine(limiter)
-		now := time.Now()
+		now := ntime.Now()
 
 		allowed, d := limiters.allowNWithDetails("test", now, 1)
 		require.True(t, allowed)
@@ -1430,7 +1431,7 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 		t.Run("Identical", func(t *testing.T) {
 			t.Parallel()
 
-			now := time.Now()
+			now := ntime.Now()
 
 			limiter := NewLimiter(keyFunc, limit)
 			limiters := Combine(limiter)
@@ -1475,7 +1476,7 @@ func TestLimiters_AllowNWithDetails(t *testing.T) {
 	t.Run("MultipleLimiters", func(t *testing.T) {
 		t.Parallel()
 
-		now := time.Now()
+		now := ntime.Now()
 
 		// Limiter1: more restrictive per-second, generous per-minute
 		perSecond1 := NewLimit(2, time.Second)  // 500ms/token

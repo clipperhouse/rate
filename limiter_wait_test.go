@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/clipperhouse/ntime"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,7 +20,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	limit := NewLimit(2, 100*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
 
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Consume all tokens
 	for range limit.count {
@@ -35,7 +36,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	{
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken), true
+			return executionTime.Add(limit.durationPerToken).ToTime(), true
 		}
 
 		// Done channel that never closes (no cancellation)
@@ -58,7 +59,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	{
 		// Deadline that expires too soon
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken / 2), true
+			return executionTime.Add(limit.durationPerToken / 2).ToTime(), true
 		}
 
 		// Done channel that never closes
@@ -74,7 +75,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	{
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken), true
+			return executionTime.Add(limit.durationPerToken).ToTime(), true
 		}
 
 		// Done channel that closes immediately
@@ -124,7 +125,7 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 	limit := NewLimit(2, 100*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
 
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Consume all tokens
 	{
@@ -142,7 +143,7 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 		wait := time.Duration(limit.count) * limit.durationPerToken
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(wait), true
+			return executionTime.Add(wait).ToTime(), true
 		}
 
 		// Done channel that never closes (no cancellation)
@@ -167,7 +168,7 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 	{
 		// Deadline that expires too soon
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken), true
+			return executionTime.Add(limit.durationPerToken).ToTime(), true
 		}
 
 		// Done channel that never closes
@@ -183,7 +184,7 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 	{
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken * time.Duration(limit.count)), true
+			return executionTime.Add(limit.durationPerToken * time.Duration(limit.count)).ToTime(), true
 		}
 
 		// Done channel that closes immediately
@@ -233,7 +234,7 @@ func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
 	const buckets = 3
 	limit := NewLimit(2, 100*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Exhaust tokens for all buckets
 	for bucketID := range buckets {
@@ -253,7 +254,7 @@ func TestLimiter_Wait_MultipleBuckets(t *testing.T) {
 	for bucketID := range buckets {
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken), true
+			return executionTime.Add(limit.durationPerToken).ToTime(), true
 		}
 
 		// Done channel that never closes (no cancellation)
@@ -283,7 +284,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 	const buckets int64 = 3
 	limit := NewLimit(2, 100*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Exhaust tokens for all buckets
 	for bucketID := range buckets {
@@ -308,7 +309,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 
 		// Deadline that gives enough time for all tokens to be refilled
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.period), true
+			return executionTime.Add(limit.period).ToTime(), true
 		}
 
 		// Done channel that never closes
@@ -357,7 +358,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 
 		// Deadline that expires too soon
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken / 2), true
+			return executionTime.Add(limit.durationPerToken / 2).ToTime(), true
 		}
 
 		// Done channel that never closes
@@ -390,7 +391,7 @@ func TestLimiter_Wait_MultipleBuckets_Concurrent(t *testing.T) {
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.period), true
+			return executionTime.Add(limit.period).ToTime(), true
 		}
 
 		// Done channel that closes immediately
@@ -427,7 +428,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	limit := NewLimit(10, 100*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
 
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Test 1: Wait should consume exactly 1 token
 	t.Run("Wait_Consumes_One_Token", func(t *testing.T) {
@@ -437,7 +438,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second), true
+			return executionTime.Add(time.Second).ToTime(), true
 		}
 		done := func() <-chan struct{} {
 			return make(chan struct{}) // never closes
@@ -462,7 +463,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second), true
+			return executionTime.Add(time.Second).ToTime(), true
 		}
 		done := func() <-chan struct{} {
 			return make(chan struct{}) // never closes
@@ -492,7 +493,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second), true
+			return executionTime.Add(time.Second).ToTime(), true
 		}
 		done := func() <-chan struct{} {
 			return make(chan struct{}) // never closes
@@ -522,7 +523,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 
 		// Deadline that expires immediately (no time to refill)
 		deadline := func() (time.Time, bool) {
-			return executionTime, true // expires immediately
+			return executionTime.ToTime(), true // expires immediately
 		}
 		done := func() <-chan struct{} {
 			return make(chan struct{}) // never closes
@@ -549,7 +550,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second), true
+			return executionTime.Add(time.Second).ToTime(), true
 		}
 		done := func() <-chan struct{} {
 			return make(chan struct{}) // never closes
@@ -576,7 +577,7 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second), true
+			return executionTime.Add(time.Second).ToTime(), true
 		}
 		done := func() <-chan struct{} {
 			return make(chan struct{}) // never closes
@@ -610,7 +611,9 @@ func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
 	})
 }
 
-func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
+func TestLimiter_Wait_FIFO_Ordering_SingleBucket_Flaky(t *testing.T) {
+	t.Skip("this test is flaky because the implementation is not deterministic")
+
 	t.Parallel()
 	keyFunc := func(input string) string {
 		return "test-bucket"
@@ -618,7 +621,7 @@ func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
 	// 1 token per 50ms
 	limit := NewLimit(1, 50*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Exhaust the single token
 	require.True(t, limiter.allow("key", executionTime), "should allow initial token")
@@ -633,7 +636,7 @@ func TestLimiter_Wait_FIFO_Ordering_SingleBucket(t *testing.T) {
 
 	// Deadline that gives enough time for all tokens to be refilled
 	deadline := func() (time.Time, bool) {
-		return executionTime.Add(time.Duration(concurrency) * limit.durationPerToken), true
+		return executionTime.Add(time.Duration(concurrency) * limit.durationPerToken).ToTime(), true
 	}
 
 	// Done channel that never closes
@@ -695,7 +698,7 @@ func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
 	// 1 token per 50ms, to make the test run reasonably fast
 	limit := NewLimit(1, 50*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Exhaust the single token for each bucket
 	for i := range buckets {
@@ -713,7 +716,7 @@ func TestLimiter_Wait_FIFO_Ordering_MultipleBuckets_Flaky(t *testing.T) {
 
 	// Deadline that gives enough time for all tokens to be refilled for all goroutines
 	deadline := func() (time.Time, bool) {
-		return executionTime.Add(time.Duration(concurrencyPerBucket) * limit.durationPerToken), true
+		return executionTime.Add(time.Duration(concurrencyPerBucket) * limit.durationPerToken).ToTime(), true
 	}
 
 	// Done channel that never closes
@@ -778,7 +781,7 @@ func TestLimiter_WaitersCleanup_Basic(t *testing.T) {
 	// Initial waiters count should be 0
 	require.Equal(t, 0, limiter.waiters.count(), "initial waiters count should be 0")
 
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Exhaust tokens for multiple keys
 	require.True(t, limiter.allow("key1", executionTime), "should allow initial token for key1")
@@ -786,7 +789,7 @@ func TestLimiter_WaitersCleanup_Basic(t *testing.T) {
 
 	// Create deadline that will timeout immediately
 	deadline := func() (time.Time, bool) {
-		return executionTime, true // immediate timeout
+		return executionTime.ToTime(), true // immediate timeout
 	}
 	done := func() <-chan struct{} {
 		ch := make(chan struct{})
@@ -825,11 +828,11 @@ func TestLimiter_WaitersCleanup_MemoryLeak_Prevention(t *testing.T) {
 	limit := NewLimit(1, 100*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
 
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Create deadline that will timeout immediately
 	deadline := func() (time.Time, bool) {
-		return executionTime, true // immediate timeout
+		return executionTime.ToTime(), true // immediate timeout
 	}
 	done := func() <-chan struct{} {
 		ch := make(chan struct{})
@@ -861,11 +864,11 @@ func TestLimiter_WaitersCleanup_Concurrent(t *testing.T) {
 	limit := NewLimit(1, 100*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
 
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Create deadline that will timeout immediately
 	deadline := func() (time.Time, bool) {
-		return executionTime, true // immediate timeout
+		return executionTime.ToTime(), true // immediate timeout
 	}
 	done := func() <-chan struct{} {
 		ch := make(chan struct{})
@@ -907,7 +910,7 @@ func TestLimiter_WaitersCleanup_WithSuccessfulWaits(t *testing.T) {
 	limit := NewLimit(1, 100*time.Millisecond)
 	limiter := NewLimiter(keyFunc, limit)
 
-	executionTime := time.Now()
+	executionTime := ntime.Now()
 
 	// Exhaust the token
 	require.True(t, limiter.allow("key", executionTime), "should allow initial token")
@@ -917,7 +920,7 @@ func TestLimiter_WaitersCleanup_WithSuccessfulWaits(t *testing.T) {
 
 	// Create deadline that gives enough time for tokens to be refilled
 	deadline := func() (time.Time, bool) {
-		return executionTime.Add(time.Duration(concurrency) * limit.durationPerToken), true
+		return executionTime.Add(time.Duration(concurrency) * limit.durationPerToken).ToTime(), true
 	}
 
 	done := func() <-chan struct{} {

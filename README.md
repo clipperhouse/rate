@@ -1,4 +1,5 @@
-[![Tests](https://github.com/clipperhouse/rate/actions/workflows/tests.yml/badge.svg)](https://github.com/clipperhouse/rate/actions/workflows/tests.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/clipperhouse/rate.svg)](https://pkg.go.dev/github.com/clipperhouse/rate)
+[![Tests](https://github.com/clipperhouse/rate/actions/workflows/tests.yml/badge.svg)](https://github.com/clipperhouse/rate/actions/workflows/tests.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/clipperhouse/rate.svg)](https://pkg.go.dev/github.com/clipperhouse/rate)
 
 A new, composable rate limiter for Go, with an emphasis on clean API and low overhead.
 
@@ -169,7 +170,7 @@ applies throughout.
 #### Efficient
 
 You should usually see zero allocations. An `Allow()` call takes
-around 60ns on my machine. Here are some
+around 50ns on my machine. Here are some
 [benchmarks of other Go rate limiters](https://github.com/sethvargo/go-limiter#speed-and-performance).
 
 At scale, one might create millions of buckets, so we’ve minimized the [data

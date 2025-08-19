@@ -30,9 +30,9 @@ func (rs *Limiters[TInput, TKey]) peekN(input TInput, executionTime ntime.Time, 
 		// Check each limit for this limiter
 		for _, limit := range limits {
 			if b, ok := r.buckets.load(userKey, limit); ok {
-				b.mu.RLock()
+				b.mu.Lock()
 				allowed := b.hasTokens(executionTime, limit, n)
-				b.mu.RUnlock()
+				b.mu.Unlock()
 				if !allowed {
 					return false // Early return if any limit is exceeded
 				}
@@ -85,12 +85,6 @@ func (rs *Limiters[TInput, TKey]) PeekNWithDetails(input TInput, n int64) (bool,
 // This method avoids allocations and is suitable for performance-critical paths.
 //
 // No tokens are consumed.
-//
-// Note: This implementation uses read locks (b.mu.RLock()) because the bucket methods
-// are designed to handle concurrent access gracefully. While concurrent calls to consumeTokens
-// might cause slight inconsistencies between hasTokens and remainingTokens results, this is
-// acceptable for peek operations where the main result (allowed) is the primary concern
-// and details are treated as predictions rather than guarantees.
 func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime ntime.Time, n int64) (bool, Details[TInput, TKey]) {
 	switch len(rs.limiters) {
 	case 0:
@@ -152,7 +146,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime n
 		// Check each limit for this limiter
 		for _, limit := range lims {
 			if b, ok := r.buckets.load(userKey, limit); ok {
-				b.mu.RLock()
+				b.mu.Lock()
 				// First check if allowed (this doesn't modify state)
 				allowed := b.hasTokens(executionTime, limit, n)
 				allowAll = allowAll && allowed
@@ -161,7 +155,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDetails(input TInput, executionTime n
 				// since the important thing is the allowed result
 				rt := b.remainingTokens(executionTime, limit)
 				ra := b.retryAfter(executionTime, limit, n)
-				b.mu.RUnlock()
+				b.mu.Unlock()
 
 				if remainingTokens == -1 || rt < remainingTokens { // min
 					remainingTokens = rt
@@ -236,12 +230,6 @@ func (rs *Limiters[TInput, TKey]) PeekNWithDebug(input TInput, n int64) (bool, [
 // For setting response headers, consider using PeekNWithDetails instead.
 //
 // No tokens are consumed.
-//
-// Note: This implementation uses read locks (b.mu.RLock()) because the bucket methods
-// are designed to handle concurrent access gracefully. While concurrent calls to consumeTokens
-// might cause slight inconsistencies between hasTokens and remainingTokens results, this is
-// acceptable for peek operations where the main result (allowed) is the primary concern
-// and details are treated as predictions rather than guarantees.
 func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime ntime.Time, n int64) (bool, []Debug[TInput, TKey]) {
 	switch len(rs.limiters) {
 	case 0:
@@ -289,7 +277,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime nti
 		// Check each limit for this limiter
 		for _, limit := range lims {
 			if b, ok := r.buckets.load(userKey, limit); ok {
-				b.mu.RLock()
+				b.mu.Lock()
 
 				allow := b.hasTokens(executionTime, limit, n)
 				debugs = append(debugs, Debug[TInput, TKey]{
@@ -304,7 +292,7 @@ func (rs *Limiters[TInput, TKey]) peekNWithDebug(input TInput, executionTime nti
 					retryAfter:      b.retryAfter(executionTime, limit, n),
 				})
 
-				b.mu.RUnlock()
+				b.mu.Unlock()
 				allowAll = allowAll && allow
 
 				continue

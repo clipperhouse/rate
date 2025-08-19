@@ -20,7 +20,7 @@ import (
 // the right thing.
 type bucket struct {
 	time ntime.Time
-	mu   sync.RWMutex
+	mu   sync.Mutex
 }
 
 func newBucket(executionTime ntime.Time, limit Limit) bucket {

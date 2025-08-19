@@ -14,26 +14,57 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 		}
 
 		b.Run("SingleLimit", func(b *testing.B) {
-			limit := rate.NewLimit(1000000, time.Second)
-			limiter := rate.NewLimiter(keyFunc, limit)
+			b.Run("Serial", func(b *testing.B) {
+				limit := rate.NewLimit(1000000, time.Second)
+				limiter := rate.NewLimiter(keyFunc, limit)
 
-			b.ReportAllocs()
+				b.ReportAllocs()
 
-			for b.Loop() {
-				limiter.PeekN(0, 1)
-			}
+				for b.Loop() {
+					limiter.PeekN(0, 1)
+				}
+			})
+
+			b.Run("Parallel", func(b *testing.B) {
+				limit := rate.NewLimit(1000000, time.Second)
+				limiter := rate.NewLimiter(keyFunc, limit)
+
+				b.ReportAllocs()
+
+				b.RunParallel(func(pb *testing.PB) {
+					for pb.Next() {
+						limiter.PeekN(0, 1)
+					}
+				})
+			})
 		})
 
 		b.Run("MultipleLimits", func(b *testing.B) {
-			limit1 := rate.NewLimit(1000000, time.Second)
-			limit2 := rate.NewLimit(500000, time.Second/2)
-			limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+			b.Run("Serial", func(b *testing.B) {
+				limit1 := rate.NewLimit(1000000, time.Second)
+				limit2 := rate.NewLimit(500000, time.Second/2)
+				limiter := rate.NewLimiter(keyFunc, limit1, limit2)
 
-			b.ReportAllocs()
+				b.ReportAllocs()
 
-			for b.Loop() {
-				limiter.PeekN(0, 1)
-			}
+				for b.Loop() {
+					limiter.PeekN(0, 1)
+				}
+			})
+
+			b.Run("Parallel", func(b *testing.B) {
+				limit1 := rate.NewLimit(1000000, time.Second)
+				limit2 := rate.NewLimit(500000, time.Second/2)
+				limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+
+				b.ReportAllocs()
+
+				b.RunParallel(func(pb *testing.PB) {
+					for pb.Next() {
+						limiter.PeekN(0, 1)
+					}
+				})
+			})
 		})
 	})
 
@@ -44,28 +75,65 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 		}
 
 		b.Run("SingleLimit", func(b *testing.B) {
-			limit := rate.NewLimit(1000000, time.Second)
-			limiter := rate.NewLimiter(keyFunc, limit)
+			b.Run("Serial", func(b *testing.B) {
+				limit := rate.NewLimit(1000000, time.Second)
+				limiter := rate.NewLimiter(keyFunc, limit)
 
-			b.ResetTimer()
-			b.ReportAllocs()
+				b.ResetTimer()
+				b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
-				limiter.PeekN(i%buckets, 1)
-			}
+				for i := 0; i < b.N; i++ {
+					limiter.PeekN(i%buckets, 1)
+				}
+			})
+
+			b.Run("Parallel", func(b *testing.B) {
+				limit := rate.NewLimit(1000000, time.Second)
+				limiter := rate.NewLimiter(keyFunc, limit)
+
+				b.ResetTimer()
+				b.ReportAllocs()
+
+				b.RunParallel(func(pb *testing.PB) {
+					i := 0
+					for pb.Next() {
+						limiter.PeekN(i%buckets, 1)
+						i++
+					}
+				})
+			})
 		})
 
 		b.Run("MultipleLimits", func(b *testing.B) {
-			limit1 := rate.NewLimit(1000000, time.Second)
-			limit2 := rate.NewLimit(500000, time.Second/2)
-			limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+			b.Run("Serial", func(b *testing.B) {
+				limit1 := rate.NewLimit(1000000, time.Second)
+				limit2 := rate.NewLimit(500000, time.Second/2)
+				limiter := rate.NewLimiter(keyFunc, limit1, limit2)
 
-			b.ResetTimer()
-			b.ReportAllocs()
+				b.ResetTimer()
+				b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
-				limiter.PeekN(i%buckets, 1)
-			}
+				for i := 0; i < b.N; i++ {
+					limiter.PeekN(i%buckets, 1)
+				}
+			})
+
+			b.Run("Parallel", func(b *testing.B) {
+				limit1 := rate.NewLimit(1000000, time.Second)
+				limit2 := rate.NewLimit(500000, time.Second/2)
+				limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+
+				b.ResetTimer()
+				b.ReportAllocs()
+
+				b.RunParallel(func(pb *testing.PB) {
+					i := 0
+					for pb.Next() {
+						limiter.PeekN(i%buckets, 1)
+						i++
+					}
+				})
+			})
 		})
 	})
 }

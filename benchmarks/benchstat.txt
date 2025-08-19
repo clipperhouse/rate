@@ -1,0 +1,235 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/clipperhouse/rate/benchmarks
+cpu: Apple M2
+                                                                                            │  v0.2.1.txt   │             v0.3.0.txt              │
+                                                                                            │    sec/op     │    sec/op     vs base               │
+Limiter_Allow/SingleBucket/SingleLimit/Serial-8                                                89.75n ±  4%   52.77n ±  5%  -41.20% (p=0.002 n=6)
+Limiter_Allow/SingleBucket/SingleLimit/Parallel-8                                              125.4n ±  1%   111.1n ±  2%  -11.40% (p=0.002 n=6)
+Limiter_Allow/SingleBucket/MultipleLimits/Serial-8                                            154.35n ±  1%   91.43n ±  0%  -40.76% (p=0.002 n=6)
+Limiter_Allow/SingleBucket/MultipleLimits/Parallel-8                                           417.0n ±  4%   301.5n ±  4%  -27.71% (p=0.002 n=6)
+Limiter_Allow/MultipleBuckets/SingleLimit/Serial-8                                             92.44n ±  2%   49.74n ±  3%  -46.19% (p=0.002 n=6)
+Limiter_Allow/MultipleBuckets/SingleLimit/Parallel-8                                           24.84n ±  4%   16.41n ±  6%  -33.90% (p=0.002 n=6)
+Limiter_Allow/MultipleBuckets/MultipleLimits/Serial-8                                         170.40n ±  1%   86.24n ±  1%  -49.39% (p=0.002 n=6)
+Limiter_Allow/MultipleBuckets/MultipleLimits/Parallel-8                                        47.06n ±  3%   26.94n ±  2%  -42.76% (p=0.002 n=6)
+Limiter_AllowWithDetails/SingleBucket/SingleLimit/Serial-8                                    139.40n ±  0%   78.73n ±  1%  -43.52% (p=0.002 n=6)
+Limiter_AllowWithDetails/SingleBucket/SingleLimit/Parallel-8                                   192.2n ±  0%   117.4n ±  0%  -38.93% (p=0.002 n=6)
+Limiter_AllowWithDetails/SingleBucket/MultipleLimits/Serial-8                                  219.4n ±  0%   109.7n ±  2%  -50.00% (p=0.002 n=6)
+Limiter_AllowWithDetails/SingleBucket/MultipleLimits/Parallel-8                                510.6n ±  7%   332.2n ±  2%  -34.93% (p=0.002 n=6)
+Limiter_AllowWithDetails/MultipleBuckets/SingleLimit/Serial-8                                 148.60n ±  2%   70.57n ±  1%  -52.51% (p=0.002 n=6)
+Limiter_AllowWithDetails/MultipleBuckets/SingleLimit/Parallel-8                                37.63n ±  2%   18.44n ±  9%  -51.00% (p=0.002 n=6)
+Limiter_AllowWithDetails/MultipleBuckets/MultipleLimits/Serial-8                               250.6n ±  6%   105.7n ±  1%  -57.84% (p=0.002 n=6)
+Limiter_AllowWithDetails/MultipleBuckets/MultipleLimits/Parallel-8                             65.04n ±  1%   30.90n ±  2%  -52.49% (p=0.002 n=6)
+Limiter_AllowWithDebug/SingleBucket/SingleLimit/Serial-8                                      152.65n ±  0%   93.47n ±  6%  -38.77% (p=0.002 n=6)
+Limiter_AllowWithDebug/SingleBucket/SingleLimit/Parallel-8                                     231.8n ±  0%   157.8n ±  0%  -31.90% (p=0.002 n=6)
+Limiter_AllowWithDebug/SingleBucket/MultipleLimits/Serial-8                                    246.7n ±  1%   153.8n ±  2%  -37.66% (p=0.002 n=6)
+Limiter_AllowWithDebug/SingleBucket/MultipleLimits/Parallel-8                                  491.1n ±  5%   373.6n ±  1%  -23.92% (p=0.002 n=6)
+Limiter_AllowWithDebug/MultipleBuckets/SingleLimit/Serial-8                                   143.20n ±  1%   87.23n ±  2%  -39.09% (p=0.002 n=6)
+Limiter_AllowWithDebug/MultipleBuckets/SingleLimit/Parallel-8                                  54.47n ±  2%   40.30n ±  3%  -26.01% (p=0.002 n=6)
+Limiter_AllowWithDebug/MultipleBuckets/MultipleLimits/Serial-8                                 253.4n ±  1%   156.8n ±  5%  -38.13% (p=0.002 n=6)
+Limiter_AllowWithDebug/MultipleBuckets/MultipleLimits/Parallel-8                              101.05n ±  0%   75.38n ±  1%  -25.41% (p=0.002 n=6)
+Limiters_Allow/SingleLimiter/SingleBucket/SingleLimit/Serial-8                                 93.32n ±  1%   57.00n ±  0%  -38.92% (p=0.002 n=6)
+Limiters_Allow/SingleLimiter/SingleBucket/SingleLimit/Parallel-8                               130.1n ±  3%   111.4n ±  0%  -14.37% (p=0.002 n=6)
+Limiters_Allow/SingleLimiter/SingleBucket/MultipleLimits/Serial-8                             157.25n ±  2%   97.81n ±  0%  -37.80% (p=0.002 n=6)
+Limiters_Allow/SingleLimiter/SingleBucket/MultipleLimits/Parallel-8                            431.4n ±  2%   295.6n ±  2%  -31.47% (p=0.002 n=6)
+Limiters_Allow/SingleLimiter/MultipleBuckets/SingleLimit/Serial-8                              95.86n ±  2%   51.65n ±  1%  -46.12% (p=0.002 n=6)
+Limiters_Allow/SingleLimiter/MultipleBuckets/SingleLimit/Parallel-8                            60.77n ±  2%   52.63n ±  2%  -13.39% (p=0.002 n=6)
+Limiters_Allow/SingleLimiter/MultipleBuckets/MultipleLimits/Serial-8                          174.10n ±  5%   91.97n ±  2%  -47.17% (p=0.002 n=6)
+Limiters_Allow/SingleLimiter/MultipleBuckets/MultipleLimits/Parallel-8                         68.50n ±  1%   56.69n ±  9%  -17.23% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit/Serial-8                    171.5n ±  0%   119.2n ±  0%  -30.52% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit/Parallel-8                  489.6n ±  4%   271.3n ±  1%  -44.59% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits/Serial-8                 284.2n ±  1%   175.2n ±  1%  -38.34% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits/Parallel-8               540.6n ±  0%   405.9n ±  1%  -24.91% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit/Serial-8                 185.6n ±  0%   108.0n ±  2%  -41.82% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit/Parallel-8               70.56n ±  2%   58.70n ±  6%  -16.82% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits/Serial-8              311.0n ±  0%   176.0n ±  2%  -43.40% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits/Parallel-8            94.44n ±  3%   68.64n ±  4%  -27.32% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit/Serial-8             132.75n ±  0%   88.88n ±  0%  -33.05% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit/Parallel-8            417.9n ± 12%   210.8n ±  3%  -49.56% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits/Serial-8           217.2n ±  0%   120.3n ±  1%  -44.60% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits/Parallel-8         439.6n ±  2%   354.1n ±  0%  -19.46% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit/Serial-8           186.1n ±  2%   108.9n ±  2%  -41.51% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit/Parallel-8         70.53n ±  7%   58.88n ±  4%  -16.52% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits/Serial-8        310.1n ±  0%   174.9n ±  5%  -43.60% (p=0.002 n=6)
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits/Parallel-8      94.16n ±  4%   69.33n ±  3%  -26.38% (p=0.002 n=6)
+Limiters_AllowWithDetails/SingleLimiter/SingleBucket/SingleLimit-8                            153.25n ±  1%   92.72n ±  0%  -39.50% (p=0.002 n=6)
+Limiters_AllowWithDetails/SingleLimiter/SingleBucket/MultipleLimits-8                          234.6n ±  0%   121.3n ±  0%  -48.31% (p=0.002 n=6)
+Limiters_AllowWithDetails/SingleLimiter/MultipleBuckets/SingleLimit-8                          68.34n ±  2%   56.81n ±  1%  -16.88% (p=0.002 n=6)
+Limiters_AllowWithDetails/SingleLimiter/MultipleBuckets/MultipleLimits-8                       83.41n ±  1%   59.98n ±  2%  -28.10% (p=0.002 n=6)
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit-8                250.6n ±  0%   131.6n ±  0%  -47.49% (p=0.002 n=6)
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits-8             418.8n ±  1%   199.1n ±  1%  -52.47% (p=0.002 n=6)
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit-8             84.15n ±  3%   60.72n ±  1%  -27.83% (p=0.002 n=6)
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits-8         128.55n ±  5%   70.62n ± 10%  -45.06% (p=0.002 n=6)
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit-8          210.6n ±  2%   103.3n ±  0%  -50.95% (p=0.002 n=6)
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits-8       341.9n ±  1%   145.5n ±  1%  -57.44% (p=0.002 n=6)
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit-8       83.60n ±  2%   60.41n ±  3%  -27.74% (p=0.002 n=6)
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits-8   128.90n ±  2%   71.70n ±  2%  -44.37% (p=0.002 n=6)
+Limiters_AllowWithDebug/SingleLimiter/SingleBucket/SingleLimit-8                               172.3n ±  3%   112.6n ±  0%  -34.65% (p=0.002 n=6)
+Limiters_AllowWithDebug/SingleLimiter/SingleBucket/MultipleLimits-8                            272.5n ±  6%   177.8n ±  0%  -34.76% (p=0.002 n=6)
+Limiters_AllowWithDebug/SingleLimiter/MultipleBuckets/SingleLimit-8                            87.65n ± 10%   75.30n ±  2%  -14.10% (p=0.002 n=6)
+Limiters_AllowWithDebug/SingleLimiter/MultipleBuckets/MultipleLimits-8                         127.9n ±  3%   102.8n ±  1%  -19.66% (p=0.002 n=6)
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit-8                  281.8n ±  0%   188.9n ±  0%  -32.96% (p=0.002 n=6)
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits-8               473.3n ±  1%   302.8n ±  1%  -36.01% (p=0.002 n=6)
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit-8               130.2n ±  1%   105.2n ±  3%  -19.23% (p=0.002 n=6)
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits-8            212.1n ±  5%   164.4n ±  1%  -22.49% (p=0.002 n=6)
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit-8            243.5n ±  0%   158.3n ±  0%  -34.98% (p=0.002 n=6)
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits-8         389.1n ±  4%   242.1n ±  1%  -37.78% (p=0.002 n=6)
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit-8         130.3n ±  1%   105.0n ±  1%  -19.38% (p=0.002 n=6)
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits-8      213.2n ±  2%   165.5n ±  8%  -22.33% (p=0.002 n=6)
+geomean                                                                                        162.7n         103.6n        -36.34%
+
+                                                                                            │  v0.2.1.txt  │             v0.3.0.txt             │
+                                                                                            │     B/op     │    B/op     vs base                │
+Limiter_Allow/SingleBucket/SingleLimit/Serial-8                                               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/SingleBucket/SingleLimit/Parallel-8                                             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/SingleBucket/MultipleLimits/Serial-8                                            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/SingleBucket/MultipleLimits/Parallel-8                                          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/MultipleBuckets/SingleLimit/Serial-8                                            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/MultipleBuckets/SingleLimit/Parallel-8                                          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/MultipleBuckets/MultipleLimits/Serial-8                                         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/MultipleBuckets/MultipleLimits/Parallel-8                                       0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/SingleBucket/SingleLimit/Serial-8                                    0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/SingleBucket/SingleLimit/Parallel-8                                  0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/SingleBucket/MultipleLimits/Serial-8                                 0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/SingleBucket/MultipleLimits/Parallel-8                               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/MultipleBuckets/SingleLimit/Serial-8                                 0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/MultipleBuckets/SingleLimit/Parallel-8                               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/MultipleBuckets/MultipleLimits/Serial-8                              0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/MultipleBuckets/MultipleLimits/Parallel-8                            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/SingleBucket/SingleLimit/Serial-8                                      112.0 ± 0%     112.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/SingleBucket/SingleLimit/Parallel-8                                    112.0 ± 0%     112.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/SingleBucket/MultipleLimits/Serial-8                                   224.0 ± 0%     224.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/SingleBucket/MultipleLimits/Parallel-8                                 224.0 ± 0%     224.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/MultipleBuckets/SingleLimit/Serial-8                                   112.0 ± 0%     112.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/MultipleBuckets/SingleLimit/Parallel-8                                 112.0 ± 0%     112.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/MultipleBuckets/MultipleLimits/Serial-8                                208.0 ± 0%     208.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/MultipleBuckets/MultipleLimits/Parallel-8                              208.0 ± 0%     208.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/SingleBucket/SingleLimit/Serial-8                                0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/SingleBucket/SingleLimit/Parallel-8                              0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/SingleBucket/MultipleLimits/Serial-8                             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/SingleBucket/MultipleLimits/Parallel-8                           0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/MultipleBuckets/SingleLimit/Serial-8                             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/MultipleBuckets/SingleLimit/Parallel-8                           0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/MultipleBuckets/MultipleLimits/Serial-8                          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/MultipleBuckets/MultipleLimits/Parallel-8                        0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit/Serial-8                   0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit/Parallel-8                 0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits/Serial-8                0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits/Parallel-8              0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit/Serial-8                0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit/Parallel-8              0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits/Serial-8             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits/Parallel-8           0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit/Serial-8             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit/Parallel-8           0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits/Serial-8          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits/Parallel-8        0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit/Serial-8          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit/Parallel-8        0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits/Serial-8       0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits/Parallel-8     0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/SingleLimiter/SingleBucket/SingleLimit-8                            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/SingleLimiter/SingleBucket/MultipleLimits-8                         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/SingleLimiter/MultipleBuckets/SingleLimit-8                         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/SingleLimiter/MultipleBuckets/MultipleLimits-8                      0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit-8               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits-8            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit-8            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits-8         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit-8         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits-8      0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit-8      0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits-8   0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/SingleLimiter/SingleBucket/SingleLimit-8                              128.0 ± 0%     128.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/SingleLimiter/SingleBucket/MultipleLimits-8                           240.0 ± 0%     240.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/SingleLimiter/MultipleBuckets/SingleLimit-8                           112.0 ± 0%     112.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/SingleLimiter/MultipleBuckets/MultipleLimits-8                        208.0 ± 0%     208.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit-8                 240.0 ± 0%     240.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits-8              480.0 ± 0%     480.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit-8              208.0 ± 0%     208.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits-8           416.0 ± 0%     416.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit-8           224.0 ± 0%     224.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits-8        448.0 ± 0%     448.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit-8        208.0 ± 0%     208.0 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits-8     416.0 ± 0%     416.0 ± 0%       ~ (p=1.000 n=6) ¹
+geomean                                                                                                  ²               +0.00%               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+
+                                                                                            │  v0.2.1.txt  │             v0.3.0.txt             │
+                                                                                            │  allocs/op   │ allocs/op   vs base                │
+Limiter_Allow/SingleBucket/SingleLimit/Serial-8                                               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/SingleBucket/SingleLimit/Parallel-8                                             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/SingleBucket/MultipleLimits/Serial-8                                            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/SingleBucket/MultipleLimits/Parallel-8                                          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/MultipleBuckets/SingleLimit/Serial-8                                            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/MultipleBuckets/SingleLimit/Parallel-8                                          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/MultipleBuckets/MultipleLimits/Serial-8                                         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_Allow/MultipleBuckets/MultipleLimits/Parallel-8                                       0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/SingleBucket/SingleLimit/Serial-8                                    0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/SingleBucket/SingleLimit/Parallel-8                                  0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/SingleBucket/MultipleLimits/Serial-8                                 0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/SingleBucket/MultipleLimits/Parallel-8                               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/MultipleBuckets/SingleLimit/Serial-8                                 0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/MultipleBuckets/SingleLimit/Parallel-8                               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/MultipleBuckets/MultipleLimits/Serial-8                              0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDetails/MultipleBuckets/MultipleLimits/Parallel-8                            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/SingleBucket/SingleLimit/Serial-8                                      1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/SingleBucket/SingleLimit/Parallel-8                                    1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/SingleBucket/MultipleLimits/Serial-8                                   1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/SingleBucket/MultipleLimits/Parallel-8                                 1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/MultipleBuckets/SingleLimit/Serial-8                                   1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/MultipleBuckets/SingleLimit/Parallel-8                                 1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/MultipleBuckets/MultipleLimits/Serial-8                                1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiter_AllowWithDebug/MultipleBuckets/MultipleLimits/Parallel-8                              1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/SingleBucket/SingleLimit/Serial-8                                0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/SingleBucket/SingleLimit/Parallel-8                              0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/SingleBucket/MultipleLimits/Serial-8                             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/SingleBucket/MultipleLimits/Parallel-8                           0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/MultipleBuckets/SingleLimit/Serial-8                             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/MultipleBuckets/SingleLimit/Parallel-8                           0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/MultipleBuckets/MultipleLimits/Serial-8                          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/SingleLimiter/MultipleBuckets/MultipleLimits/Parallel-8                        0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit/Serial-8                   0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit/Parallel-8                 0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits/Serial-8                0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits/Parallel-8              0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit/Serial-8                0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit/Parallel-8              0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits/Serial-8             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits/Parallel-8           0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit/Serial-8             0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit/Parallel-8           0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits/Serial-8          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits/Parallel-8        0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit/Serial-8          0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit/Parallel-8        0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits/Serial-8       0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_Allow/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits/Parallel-8     0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/SingleLimiter/SingleBucket/SingleLimit-8                            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/SingleLimiter/SingleBucket/MultipleLimits-8                         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/SingleLimiter/MultipleBuckets/SingleLimit-8                         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/SingleLimiter/MultipleBuckets/MultipleLimits-8                      0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit-8               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits-8            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit-8            0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits-8         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit-8         0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits-8      0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit-8      0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDetails/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits-8   0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/SingleLimiter/SingleBucket/SingleLimit-8                              1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/SingleLimiter/SingleBucket/MultipleLimits-8                           1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/SingleLimiter/MultipleBuckets/SingleLimit-8                           1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/SingleLimiter/MultipleBuckets/MultipleLimits-8                        1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/SingleBucket/SingleLimit-8                 1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/SingleBucket/MultipleLimits-8              1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/MultipleBuckets/SingleLimit-8              1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/SameKeyer/MultipleBuckets/MultipleLimits-8           1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/SingleBucket/SingleLimit-8           1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/SingleBucket/MultipleLimits-8        1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/MultipleBuckets/SingleLimit-8        1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+Limiters_AllowWithDebug/MultipleLimiters/DifferentKeyers/MultipleBuckets/MultipleLimits-8     1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=6) ¹
+geomean                                                                                                  ²               +0.00%               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean

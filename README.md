@@ -169,6 +169,8 @@ applies throughout.
 
 #### Efficient
 
+See the `benchmarks/` folder.
+
 You should usually see zero allocations. An `Allow()` call takes
 around 50ns on my machine. Here are some
 [benchmarks of other Go rate limiters](https://github.com/sethvargo/go-limiter#speed-and-performance).

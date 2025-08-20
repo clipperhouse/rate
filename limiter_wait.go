@@ -2,8 +2,6 @@ package rate
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/clipperhouse/ntime"
@@ -30,10 +28,8 @@ import (
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
 //
-// Wait offers best-effort FIFO ordering of requests. Under sustained
-// contention (when multiple requests wait longer than ~1ms), the Go runtime's
-// mutex starvation mode ensures strict FIFO ordering. Under light load,
-// ordering may be less strict but performance is optimized.
+// Wait makes no ordering guarantees. Multiple concurrent calls may
+// acquire tokens in any order.
 func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 	return r.waitN(ctx, input, ntime.Now(), 1)
 }
@@ -59,10 +55,8 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
 //
-// WaitN offers best-effort FIFO ordering of requests. Under sustained
-// contention (when multiple requests wait longer than ~1ms), the Go runtime's
-// mutex starvation mode ensures strict FIFO ordering. Under light load,
-// ordering may be less strict but performance is optimized.
+// WaitN makes no ordering guarantees. Multiple concurrent calls may
+// acquire tokens in any order.
 func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
 	return r.waitN(ctx, input, ntime.Now(), n)
 }
@@ -105,23 +99,8 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	// be a parameter.
 	currentTime := startTime
 
-	userKey := r.keyFunc(input)
-	waiter := r.getWaiter(userKey)
-
-	// Ensure cleanup happens when this waiter exits
-	defer func() {
-		// If no more waiters for this key, remove the entry to prevent memory leak,
-		// reference-counted
-		if waiter.decrement() == 0 {
-			r.waiters.delete(userKey)
-		}
-	}()
-
 	for {
-		// The goroutine at the front of the queue gets to try for a token first.
-		waiter.mu.Lock()
 		allow, details := r.allowNWithDetails(input, currentTime, n)
-		waiter.mu.Unlock()
 		if allow {
 			return true
 		}
@@ -142,31 +121,4 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 			currentTime = currentTime.Add(retryAfter)
 		}
 	}
-}
-
-// waiter represents a reservation queue for a specific key with reference counting
-type waiter struct {
-	mu    sync.Mutex
-	count int64 // number of active waiters for this key
-}
-
-// increment atomically increments the waiter count and returns the new count
-func (w *waiter) increment() int64 {
-	return atomic.AddInt64(&w.count, 1)
-}
-
-// decrement atomically decrements the waiter count and returns the new count
-func (w *waiter) decrement() int64 {
-	return atomic.AddInt64(&w.count, -1)
-}
-
-func getWaiter() *waiter {
-	return &waiter{}
-}
-
-// getWaiter atomically gets or creates a waiter entry and increments its reference count
-func (r *Limiter[TInput, TKey]) getWaiter(key TKey) *waiter {
-	waiter := r.waiters.loadOrStore(key, getWaiter)
-	waiter.increment()
-	return waiter
 }

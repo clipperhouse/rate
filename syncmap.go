@@ -37,21 +37,6 @@ func (bm *bucketMap[TKey]) loadOrStore(userKey TKey, executionTime ntime.Time, l
 	return actual.(*bucket)
 }
 
-// loadOrGet returns the existing value for the key if present.
-// Otherwise, it returns a new (temporary) value.
-func (bm *bucketMap[TKey]) loadOrGet(userKey TKey, executionTime ntime.Time, limit Limit) *bucket {
-	spec := bucketSpec[TKey]{
-		limit:   limit,
-		userKey: userKey,
-	}
-	loaded, ok := bm.m.Load(spec)
-	if ok {
-		return loaded.(*bucket)
-	}
-	b := newBucket(executionTime, limit)
-	return &b
-}
-
 func (bm *bucketMap[TKey]) load(userKey TKey, limit Limit) (*bucket, bool) {
 	spec := bucketSpec[TKey]{
 		limit:   limit,

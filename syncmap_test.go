@@ -72,31 +72,6 @@ func TestBucketMap_LoadOrStore(t *testing.T) {
 	require.False(t, bucket1 == bucket4, "should return different bucket for different key")
 }
 
-func TestBucketMap_LoadOrGet(t *testing.T) {
-	t.Parallel()
-
-	var bm bucketMap[string]
-	limit := NewLimit(100, time.Second)
-	executionTime := ntime.Now()
-
-	// First call should return a temporary bucket (not stored)
-	bucket1 := bm.loadOrGet("key1", executionTime, limit)
-	require.NotNil(t, bucket1, "should return a bucket")
-
-	// Second call should return another temporary bucket (different instance)
-	// Use slightly different execution time to ensure different bucket instances
-	bucket2 := bm.loadOrGet("key1", executionTime.Add(time.Nanosecond), limit)
-	require.NotNil(t, bucket2, "should return a bucket")
-	require.False(t, bucket1 == bucket2, "should return different temporary buckets when none stored")
-
-	// Store a bucket first
-	storedBucket := bm.loadOrStore("key1", executionTime, limit)
-
-	// Now loadOrGet should return the stored bucket
-	bucket3 := bm.loadOrGet("key1", executionTime, limit)
-	require.Equal(t, storedBucket, bucket3, "should return stored bucket when available")
-}
-
 func TestBucketMap_Load(t *testing.T) {
 	t.Parallel()
 
@@ -180,9 +155,6 @@ func TestBucketMap_ConcurrentAccess(t *testing.T) {
 			for range ops {
 				// Test loadOrStore method
 				bm.loadOrStore(key, executionTime, limit)
-
-				// Test loadOrGet method
-				bm.loadOrGet(key, executionTime, limit)
 
 				// Test load method
 				bm.load(key, limit)

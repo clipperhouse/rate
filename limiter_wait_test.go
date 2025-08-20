@@ -30,7 +30,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	ok := limiter.allow("test", executionTime)
 	require.False(t, ok, "should not allow when tokens exhausted")
 
-	// Test 1: Wait with enough time to acquire a token
+	// Test 1: Wait for 1 token with enough time to acquire it
 	{
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
@@ -42,8 +42,8 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 			return make(chan struct{}) // never closes
 		}
 
-		allow := limiter.waitWithCancellation("test", executionTime, deadline, done)
-		require.True(t, allow, "should acquire token after waiting")
+		allow := limiter.waitNWithCancellation("test", executionTime, 1, deadline, done)
+		require.True(t, allow, "should acquire 1 token after waiting")
 
 		// We waited
 		executionTime = executionTime.Add(limit.durationPerToken)
@@ -53,7 +53,7 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 	ok = limiter.allow("test", executionTime)
 	require.False(t, ok, "should not allow again immediately after wait")
 
-	// Test 2: Wait with deadline that expires before token is available
+	// Test 2: Wait for 1 token with deadline that expires before token is available
 	{
 		// Deadline that expires too soon
 		deadline := func() (time.Time, bool) {
@@ -65,11 +65,11 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 			return make(chan struct{}) // never closes
 		}
 
-		allow := limiter.waitWithCancellation("test", executionTime, deadline, done)
-		require.False(t, allow, "should not acquire token if deadline expires before token is available")
+		allow := limiter.waitNWithCancellation("test", executionTime, 1, deadline, done)
+		require.False(t, allow, "should not acquire 1 token if deadline expires before token is available")
 	}
 
-	// Test 3: Wait with immediate cancellation
+	// Test 3: Wait for 1 token with immediate cancellation
 	{
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
@@ -83,11 +83,11 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 			return ch
 		}
 
-		allow := limiter.waitWithCancellation("test", executionTime, deadline, done)
-		require.False(t, allow, "should not acquire token if context is cancelled immediately")
+		allow := limiter.waitNWithCancellation("test", executionTime, 1, deadline, done)
+		require.False(t, allow, "should not acquire 1 token if context is cancelled immediately")
 	}
 
-	// Test 4: Wait with no deadline
+	// Test 4: Wait for 1 token with no deadline
 	{
 		// Deadline that returns no deadline
 		deadline := func() (time.Time, bool) {
@@ -100,8 +100,8 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 		}
 
 		{
-			allow := limiter.waitWithCancellation("test", executionTime, deadline, done)
-			require.True(t, allow, "should acquire token when no deadline is set")
+			allow := limiter.waitNWithCancellation("test", executionTime, 1, deadline, done)
+			require.True(t, allow, "should acquire 1 token when no deadline is set")
 		}
 
 		// We waited
@@ -113,31 +113,12 @@ func TestLimiter_Wait_SingleBucket(t *testing.T) {
 			require.False(t, allow, "should not allow again immediately after wait")
 		}
 	}
-}
 
-func TestLimiter_WaitN_SingleBucket(t *testing.T) {
-	t.Parallel()
-	keyFunc := func(input string) string {
-		return input
-	}
-	limit := NewLimit(2, 100*time.Millisecond)
-	limiter := NewLimiter(keyFunc, limit)
-
-	executionTime := ntime.Now()
-
-	// Consume all tokens
+	// Test 5: Wait for multiple tokens (limit.count) with enough time to acquire them
 	{
-		ok := limiter.allowN("test", executionTime, limit.count)
-		require.True(t, ok, "should allow initial tokens")
-	}
-	{
-		// Should not allow immediately
-		ok := limiter.allowN("test", executionTime, 1)
-		require.False(t, ok, "should not allow when tokens exhausted")
-	}
+		// Wait for bucket to refill enough tokens
+		executionTime = executionTime.Add(limit.durationPerToken * time.Duration(limit.count))
 
-	// Test 1: Wait with enough time to acquire tokens
-	{
 		wait := time.Duration(limit.count) * limit.durationPerToken
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
@@ -150,23 +131,26 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 		}
 
 		allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
-		require.True(t, allow, "should acquire tokens after waiting")
+		require.True(t, allow, "should acquire %d tokens after waiting", limit.count)
 
 		// We waited
 		executionTime = executionTime.Add(limit.durationPerToken)
 	}
 
+	// Test 6: Wait for multiple tokens with deadline that expires before all tokens are available
 	{
-		// Should not allow again immediately after wait
-		ok := limiter.allow("test", executionTime)
-		require.False(t, ok, "should not allow again immediately after wait")
-	}
+		// Wait for bucket to refill enough tokens
+		executionTime = executionTime.Add(limit.durationPerToken * time.Duration(limit.count))
 
-	// Test 2: Wait with deadline that expires before n tokens are available
-	{
-		// Deadline that expires too soon
+		// Consume all tokens to exhaust the bucket again
+		for range limit.count {
+			ok := limiter.allow("test", executionTime)
+			require.True(t, ok, "should allow tokens to exhaust bucket")
+		}
+
+		// Deadline that expires too soon - use a very short duration
 		deadline := func() (time.Time, bool) {
-			return executionTime.Add(limit.durationPerToken).ToTime(), true
+			return executionTime.Add(limit.durationPerToken / 4).ToTime(), true
 		}
 
 		// Done channel that never closes
@@ -175,11 +159,20 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 		}
 
 		allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
-		require.False(t, allow, "should not acquire tokens if deadline expires before tokens are available")
+		require.False(t, allow, "should not acquire %d tokens if deadline expires before tokens are available", limit.count)
 	}
 
-	// Test 3: Wait with immediate cancellation
+	// Test 7: Wait for multiple tokens with immediate cancellation
 	{
+		// Wait for bucket to refill enough tokens
+		executionTime = executionTime.Add(limit.durationPerToken * time.Duration(limit.count))
+
+		// Consume all tokens to exhaust the bucket again
+		for range limit.count {
+			ok := limiter.allow("test", executionTime)
+			require.True(t, ok, "should allow tokens to exhaust bucket")
+		}
+
 		// Deadline that gives enough time
 		deadline := func() (time.Time, bool) {
 			return executionTime.Add(limit.durationPerToken * time.Duration(limit.count)).ToTime(), true
@@ -193,11 +186,20 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 		}
 
 		allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
-		require.False(t, allow, "should not acquire tokens if context is cancelled immediately")
+		require.False(t, allow, "should not acquire %d tokens if context is cancelled immediately", limit.count)
 	}
 
-	// Test 4: Wait with no deadline
+	// Test 8: Wait for multiple tokens with no deadline
 	{
+		// Wait for bucket to refill enough tokens
+		executionTime = executionTime.Add(limit.durationPerToken * time.Duration(limit.count))
+
+		// Consume all tokens to exhaust the bucket again
+		for range limit.count {
+			ok := limiter.allow("test", executionTime)
+			require.True(t, ok, "should allow tokens to exhaust bucket")
+		}
+
 		// Deadline that returns no deadline
 		deadline := func() (time.Time, bool) {
 			return time.Time{}, false
@@ -210,7 +212,7 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 
 		{
 			allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
-			require.True(t, allow, "should acquire tokens when no deadline is set")
+			require.True(t, allow, "should acquire %d tokens when no deadline is set", limit.count)
 		}
 
 		// We waited
@@ -219,7 +221,7 @@ func TestLimiter_WaitN_SingleBucket(t *testing.T) {
 		// Should not allow again immediately
 		{
 			allow := limiter.allowN("test", executionTime, limit.count)
-			require.False(t, allow, "should not allow again immediately after wait")
+			require.False(t, allow, "should not allow %d tokens again immediately after wait", limit.count)
 		}
 	}
 }

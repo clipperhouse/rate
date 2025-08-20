@@ -6,7 +6,7 @@ import (
 	"github.com/clipperhouse/ntime"
 )
 
-// bucketMap is a specialized sync.Map for storing buckets to avoid allocations
+// bucketMap is a specialized sync.Map for storing buckets
 type bucketMap[TKey comparable] struct {
 	m sync.Map
 }
@@ -15,13 +15,12 @@ type bucketMap[TKey comparable] struct {
 // It is a composite key to ensure that each bucket is unique for a given limit and user key.
 type bucketSpec[TKey comparable] struct {
 	limit Limit
-	// userKey is the result of calling the user-defined Keyer
+	// userKey is the result of calling the user-defined KeyFunc
 	userKey TKey
 }
 
 // loadOrStore returns the existing bucket for the key if present.
 // Otherwise, it creates a new bucket, stores it, and returns it.
-// This is specialized to avoid a closure allocation for the getter.
 func (bm *bucketMap[TKey]) loadOrStore(userKey TKey, executionTime ntime.Time, limit Limit) *bucket {
 	spec := bucketSpec[TKey]{
 		limit:   limit,
@@ -31,7 +30,7 @@ func (bm *bucketMap[TKey]) loadOrStore(userKey TKey, executionTime ntime.Time, l
 	if loaded, ok := bm.m.Load(spec); ok {
 		return loaded.(*bucket)
 	}
-	// Only create the b if we didn't find an existing one
+	// Only create the bucket if we didn't find an existing one
 	b := newBucket(executionTime, limit)
 	actual, _ := bm.m.LoadOrStore(spec, &b)
 	return actual.(*bucket)

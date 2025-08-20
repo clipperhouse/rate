@@ -39,9 +39,9 @@ func (r *Limiter[TInput, TKey]) peekN(input TInput, executionTime ntime.Time, n 
 	// without needing to collect and lock them all together
 	for _, limit := range limits {
 		if b, ok := r.buckets.load(userKey, limit); ok {
-			b.mu.RLock()
+			b.mu.Lock()
 			allowed := b.hasTokens(executionTime, limit, n)
-			b.mu.RUnlock()
+			b.mu.Unlock()
 			if !allowed {
 				return false
 			}
@@ -99,7 +99,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime nti
 	// without needing to collect and lock them all together
 	for _, limit := range limits {
 		if b, ok := r.buckets.load(userKey, limit); ok {
-			b.mu.RLock()
+			b.mu.Lock()
 
 			allowAll = allowAll && b.hasTokens(executionTime, limit, n)
 			rt := b.remainingTokens(executionTime, limit)
@@ -111,7 +111,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDetails(input TInput, executionTime nti
 				retryAfter = ra
 			}
 
-			b.mu.RUnlock()
+			b.mu.Unlock()
 
 			continue
 		}
@@ -195,7 +195,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime ntime
 	// without needing to collect and lock them all together
 	for _, limit := range limits {
 		if b, ok := r.buckets.load(userKey, limit); ok {
-			b.mu.RLock()
+			b.mu.Lock()
 
 			allow := b.hasTokens(executionTime, limit, n)
 			debugs = append(debugs, Debug[TInput, TKey]{
@@ -210,7 +210,7 @@ func (r *Limiter[TInput, TKey]) peekNWithDebug(input TInput, executionTime ntime
 				retryAfter:      b.retryAfter(executionTime, limit, n),
 			})
 
-			b.mu.RUnlock()
+			b.mu.Unlock()
 			allowAll = allowAll && allow
 
 			continue

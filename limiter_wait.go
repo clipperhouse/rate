@@ -31,7 +31,7 @@ import (
 // Wait makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
 func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
-	return r.waitN(ctx, input, ntime.Now(), 1)
+	return r.WaitN(ctx, input, 1)
 }
 
 // WaitN will poll [Limiter.AllowN] for a period of time,
@@ -58,13 +58,9 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 // WaitN makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
 func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
-	return r.waitN(ctx, input, ntime.Now(), n)
-}
-
-func (r *Limiter[TInput, TKey]) waitN(ctx context.Context, input TInput, executionTime ntime.Time, n int64) bool {
 	return r.waitNWithCancellation(
 		input,
-		executionTime,
+		ntime.Now(),
 		n,
 		ctx.Deadline,
 		ctx.Done,

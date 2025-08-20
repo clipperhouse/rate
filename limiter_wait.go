@@ -89,10 +89,6 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 	deadline func() (time.Time, bool),
 	done func() <-chan struct{},
 ) bool {
-	if r.allowN(input, startTime, n) {
-		return true
-	}
-
 	// currentTime is an approximation of the real clock moving forward
 	// it's imprecise because it depends on time.After below.
 	// For testing purposes, we want startTime (execution time) to
@@ -107,9 +103,13 @@ func (r *Limiter[TInput, TKey]) waitNWithCancellation(
 
 		retryAfter := details.RetryAfter()
 
-		// if we can't possibly get a token, fail fast
+		// If we can't possibly get a token, fail fast
 		if deadline, ok := deadline(); ok {
-			if deadline.Before(currentTime.Add(retryAfter).ToTime()) {
+			// ctx deadline uses time.Time, not ntime.Time,
+			// so use a duration for the comparison.
+			// This might not be robust to clock skew.
+			d := deadline.Sub(currentTime.ToTime())
+			if d < retryAfter {
 				return false
 			}
 		}

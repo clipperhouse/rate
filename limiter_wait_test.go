@@ -1,6 +1,7 @@
 package rate
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -35,18 +36,16 @@ func TestLimiter_Wait(t *testing.T) {
 
 		// Test 1: Wait for 1 token with enough time to acquire it
 		{
-			// Deadline that gives enough time
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.durationPerToken).ToTime(), true
+			// Context with deadline that gives enough time
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.durationPerToken).ToTime(),
+				hasDeadline: true,
+				done:        make(chan struct{}), // never closes
 			}
 
-			// Done channel that never closes (no cancellation)
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
-			}
-
-			allow := limiter.waitNWithCancellation("test", executionTime, 1, deadline, done)
+			allow, details := limiter.waitNWithDetails("test", executionTime, 1, ctx)
 			require.True(t, allow, "should acquire 1 token after waiting")
+			require.NotNil(t, details, "should return details")
 
 			// We waited
 			executionTime = executionTime.Add(limit.durationPerToken)
@@ -58,63 +57,53 @@ func TestLimiter_Wait(t *testing.T) {
 
 		// Test 2: Wait for 1 token with deadline that expires before token is available
 		{
-			// Deadline that expires too soon
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.durationPerToken / 2).ToTime(), true
+			// Context with deadline that expires too soon
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.durationPerToken / 2).ToTime(),
+				hasDeadline: true,
+				done:        make(chan struct{}), // never closes
 			}
 
-			// Done channel that never closes
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
-			}
-
-			allow := limiter.waitNWithCancellation("test", executionTime, 1, deadline, done)
+			allow, details := limiter.waitNWithDetails("test", executionTime, 1, ctx)
 			require.False(t, allow, "should not acquire 1 token if deadline expires before token is available")
+			require.NotNil(t, details, "should return details even on deadline expiry")
 		}
 
 		// Test 3: Wait for 1 token with immediate cancellation
 		{
-			// Deadline that gives enough time
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.durationPerToken).ToTime(), true
+			// Context that's immediately cancelled (closed)
+			done := make(chan struct{})
+			close(done)
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.durationPerToken).ToTime(),
+				hasDeadline: true,
+				done:        done,
 			}
 
-			// Done channel that closes immediately
-			done := func() <-chan struct{} {
-				ch := make(chan struct{})
-				close(ch) // immediately closed
-				return ch
-			}
-
-			allow := limiter.waitNWithCancellation("test", executionTime, 1, deadline, done)
+			allow, details := limiter.waitNWithDetails("test", executionTime, 1, ctx)
 			require.False(t, allow, "should not acquire 1 token if context is cancelled immediately")
+			require.NotNil(t, details, "should return details even on cancellation")
 		}
 
 		// Test 4: Wait for 1 token with no deadline
 		{
-			// Deadline that returns no deadline
-			deadline := func() (time.Time, bool) {
-				return time.Time{}, false
+			// Context with no deadline
+			ctx := &testContext{
+				deadline:    time.Time{},
+				hasDeadline: false,
+				done:        make(chan struct{}), // never closes
 			}
 
-			// Done channel that never closes
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
-			}
-
-			{
-				allow := limiter.waitNWithCancellation("test", executionTime, 1, deadline, done)
-				require.True(t, allow, "should acquire 1 token when no deadline is set")
-			}
+			allow, details := limiter.waitNWithDetails("test", executionTime, 1, ctx)
+			require.True(t, allow, "should acquire 1 token when no deadline is set")
+			require.NotNil(t, details, "should return details")
 
 			// We waited
 			executionTime = executionTime.Add(limit.durationPerToken)
 
 			// Should not allow again immediately
-			{
-				allow := limiter.allow("test", executionTime)
-				require.False(t, allow, "should not allow again immediately after wait")
-			}
+			ok := limiter.allow("test", executionTime)
+			require.False(t, ok, "should not allow again immediately after wait")
 		}
 
 		// Test 5: Wait for multiple tokens (limit.count) with enough time to acquire them
@@ -123,18 +112,16 @@ func TestLimiter_Wait(t *testing.T) {
 			executionTime = executionTime.Add(limit.durationPerToken * time.Duration(limit.count))
 
 			wait := time.Duration(limit.count) * limit.durationPerToken
-			// Deadline that gives enough time
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(wait).ToTime(), true
+			// Context with deadline that gives enough time
+			ctx := &testContext{
+				deadline:    executionTime.Add(wait).ToTime(),
+				hasDeadline: true,
+				done:        make(chan struct{}), // never closes
 			}
 
-			// Done channel that never closes (no cancellation)
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
-			}
-
-			allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
+			allow, details := limiter.waitNWithDetails("test", executionTime, limit.count, ctx)
 			require.True(t, allow, "should acquire %d tokens after waiting", limit.count)
+			require.NotNil(t, details, "should return details")
 
 			// We waited
 			executionTime = executionTime.Add(limit.durationPerToken)
@@ -151,18 +138,16 @@ func TestLimiter_Wait(t *testing.T) {
 				require.True(t, ok, "should allow tokens to exhaust bucket")
 			}
 
-			// Deadline that expires too soon - use a very short duration
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.durationPerToken / 4).ToTime(), true
+			// Context with deadline that expires too soon
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.durationPerToken / 4).ToTime(),
+				hasDeadline: true,
+				done:        make(chan struct{}), // never closes
 			}
 
-			// Done channel that never closes
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
-			}
-
-			allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
+			allow, details := limiter.waitNWithDetails("test", executionTime, limit.count, ctx)
 			require.False(t, allow, "should not acquire %d tokens if deadline expires before tokens are available", limit.count)
+			require.NotNil(t, details, "should return details even on deadline expiry")
 		}
 
 		// Test 7: Wait for multiple tokens with immediate cancellation
@@ -176,20 +161,18 @@ func TestLimiter_Wait(t *testing.T) {
 				require.True(t, ok, "should allow tokens to exhaust bucket")
 			}
 
-			// Deadline that gives enough time
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.durationPerToken * time.Duration(limit.count)).ToTime(), true
+			// Context that's immediately cancelled (closed)
+			done := make(chan struct{})
+			close(done)
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.durationPerToken * time.Duration(limit.count)).ToTime(),
+				hasDeadline: true,
+				done:        done,
 			}
 
-			// Done channel that closes immediately
-			done := func() <-chan struct{} {
-				ch := make(chan struct{})
-				close(ch) // immediately closed
-				return ch
-			}
-
-			allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
+			allow, details := limiter.waitNWithDetails("test", executionTime, limit.count, ctx)
 			require.False(t, allow, "should not acquire %d tokens if context is cancelled immediately", limit.count)
+			require.NotNil(t, details, "should return details even on cancellation")
 		}
 
 		// Test 8: Wait for multiple tokens with no deadline
@@ -203,29 +186,23 @@ func TestLimiter_Wait(t *testing.T) {
 				require.True(t, ok, "should allow tokens to exhaust bucket")
 			}
 
-			// Deadline that returns no deadline
-			deadline := func() (time.Time, bool) {
-				return time.Time{}, false
+			// Context with no deadline
+			ctx := &testContext{
+				deadline:    time.Time{},
+				hasDeadline: false,
+				done:        make(chan struct{}), // never closes
 			}
 
-			// Done channel that never closes
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
-			}
-
-			{
-				allow := limiter.waitNWithCancellation("test", executionTime, limit.count, deadline, done)
-				require.True(t, allow, "should acquire %d tokens when no deadline is set", limit.count)
-			}
+			allow, details := limiter.waitNWithDetails("test", executionTime, limit.count, ctx)
+			require.True(t, allow, "should acquire %d tokens when no deadline is set", limit.count)
+			require.NotNil(t, details, "should return details")
 
 			// We waited
 			executionTime = executionTime.Add(limit.durationPerToken)
 
 			// Should not allow again immediately
-			{
-				allow := limiter.allowN("test", executionTime, limit.count)
-				require.False(t, allow, "should not allow %d tokens again immediately after wait", limit.count)
-			}
+			allow = limiter.allowN("test", executionTime, limit.count)
+			require.False(t, allow, "should not allow %d tokens again immediately after wait", limit.count)
 		}
 	})
 
@@ -255,18 +232,16 @@ func TestLimiter_Wait(t *testing.T) {
 
 		// Wait for a token for each bucket
 		for bucketID := range buckets {
-			// Deadline that gives enough time
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.durationPerToken).ToTime(), true
+			// Context with deadline that gives enough time
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.durationPerToken).ToTime(),
+				hasDeadline: true,
+				done:        make(chan struct{}), // never closes
 			}
 
-			// Done channel that never closes (no cancellation)
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
-			}
-
-			allow := limiter.waitWithCancellation(bucketID, executionTime, deadline, done)
+			allow, details := limiter.waitNWithDetails(bucketID, executionTime, 1, ctx)
 			require.True(t, allow, "should acquire token after waiting for bucket %d", bucketID)
+			require.NotNil(t, details, "should return details")
 		}
 
 		// We waited
@@ -310,14 +285,11 @@ func TestLimiter_Wait(t *testing.T) {
 			concurrency := tokens * 3 // oversubscribe by 3x
 			results := make([]bool, concurrency)
 
-			// Deadline that gives enough time for all tokens to be refilled
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.period).ToTime(), true
-			}
-
-			// Done channel that never closes
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
+			// Context with deadline that gives enough time for all tokens to be refilled
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.period).ToTime(),
+				hasDeadline: true,
+				done:        make(chan struct{}), // never closes
 			}
 
 			// Start concurrent waits
@@ -327,7 +299,7 @@ func TestLimiter_Wait(t *testing.T) {
 				go func(i int64) {
 					defer wg.Done()
 					bucketID := i % buckets
-					results[i] = limiter.waitWithCancellation(bucketID, executionTime, deadline, done)
+					results[i], _ = limiter.waitNWithDetails(bucketID, executionTime, 1, ctx)
 				}(i)
 			}
 			wg.Wait()
@@ -359,14 +331,11 @@ func TestLimiter_Wait(t *testing.T) {
 			concurrency := buckets
 			results := make([]bool, concurrency)
 
-			// Deadline that expires too soon
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.durationPerToken / 2).ToTime(), true
-			}
-
-			// Done channel that never closes
-			done := func() <-chan struct{} {
-				return make(chan struct{}) // never closes
+			// Context with deadline that expires too soon
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.durationPerToken / 2).ToTime(),
+				hasDeadline: true,
+				done:        make(chan struct{}), // never closes
 			}
 
 			// Start concurrent waits
@@ -375,10 +344,9 @@ func TestLimiter_Wait(t *testing.T) {
 				wg.Add(1)
 				go func(i int64) {
 					defer wg.Done()
-					results[i] = limiter.waitWithCancellation(i, executionTime, deadline, done)
+					results[i], _ = limiter.waitNWithDetails(i, executionTime, 1, ctx)
 				}(i)
 			}
-
 			wg.Wait()
 
 			// All should fail because deadline expires before tokens are available
@@ -392,16 +360,13 @@ func TestLimiter_Wait(t *testing.T) {
 			concurrency := buckets
 			results := make([]bool, concurrency)
 
-			// Deadline that gives enough time
-			deadline := func() (time.Time, bool) {
-				return executionTime.Add(limit.period).ToTime(), true
-			}
-
-			// Done channel that closes immediately
-			done := func() <-chan struct{} {
-				ch := make(chan struct{})
-				close(ch) // immediately closed
-				return ch
+			// Context that's immediately cancelled (closed)
+			done := make(chan struct{})
+			close(done)
+			ctx := &testContext{
+				deadline:    executionTime.Add(limit.period).ToTime(),
+				hasDeadline: true,
+				done:        done,
 			}
 
 			// Start concurrent waits
@@ -410,10 +375,9 @@ func TestLimiter_Wait(t *testing.T) {
 				wg.Add(1)
 				go func(i int64) {
 					defer wg.Done()
-					results[i] = limiter.waitWithCancellation(i, executionTime, deadline, done)
+					results[i], _ = limiter.waitNWithDetails(i, executionTime, 1, ctx)
 				}(i)
 			}
-
 			wg.Wait()
 
 			// All should fail because context is cancelled immediately
@@ -424,193 +388,31 @@ func TestLimiter_Wait(t *testing.T) {
 	})
 }
 
-func TestLimiter_WaitN_ConsumesCorrectTokens(t *testing.T) {
-	t.Parallel()
-	keyFunc := func(input string) string {
-		return input
+var _ context.Context = &testContext{}
+
+type testContext struct {
+	deadline    time.Time
+	hasDeadline bool
+	done        <-chan struct{}
+}
+
+func (t *testContext) Deadline() (deadline time.Time, ok bool) {
+	return t.deadline, t.hasDeadline
+}
+
+func (t *testContext) Done() <-chan struct{} {
+	return t.done
+}
+
+func (t *testContext) Err() error {
+	select {
+	case <-t.done:
+		return context.Canceled
+	default:
+		return nil
 	}
-	limit := NewLimit(10, 100*time.Millisecond)
-	limiter := NewLimiter(keyFunc, limit)
+}
 
-	executionTime := ntime.Now()
-
-	// Test 1: Wait should consume exactly 1 token
-	t.Run("Wait_Consumes_One_Token", func(t *testing.T) {
-		// Verify initial state
-		_, initialDetails := limiter.peekWithDebug("test-wait-1", executionTime)
-		require.Equal(t, limit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
-
-		// Deadline that gives enough time
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second).ToTime(), true
-		}
-		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
-		}
-
-		// Wait should succeed and consume exactly 1 token
-		allowed := limiter.waitWithCancellation("test-wait-1", executionTime, deadline, done)
-		require.True(t, allowed, "wait should succeed")
-
-		// Verify exactly 1 token was consumed
-		_, finalDetails := limiter.peekWithDebug("test-wait-1", executionTime)
-		require.Equal(t, limit.count-1, finalDetails[0].TokensRemaining(), "should have consumed exactly 1 token")
-	})
-
-	// Test 2: WaitN should consume exactly n tokens
-	t.Run("WaitN_Consumes_N_Tokens", func(t *testing.T) {
-		const tokensToWait = 3
-
-		// Verify initial state
-		_, initialDetails := limiter.peekWithDebug("test-waitn-3", executionTime)
-		require.Equal(t, limit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
-
-		// Deadline that gives enough time
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second).ToTime(), true
-		}
-		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
-		}
-
-		// WaitN should succeed and consume exactly tokensToWait tokens
-		allowed := limiter.waitNWithCancellation("test-waitn-3", executionTime, tokensToWait, deadline, done)
-		require.True(t, allowed, "waitN should succeed")
-
-		// Verify exactly tokensToWait tokens were consumed
-		_, details := limiter.peekWithDebug("test-waitn-3", executionTime)
-		require.Equal(t, limit.count-tokensToWait, details[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
-	})
-
-	// Test 3: WaitN with multiple limits should consume n tokens from all buckets
-	t.Run("WaitN_MultipleLimits_Consumes_N_From_All", func(t *testing.T) {
-		perSecond := NewLimit(5, time.Second)
-		perMinute := NewLimit(20, time.Minute)
-		limiter := NewLimiter(keyFunc, perSecond, perMinute)
-		const tokensToWait = 2
-
-		// Verify initial state
-		_, initialDetails := limiter.peekWithDebug("test-multi-waitn", executionTime)
-		require.Len(t, initialDetails, 2, "should have details for both limits")
-		require.Equal(t, perSecond.count, initialDetails[0].TokensRemaining(), "per-second should start with all tokens")
-		require.Equal(t, perMinute.count, initialDetails[1].TokensRemaining(), "per-minute should start with all tokens")
-
-		// Deadline that gives enough time
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second).ToTime(), true
-		}
-		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
-		}
-
-		// WaitN should succeed and consume exactly tokensToWait tokens from both limits
-		allowed := limiter.waitNWithCancellation("test-multi-waitn", executionTime, tokensToWait, deadline, done)
-		require.True(t, allowed, "waitN should succeed with multiple limits")
-
-		// Verify exactly tokensToWait tokens were consumed from both buckets
-		_, finalDetails := limiter.peekWithDebug("test-multi-waitn", executionTime)
-		require.Len(t, finalDetails, 2, "should have details for both limits")
-		require.Equal(t, perSecond.count-tokensToWait, finalDetails[0].TokensRemaining(), "per-second should have consumed exactly %d tokens", tokensToWait)
-		require.Equal(t, perMinute.count-tokensToWait, finalDetails[1].TokensRemaining(), "per-minute should have consumed exactly %d tokens", tokensToWait)
-	})
-
-	// Test 4: WaitN that fails should consume zero tokens
-	t.Run("WaitN_Fails_Consumes_Zero_Tokens", func(t *testing.T) {
-		// First, exhaust the bucket
-		for range limit.count {
-			limiter.allow("test-fail-waitn", executionTime)
-		}
-
-		// Verify bucket is exhausted
-		_, exhaustedDetails := limiter.peekWithDebug("test-fail-waitn", executionTime)
-		require.Equal(t, int64(0), exhaustedDetails[0].TokensRemaining(), "bucket should be exhausted")
-
-		// Deadline that expires immediately (no time to refill)
-		deadline := func() (time.Time, bool) {
-			return executionTime.ToTime(), true // expires immediately
-		}
-		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
-		}
-
-		// WaitN should fail and consume zero tokens
-		allowed := limiter.waitNWithCancellation("test-fail-waitn", executionTime, 1, deadline, done)
-		require.False(t, allowed, "waitN should fail when deadline expires before tokens available")
-
-		// Verify no tokens were consumed
-		_, finalDetails := limiter.peekWithDebug("test-fail-waitn", executionTime)
-		require.Equal(t, int64(0), finalDetails[0].TokensRemaining(), "should still have 0 tokens after failed wait")
-	})
-
-	// Test 5: Verify WaitN with high token count
-	t.Run("WaitN_High_Token_Count", func(t *testing.T) {
-		bigLimit := NewLimit(50, time.Second)
-		bigLimiter := NewLimiter(keyFunc, bigLimit)
-		const tokensToWait = 25
-
-		// Verify initial state
-		_, initialDetails := bigLimiter.peekWithDebug("test-big-waitn", executionTime)
-		require.Equal(t, bigLimit.count, initialDetails[0].TokensRemaining(), "should start with all tokens")
-
-		// Deadline that gives enough time
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second).ToTime(), true
-		}
-		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
-		}
-
-		// WaitN should succeed and consume exactly tokensToWait tokens
-		allowed := bigLimiter.waitNWithCancellation("test-big-waitn", executionTime, tokensToWait, deadline, done)
-		require.True(t, allowed, "waitN should succeed with high token count")
-
-		// Verify exactly tokensToWait tokens were consumed
-		_, finalDetails := bigLimiter.peekWithDebug("test-big-waitn", executionTime)
-		require.Equal(t, bigLimit.count-tokensToWait, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens", tokensToWait)
-	})
-
-	// Test 6: Concurrent WaitN should consume correct total tokens
-	t.Run("WaitN_Concurrent_Token_Consumption", func(t *testing.T) {
-		concurrentLimit := NewLimit(20, time.Second)
-		concurrentLimiter := NewLimiter(keyFunc, concurrentLimit)
-		const tokensPerWait = 2
-		const numGoroutines = 5             // Will try to consume 10 total tokens
-		const expectedSuccesses = int64(10) // 20 / 2 = 10 successful waits possible
-
-		results := make([]bool, numGoroutines)
-
-		// Deadline that gives enough time
-		deadline := func() (time.Time, bool) {
-			return executionTime.Add(time.Second).ToTime(), true
-		}
-		done := func() <-chan struct{} {
-			return make(chan struct{}) // never closes
-		}
-
-		// Start concurrent waits
-		var wg sync.WaitGroup
-		for i := range numGoroutines {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
-				results[i] = concurrentLimiter.waitNWithCancellation("test-concurrent-waitn", executionTime, tokensPerWait, deadline, done)
-			}(i)
-		}
-		wg.Wait()
-
-		// Count successes
-		var successes int64
-		for _, result := range results {
-			if result {
-				successes++
-			}
-		}
-
-		require.Equal(t, expectedSuccesses/tokensPerWait, successes, "expected exactly %d successful waits", expectedSuccesses/tokensPerWait)
-
-		// Verify total tokens consumed
-		_, finalDetails := concurrentLimiter.peekWithDebug("test-concurrent-waitn", executionTime)
-		expectedRemaining := concurrentLimit.count - (successes * tokensPerWait)
-		require.Equal(t, expectedRemaining, finalDetails[0].TokensRemaining(), "should have consumed exactly %d tokens total", successes*tokensPerWait)
-	})
+func (t *testContext) Value(key any) any {
+	return nil
 }

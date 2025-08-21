@@ -58,13 +58,7 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 // WaitN makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
 func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
-	allow, _ := r.waitNWithDetails(
-		input,
-		ntime.Now(),
-		n,
-		ctx.Deadline,
-		ctx.Done,
-	)
+	allow, _ := r.waitNWithDetails(input, ntime.Now(), n, ctx)
 	return allow
 }
 
@@ -109,7 +103,7 @@ func (r *Limiter[TInput, TKey]) WaitWithDetails(ctx context.Context, input TInpu
 // Take care to create an appropriate context. You almost certainly
 // want [context.WithTimeout] or [context.WithDeadline].
 //
-// You should be conservative, as WaitNWithDetails will introduce
+// You should be conservative, as WaitWithDetails will introduce
 // backpressure on your upstream systems -- connections
 // may be held open longer, requests may queue in memory.
 //
@@ -118,47 +112,20 @@ func (r *Limiter[TInput, TKey]) WaitWithDetails(ctx context.Context, input TInpu
 //
 //	ctx := context.WithTimeout(ctx, limit.DurationPerToken())
 //
-// WaitNWithDetails makes no ordering guarantees. Multiple concurrent calls may
+// WaitWithDetails makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
 func (r *Limiter[TInput, TKey]) WaitNWithDetails(ctx context.Context, input TInput, n int64) (bool, Details[TInput, TKey]) {
-	return r.waitNWithDetails(
-		input,
-		ntime.Now(),
-		n,
-		ctx.Deadline,
-		ctx.Done,
-	)
+	return r.waitNWithDetails(input, ntime.Now(), n, ctx)
 }
 
-func (r *Limiter[TInput, TKey]) waitWithCancellation(
-	input TInput,
-	startTime ntime.Time,
-	deadline func() (time.Time, bool),
-	done func() <-chan struct{},
-) bool {
-	allow, _ := r.waitNWithDetails(input, startTime, 1, deadline, done)
-	return allow
-}
-
-func (r *Limiter[TInput, TKey]) waitNWithCancellation(
-	input TInput,
-	startTime ntime.Time,
-	n int64,
-	deadline func() (time.Time, bool),
-	done func() <-chan struct{},
-) bool {
-	allow, _ := r.waitNWithDetails(input, startTime, n, deadline, done)
-	return allow
-}
-
-// waitWithCancellation is a more testable version of wait that accepts
-// deadline and done functions instead of a context, allowing for deterministic testing.
+// waitNWithDetails is the internal implementation that accepts a context.
+// It is designed to be testable by accepting any context implementation,
+// including test contexts that provide deterministic behavior.
 func (r *Limiter[TInput, TKey]) waitNWithDetails(
 	input TInput,
 	startTime ntime.Time,
 	n int64,
-	deadline func() (time.Time, bool),
-	done func() <-chan struct{},
+	ctx context.Context,
 ) (bool, Details[TInput, TKey]) {
 	// currentTime is an approximation of the real clock moving forward.
 	// It's imprecise because it depends on time.After below.
@@ -175,7 +142,7 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 		retryAfter := details.RetryAfter()
 
 		// If we can't possibly get a token, fail fast
-		if deadline, ok := deadline(); ok {
+		if deadline, ok := ctx.Deadline(); ok {
 			// ctx deadline uses time.Time, not ntime.Time,
 			// so use a duration for the comparison.
 			// This might not be robust to clock skew.
@@ -186,10 +153,8 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 		}
 
 		select {
-		case <-done():
-			// Do one more check on cancellation,
-			// to have accurate retryAfter.
-			return r.allowNWithDetails(input, currentTime, n)
+		case <-ctx.Done():
+			return false, details
 		case <-time.After(retryAfter):
 			currentTime = currentTime.Add(retryAfter)
 		}

@@ -40,7 +40,8 @@ func TestLimiter_Wait(t *testing.T) {
 				done: make(chan struct{}), // never closes
 			}
 
-			allow, details := limiter.waitNWithDetails("test", executionTime, 1, ctx)
+			allow, details, err := limiter.waitNWithDetails("test", executionTime, 1, ctx)
+			require.NoError(t, err, "should not return error")
 			require.True(t, allow, "should acquire 1 token after waiting")
 			require.NotNil(t, details, "should return details")
 
@@ -61,7 +62,8 @@ func TestLimiter_Wait(t *testing.T) {
 			}
 			close(done)
 
-			allow, details := limiter.waitNWithDetails("test", executionTime, 1, ctx)
+			allow, details, err := limiter.waitNWithDetails("test", executionTime, 1, ctx)
+			require.ErrorIs(t, err, context.Canceled, "should return context canceled error")
 			require.False(t, allow, "should not acquire 1 token if context is cancelled immediately")
 			require.NotNil(t, details, "should return details even on cancellation")
 		}
@@ -75,7 +77,8 @@ func TestLimiter_Wait(t *testing.T) {
 				done: make(chan struct{}), // never closes
 			}
 
-			allow, details := limiter.waitNWithDetails("test", executionTime, limit.count, ctx)
+			allow, details, err := limiter.waitNWithDetails("test", executionTime, limit.count, ctx)
+			require.NoError(t, err, "should not return error")
 			require.True(t, allow, "should acquire %d tokens after waiting", limit.count)
 			require.NotNil(t, details, "should return details")
 
@@ -101,7 +104,8 @@ func TestLimiter_Wait(t *testing.T) {
 			}
 			close(done)
 
-			allow, details := limiter.waitNWithDetails("test", executionTime, limit.count, ctx)
+			allow, details, err := limiter.waitNWithDetails("test", executionTime, limit.count, ctx)
+			require.ErrorIs(t, err, context.Canceled, "should return context canceled error")
 			require.False(t, allow, "should not acquire %d tokens if context is cancelled immediately", limit.count)
 			require.NotNil(t, details, "should return details even on cancellation")
 		}
@@ -138,7 +142,8 @@ func TestLimiter_Wait(t *testing.T) {
 					done: make(chan struct{}), // never closes
 				}
 
-				allow, details := limiter.waitNWithDetails(bucketID, executionTime, 1, ctx)
+				allow, details, err := limiter.waitNWithDetails(bucketID, executionTime, 1, ctx)
+				require.NoError(t, err, "should not return error")
 				require.True(t, allow, "should acquire token after waiting for bucket %d", bucketID)
 				require.NotNil(t, details, "should return details")
 			}
@@ -195,7 +200,9 @@ func TestLimiter_Wait(t *testing.T) {
 					wg.Add(1)
 					go func(i int64) {
 						defer wg.Done()
-						results[i], _ = limiter.waitNWithDetails(i, executionTime, 1, ctx)
+						allow, _, err := limiter.waitNWithDetails(i, executionTime, 1, ctx)
+						require.ErrorIs(t, err, context.Canceled, "should return context canceled error")
+						results[i] = allow
 					}(i)
 				}
 				wg.Wait()
@@ -223,13 +230,15 @@ func TestLimiter_Wait(t *testing.T) {
 					wg.Add(1)
 					go func(i int64) {
 						defer wg.Done()
-						results[i], _ = limiter.waitNWithDetails(i, executionTime, 1, ctx)
+						allow, _, err := limiter.waitNWithDetails(i, executionTime, 1, ctx)
+						require.ErrorIs(t, err, context.Canceled, "should return context canceled error")
+						results[i] = allow
 					}(i)
 				}
 
 				// Cancel context after a short delay
 				go func() {
-					time.Sleep(10 * time.Millisecond)
+					time.Sleep(2 * time.Millisecond)
 					close(done)
 				}()
 

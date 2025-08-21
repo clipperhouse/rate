@@ -30,8 +30,9 @@ import (
 //
 // Wait makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
-	return r.WaitN(ctx, input, 1)
+func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) (bool, error) {
+	allow, _, err := r.waitNWithDetails(input, ntime.Now(), 1, ctx)
+	return allow, err
 }
 
 // WaitN will poll [Limiter.AllowN] for a period of time,
@@ -57,9 +58,9 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) bool {
 //
 // WaitN makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) bool {
-	allow, _ := r.waitNWithDetails(input, ntime.Now(), n, ctx)
-	return allow
+func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) (bool, error) {
+	allow, _, err := r.waitNWithDetails(input, ntime.Now(), n, ctx)
+	return allow, err
 }
 
 // WaitWithDetails will poll [Allow] for a period of time,
@@ -86,7 +87,7 @@ func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64
 //
 // WaitWithDetails makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) WaitWithDetails(ctx context.Context, input TInput) (bool, Details[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) WaitWithDetails(ctx context.Context, input TInput) (bool, Details[TInput, TKey], error) {
 	return r.WaitNWithDetails(ctx, input, 1)
 }
 
@@ -114,7 +115,7 @@ func (r *Limiter[TInput, TKey]) WaitWithDetails(ctx context.Context, input TInpu
 //
 // WaitWithDetails makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) WaitNWithDetails(ctx context.Context, input TInput, n int64) (bool, Details[TInput, TKey]) {
+func (r *Limiter[TInput, TKey]) WaitNWithDetails(ctx context.Context, input TInput, n int64) (bool, Details[TInput, TKey], error) {
 	return r.waitNWithDetails(input, ntime.Now(), n, ctx)
 }
 
@@ -126,7 +127,7 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 	startTime ntime.Time,
 	n int64,
 	ctx context.Context,
-) (bool, Details[TInput, TKey]) {
+) (bool, Details[TInput, TKey], error) {
 	// currentTime is an approximation of the real clock moving forward.
 	// It's imprecise because it depends on time.After below.
 	// For testing purposes, we want startTime (execution time) to
@@ -136,7 +137,7 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 	for {
 		allow, details := r.allowNWithDetails(input, currentTime, n)
 		if allow {
-			return allow, details
+			return allow, details, nil
 		}
 
 		retryAfter := details.RetryAfter()
@@ -148,7 +149,7 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 			// We'll choose the semantics of "cancellation always
 			// means deny".
 			_, details := r.peekNWithDetails(input, currentTime, n)
-			return false, details
+			return false, details, ctx.Err()
 		case <-time.After(retryAfter):
 			currentTime = currentTime.Add(retryAfter)
 		}

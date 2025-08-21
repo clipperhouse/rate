@@ -141,19 +141,13 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 
 		retryAfter := details.RetryAfter()
 
-		// If we can't possibly get a token, fail fast
-		if deadline, ok := ctx.Deadline(); ok {
-			// ctx deadline uses time.Time, not ntime.Time,
-			// so use a duration for the comparison.
-			// This might not be robust to clock skew.
-			d := deadline.Sub(currentTime.ToTime())
-			if d < retryAfter {
-				return false, details
-			}
-		}
-
 		select {
 		case <-ctx.Done():
+			// Need to get updated details, since this cancellation
+			// event might have been a while after the last call.
+			// We'll choose the semantics of "cancellation always
+			// means deny".
+			_, details := r.peekNWithDetails(input, currentTime, n)
 			return false, details
 		case <-time.After(retryAfter):
 			currentTime = currentTime.Add(retryAfter)

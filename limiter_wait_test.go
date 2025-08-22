@@ -257,12 +257,12 @@ func TestLimiter_Wait(t *testing.T) {
 						results[bucketID] = allow
 					}(bucketID)
 
-					// Cancel context after a goroutine has started,
-					// with a delay
-					go func() {
-						time.Sleep(10 * time.Millisecond)
-						close(done)
-					}()
+					// Cancel context after goroutine has started.
+					// Originally, this had a delay, for a better test,
+					// but it is flaky on GitHub Actions, presumably
+					// because the runner is resource constrained.
+					// Delay works fine locally on Mac M2.
+					close(done)
 				}
 				wg.Wait()
 
@@ -521,12 +521,12 @@ func TestLimiter_WaitWithDebug(t *testing.T) {
 						results[bucketID] = allow
 					}(bucketID)
 
-					// Cancel context after a goroutine has started,
-					// with a delay
-					go func() {
-						time.Sleep(10 * time.Millisecond)
-						close(done)
-					}()
+					// Cancel context after goroutine has started.
+					// Originally, this had a delay, for a better test,
+					// but it is flaky on GitHub Actions, presumably
+					// because the runner is resource constrained.
+					// Delay works fine locally on Mac M2.
+					close(done)
 				}
 				wg.Wait()
 

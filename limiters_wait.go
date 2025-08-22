@@ -7,7 +7,7 @@ import (
 	"github.com/clipperhouse/ntime"
 )
 
-// Wait will poll [Allow] for a period of time,
+// Wait will poll [Limiters.Allow] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
@@ -32,12 +32,11 @@ import (
 //
 // Wait makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) (bool, error) {
-	allow, _, err := r.waitNWithDetails(ctx, input, ntime.Now(), 1)
-	return allow, err
+func (r *Limiters[TInput, TKey]) Wait(ctx context.Context, input TInput) (bool, error) {
+	return r.WaitN(ctx, input, 1)
 }
 
-// WaitN will poll [Limiter.AllowN] for a period of time,
+// WaitN will poll [Limiters.AllowN] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
@@ -62,12 +61,12 @@ func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) (bool, e
 //
 // WaitN makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) (bool, error) {
-	allow, _, err := r.waitNWithDetails(ctx, input, ntime.Now(), n)
+func (r *Limiters[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64) (bool, error) {
+	allow, _, err := r.WaitNWithDetails(ctx, input, n)
 	return allow, err
 }
 
-// WaitWithDetails will poll [Allow] for a period of time,
+// WaitWithDetails will poll [Limiters.Allow] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
@@ -93,11 +92,11 @@ func (r *Limiter[TInput, TKey]) WaitN(ctx context.Context, input TInput, n int64
 //
 // WaitWithDetails makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) WaitWithDetails(ctx context.Context, input TInput) (bool, Details[TInput, TKey], error) {
+func (r *Limiters[TInput, TKey]) WaitWithDetails(ctx context.Context, input TInput) (bool, Details[TInput, TKey], error) {
 	return r.WaitNWithDetails(ctx, input, 1)
 }
 
-// WaitNWithDetails will poll [Limiter.AllowN] for a period of time,
+// WaitNWithDetails will poll [Limiters.AllowN] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
@@ -123,14 +122,11 @@ func (r *Limiter[TInput, TKey]) WaitWithDetails(ctx context.Context, input TInpu
 //
 // WaitWithDetails makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) WaitNWithDetails(ctx context.Context, input TInput, n int64) (bool, Details[TInput, TKey], error) {
+func (r *Limiters[TInput, TKey]) WaitNWithDetails(ctx context.Context, input TInput, n int64) (bool, Details[TInput, TKey], error) {
 	return r.waitNWithDetails(ctx, input, ntime.Now(), n)
 }
 
-// waitNWithDetails is the internal implementation that accepts a context.
-// It is designed to be testable by accepting any context implementation,
-// including test contexts that provide deterministic behavior.
-func (r *Limiter[TInput, TKey]) waitNWithDetails(
+func (r *Limiters[TInput, TKey]) waitNWithDetails(
 	ctx context.Context,
 	input TInput,
 	startTime ntime.Time,
@@ -162,7 +158,7 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 	}
 }
 
-// WaitWithDebug will poll [Limiter.Allow] for a period of time,
+// WaitWithDebug will poll [Limiters.Allow] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
@@ -179,14 +175,14 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 //
 // WaitNWithDebug makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) WaitWithDebug(
+func (r *Limiters[TInput, TKey]) WaitWithDebug(
 	ctx context.Context,
 	input TInput,
 ) (bool, []Debug[TInput, TKey], error) {
 	return r.WaitNWithDebug(ctx, input, 1)
 }
 
-// WaitNWithDebug will poll [Limiter.AllowN] for a period of time,
+// WaitNWithDebug will poll [Limiters.AllowN] for a period of time,
 // until it is cancelled by the passed context. It has the
 // effect of adding latency to requests instead of refusing
 // them immediately. Consider it graceful degradation.
@@ -203,7 +199,7 @@ func (r *Limiter[TInput, TKey]) WaitWithDebug(
 //
 // WaitNWithDebug makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
-func (r *Limiter[TInput, TKey]) WaitNWithDebug(
+func (r *Limiters[TInput, TKey]) WaitNWithDebug(
 	ctx context.Context,
 	input TInput,
 	n int64,
@@ -211,10 +207,7 @@ func (r *Limiter[TInput, TKey]) WaitNWithDebug(
 	return r.waitNWithDebug(ctx, input, ntime.Now(), n)
 }
 
-// waitNWithDetails is the internal implementation that accepts a context.
-// It is designed to be testable by accepting any context implementation,
-// including test contexts that provide deterministic behavior.
-func (r *Limiter[TInput, TKey]) waitNWithDebug(
+func (r *Limiters[TInput, TKey]) waitNWithDebug(
 	ctx context.Context,
 	input TInput,
 	startTime ntime.Time,

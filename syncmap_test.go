@@ -47,52 +47,6 @@ func TestSyncMap_ConcurrentAccess(t *testing.T) {
 	// If we get here without panic or race conditions, the test passes
 }
 
-func TestSyncMap_LoadOrStoreFunc(t *testing.T) {
-	t.Parallel()
-
-	sm := &syncMap[string, int]{}
-
-	factoryCalls := 0
-	factory := func() int {
-		factoryCalls++
-		return 42
-	}
-
-	// First call should call factory and store the value
-	result1 := sm.loadOrStore("key1", factory)
-	require.Equal(t, 42, result1, "should return factory value")
-	require.Equal(t, 1, factoryCalls, "factory should be called once")
-
-	// Second call with same key should NOT call factory
-	result2 := sm.loadOrStore("key1", factory)
-	require.Equal(t, 42, result2, "should return existing value")
-	require.Equal(t, 1, factoryCalls, "factory should not be called again for existing key")
-
-	// Third call with different key should call factory again
-	result3 := sm.loadOrStore("key2", factory)
-	require.Equal(t, 42, result3, "should return factory value for new key")
-	require.Equal(t, 2, factoryCalls, "factory should be called for new key")
-}
-
-func TestSyncMap_Count(t *testing.T) {
-	t.Parallel()
-
-	sm := &syncMap[string, int]{}
-
-	for range 2 {
-		// should only be stored once despite multiple calls
-		for key := range 101 {
-			sm.loadOrStore(fmt.Sprint(key), func() int {
-				return key
-			})
-		}
-	}
-
-	expected := 101
-	actual := sm.count()
-	require.Equal(t, expected, actual, "expected Count() to be accurate")
-}
-
 func TestBucketMap_LoadOrStore(t *testing.T) {
 	t.Parallel()
 
@@ -116,31 +70,6 @@ func TestBucketMap_LoadOrStore(t *testing.T) {
 	// Fourth call with different key should return a different bucket
 	bucket4 := bm.loadOrStore("key2", executionTime, limit1)
 	require.False(t, bucket1 == bucket4, "should return different bucket for different key")
-}
-
-func TestBucketMap_LoadOrGet(t *testing.T) {
-	t.Parallel()
-
-	var bm bucketMap[string]
-	limit := NewLimit(100, time.Second)
-	executionTime := ntime.Now()
-
-	// First call should return a temporary bucket (not stored)
-	bucket1 := bm.loadOrGet("key1", executionTime, limit)
-	require.NotNil(t, bucket1, "should return a bucket")
-
-	// Second call should return another temporary bucket (different instance)
-	// Use slightly different execution time to ensure different bucket instances
-	bucket2 := bm.loadOrGet("key1", executionTime.Add(time.Nanosecond), limit)
-	require.NotNil(t, bucket2, "should return a bucket")
-	require.False(t, bucket1 == bucket2, "should return different temporary buckets when none stored")
-
-	// Store a bucket first
-	storedBucket := bm.loadOrStore("key1", executionTime, limit)
-
-	// Now loadOrGet should return the stored bucket
-	bucket3 := bm.loadOrGet("key1", executionTime, limit)
-	require.Equal(t, storedBucket, bucket3, "should return stored bucket when available")
 }
 
 func TestBucketMap_Load(t *testing.T) {
@@ -226,9 +155,6 @@ func TestBucketMap_ConcurrentAccess(t *testing.T) {
 			for range ops {
 				// Test loadOrStore method
 				bm.loadOrStore(key, executionTime, limit)
-
-				// Test loadOrGet method
-				bm.loadOrGet(key, executionTime, limit)
 
 				// Test load method
 				bm.load(key, limit)

@@ -6,7 +6,6 @@ type Limiter[TInput any, TKey comparable] struct {
 	limits     []Limit
 	limitFuncs []LimitFunc[TInput]
 	buckets    bucketMap[TKey]
-	waiters    syncMap[TKey, *waiter]
 }
 
 // KeyFunc is a function that takes an input and returns a bucket key.

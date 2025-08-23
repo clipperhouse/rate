@@ -1,5 +1,7 @@
 package rate
 
+import "github.com/clipperhouse/ntime"
+
 // Limiter is a rate limiter that can be used to limit the rate of requests to a given key.
 type Limiter[TInput any, TKey comparable] struct {
 	keyFunc    KeyFunc[TInput, TKey]
@@ -40,4 +42,30 @@ func (r *Limiter[TInput, TKey]) getLimits(input TInput) []Limit {
 		limits[i] = limitFunc(input)
 	}
 	return limits
+}
+
+// GC deletes buckets that are full, i.e, buckets for which enough
+// time has passed that they are no longer relevant. A full bucket
+// and a non-existent bucket have the same semantics.
+//
+// Without GC, buckets (memory) will grow unbounded.
+//
+// This can be a moderately expensive operation, depending
+// on the number of buckets. If you want a cheaper operation,
+// see [Clear].
+func (r *Limiter[TInput, TKey]) GC() (deleted int64) {
+	return r.buckets.gc(ntime.Now)
+}
+
+// Clear deletes all buckets. This is semantically
+// equivalent to refilling all buckets.
+//
+// You would use this method for garbage collection
+// purposes, as the limiter's memory will grow unbounded
+// otherwise.
+//
+// See also the [GC] method, which is more selective, and
+// only deletes buckets that are no longer meaningful.
+func (r *Limiter[TInput, TKey]) Clear() {
+	r.buckets.m.Clear()
 }

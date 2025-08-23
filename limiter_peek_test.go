@@ -29,7 +29,7 @@ func TestLimiter_Peek_NeverPersists(t *testing.T) {
 	}
 
 	// no buckets should have been stored
-	require.Equal(t, limiter.buckets.count(), 0, "buckets should not persist after peeking")
+	require.Equal(t, int64(0), limiter.buckets.count(), "buckets should not persist after peeking")
 }
 
 func TestLimiter_Peek_SingleBucket(t *testing.T) {

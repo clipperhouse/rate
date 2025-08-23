@@ -151,7 +151,7 @@ func TestLimiter_Allow(t *testing.T) {
 			}
 
 			expected := buckets * len(limiter.limits)
-			require.Equal(t, limiter.buckets.count(), expected, "buckets should have persisted after allow")
+			require.Equal(t, int64(expected), limiter.buckets.count(), "buckets should have persisted after allow")
 		})
 	})
 

@@ -103,3 +103,10 @@ func (b *bucket) nextTokensTime(executionTime ntime.Time, limit Limit, n int64) 
 func (b *bucket) retryAfter(executionTime ntime.Time, limit Limit, n int64) time.Duration {
 	return max(0, b.nextTokensTime(executionTime, limit, n).Sub(executionTime))
 }
+
+// isFull checks if the bucket is full, i.e. has all the tokens it can have.
+//
+// ⚠️ caller is responsible for locking appropriately
+func (b *bucket) isFull(executionTime ntime.Time, limit Limit) bool {
+	return b.time.BeforeOrEqual(executionTime.Add(-limit.period))
+}

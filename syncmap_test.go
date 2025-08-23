@@ -3,6 +3,7 @@ package rate
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -108,7 +109,7 @@ func TestBucketMap_Count(t *testing.T) {
 	executionTime := ntime.Now()
 
 	// Empty map should have count 0
-	require.Equal(t, 0, bm.count(), "empty map should have count 0")
+	require.Equal(t, int64(0), bm.count(), "empty map should have count 0")
 
 	// Add buckets with different keys and limits
 	for i := range 50 {
@@ -116,7 +117,7 @@ func TestBucketMap_Count(t *testing.T) {
 		bm.loadOrStore(key, executionTime, limit1)
 	}
 
-	require.Equal(t, 50, bm.count(), "should have 50 buckets after adding 50 different keys")
+	require.Equal(t, int64(50), bm.count(), "should have 50 buckets after adding 50 different keys")
 
 	// Add buckets with same keys but different limits
 	for i := range 50 {
@@ -124,7 +125,7 @@ func TestBucketMap_Count(t *testing.T) {
 		bm.loadOrStore(key, executionTime, limit2)
 	}
 
-	require.Equal(t, 100, bm.count(), "should have 100 buckets after adding same keys with different limits")
+	require.Equal(t, int64(100), bm.count(), "should have 100 buckets after adding same keys with different limits")
 
 	// Adding duplicate key-limit combinations should not increase count
 	for i := range 25 {
@@ -132,7 +133,7 @@ func TestBucketMap_Count(t *testing.T) {
 		bm.loadOrStore(key, executionTime, limit1)
 	}
 
-	require.Equal(t, 100, bm.count(), "should still have 100 buckets after duplicate additions")
+	require.Equal(t, int64(100), bm.count(), "should still have 100 buckets after duplicate additions")
 }
 
 func TestBucketMap_ConcurrentAccess(t *testing.T) {
@@ -190,5 +191,108 @@ func TestBucketMap_DifferentKeyTypes(t *testing.T) {
 	bucket3 := bm.loadOrStore(43, executionTime, limit)
 	require.False(t, bucket1 == bucket3, "different int keys should have different buckets")
 
-	require.Equal(t, 2, bm.count(), "should have 2 buckets for 2 different int keys")
+	require.Equal(t, int64(2), bm.count(), "should have 2 buckets for 2 different int keys")
+}
+
+func TestBucketMap_GC(t *testing.T) {
+	t.Parallel()
+
+	t.Run("gc deletes full buckets", func(t *testing.T) {
+		var bm bucketMap[string]
+		const count int64 = 1000
+
+		limit := NewLimit(10, time.Second)
+		executionTime := ntime.Now()
+
+		// Create a bunch of older buckets
+		for i := range count {
+			key := fmt.Sprintf("key%d", i)
+			b := bm.loadOrStore(key, executionTime, limit)
+			// 1/4 of the buckets will not be full
+			if i%4 == 0 {
+				b.consumeTokens(executionTime, limit, 1)
+			}
+		}
+
+		require.Equal(t, count, bm.count(), "should have 1000 buckets after creating 1000 older buckets")
+
+		// GC should delete 750 buckets full buckets, and not the 250 that are not full
+		{
+			deleted := bm.gc(func() ntime.Time {
+				return executionTime
+			})
+			require.Equal(t, int64(750), deleted, "should have 750 deleted buckets, since 1/4 of the buckets are full")
+			require.Equal(t, int64(250), bm.count(), "should have 250 buckets remaining after GC")
+		}
+
+		// Time passes
+		executionTime = executionTime.Add(time.Second)
+
+		// All remaining buckets are full now
+		{
+			deleted := bm.gc(func() ntime.Time {
+				return executionTime
+			})
+			require.Equal(t, int64(250), deleted, "should have deleted the remaining 250 buckets")
+			require.Equal(t, int64(0), bm.count(), "should have 0 buckets remaining after all deletions")
+		}
+	})
+
+	t.Run("gc concurrent with reads and writes", func(t *testing.T) {
+		var bm bucketMap[string]
+		const count int64 = 1000
+
+		limit := NewLimit(10, time.Second)
+		executionTime := ntime.Now()
+
+		// Create a bunch of buckets concurrently
+
+		// Trying to get the timing right for a good test,
+		// since a slow system like GitHub Actions seems
+		// to take a while to launch goroutines.
+		signal := make(chan struct{})
+		launched := int64(0)
+
+		var wg sync.WaitGroup
+		for i := range count {
+			wg.Add(1)
+			go func(i int64) {
+				defer wg.Done()
+
+				time.Sleep(time.Millisecond)
+				key := fmt.Sprintf("key%d", i)
+				b := bm.loadOrStore(key, executionTime, limit)
+				b.mu.Lock()
+				// 1/5 of the buckets will not be full
+				if i%5 == 0 {
+					b.consumeTokens(executionTime, limit, 1)
+				}
+				b.mu.Unlock()
+
+				// Signal when we reach 100 launched goroutines
+				if atomic.AddInt64(&launched, 1) == 100 {
+					close(signal)
+				}
+			}(i)
+		}
+
+		// Wait for 100 goroutines to launch before running GC,
+		// try to induce some concurrency.
+
+		<-signal
+		bm.gc(func() ntime.Time {
+			return executionTime
+		})
+		wg.Wait()
+
+		// Expect that some, but not all, deletions have happened,
+		// since there was concurrent creation of buckets.
+		require.Less(t, bm.count(), count, "some deletions should have happened")
+
+		// Now delete the remaining buckets, without concurrency
+		bm.gc(func() ntime.Time {
+			return executionTime
+		})
+		require.Equal(t, int64(200), bm.count(), "should have 200 buckets after deletion and GC")
+	})
 }

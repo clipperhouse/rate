@@ -576,3 +576,26 @@ func TestBucket_RetryAfter(t *testing.T) {
 		require.Equal(t, expected, retryAfter, "retryAfter should be durationPerToken when requesting 2 tokens after exactly one durationPerToken has passed")
 	})
 }
+
+func TestBucket_IsFull(t *testing.T) {
+	t.Parallel()
+
+	now := ntime.Now()
+	limit := NewLimit(11, time.Second)
+	bucket := newBucket(now, limit)
+
+	// Newly created buckets are full
+	require.True(t, bucket.isFull(now, limit), "bucket should be full initially")
+
+	bucket.consumeTokens(now, limit, 5)
+	require.Equal(t, int64(6), bucket.remainingTokens(now, limit), "bucket should have 6 tokens remaining after consuming 5 tokens")
+	require.False(t, bucket.isFull(now, limit), "bucket should not be full after consuming 5 tokens")
+
+	now = now.Add(limit.durationPerToken * 4)
+	require.Equal(t, int64(10), bucket.remainingTokens(now, limit), "bucket should have 10 tokens remaining after consuming 5 tokens and waiting for 4")
+	require.False(t, bucket.isFull(now, limit), "bucket should not be full after consuming 5 tokens and waiting for 4")
+
+	now = now.Add(limit.durationPerToken)
+	require.Equal(t, int64(11), bucket.remainingTokens(now, limit), "bucket should have 11 tokens remaining")
+	require.True(t, bucket.isFull(now, limit), "bucket should be full after consuming 1 token and waiting for 4 durationPerTokens")
+}

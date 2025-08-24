@@ -8,7 +8,8 @@ import (
 
 // bucketMap is a specialized sync.Map for storing buckets
 type bucketMap[TKey comparable] struct {
-	m sync.Map
+	m  sync.Map
+	mu sync.RWMutex
 }
 
 // bucketSpec is a key for the bucket map, which includes the limit and the user key.
@@ -47,11 +48,34 @@ func (bm *bucketMap[TKey]) load(userKey TKey, limit Limit) (*bucket, bool) {
 	return nil, false
 }
 
-func (bm *bucketMap[TKey]) count() int {
-	count := 0
+func (bm *bucketMap[TKey]) count() int64 {
+	count := int64(0)
 	bm.m.Range(func(_, _ any) bool {
 		count++
 		return true
 	})
 	return count
+}
+
+// gc deletes buckets that are full, which has the
+// same semantics as the bucket not existing
+func (bm *bucketMap[TKey]) gc(timeFunc func() ntime.Time) (deleted int64) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+
+	bm.m.Range(func(key, value any) bool {
+		// I wonder if there is a possibility of a race here, not sure.
+		// Thinking about the timing between getting the bucket from the map
+		// and locking the bucket. Maybe it's not a problem.
+		spec := key.(bucketSpec[TKey])
+		b := value.(*bucket)
+		b.mu.Lock()
+		if b.isFull(timeFunc(), spec.limit) {
+			bm.m.Delete(key)
+			deleted++
+		}
+		b.mu.Unlock()
+		return true
+	})
+	return deleted
 }

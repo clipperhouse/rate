@@ -57,25 +57,31 @@ func (bm *bucketMap[TKey]) count() int64 {
 	return count
 }
 
-// gc deletes buckets that are full, which has the
-// same semantics as the bucket not existing
+// gc deletes buckets that are full using mark-and-sweep
 func (bm *bucketMap[TKey]) gc(timeFunc func() ntime.Time) (deleted int64) {
-	bm.mu.Lock()
-	defer bm.mu.Unlock()
+	// Phase 1: Mark buckets for deletion
+	toDelete := make([]bucketSpec[TKey], 0)
 
 	bm.m.Range(func(key, value any) bool {
-		// I wonder if there is a possibility of a race here, not sure.
-		// Thinking about the timing between getting the bucket from the map
-		// and locking the bucket. Maybe it's not a problem.
 		spec := key.(bucketSpec[TKey])
 		b := value.(*bucket)
 		b.mu.Lock()
 		if b.isFull(timeFunc(), spec.limit) {
-			bm.m.Delete(key)
-			deleted++
+			toDelete = append(toDelete, spec)
 		}
 		b.mu.Unlock()
 		return true
 	})
+
+	// Phase 2: Delete marked buckets atomically
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+
+	for _, spec := range toDelete {
+		if _, loaded := bm.m.LoadAndDelete(spec); loaded {
+			deleted++
+		}
+	}
+
 	return deleted
 }

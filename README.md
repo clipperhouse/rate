@@ -196,3 +196,5 @@ HTTP is the common case, but you can use whatever your app needs.
 ## Roadmap
 
 First and foremost, I want some feedback. Try it, open an issue, or [ping me](https://x.com/clipperhouse).
+
+I can imagine a desire to share state across a cluster, perhaps via Redis or other shared database. That would be useful but would likely require sacrificing some of my optimizations, such as [ntime](https://github.com/clipperhouse/ntime). Open to it.

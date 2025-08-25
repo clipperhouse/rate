@@ -399,3 +399,198 @@ func TestBucketMap_GC(t *testing.T) {
 		require.GreaterOrEqual(t, deleted, int64(0), "final GC should complete without errors")
 	})
 }
+
+func BenchmarkBucketMap_GC(b *testing.B) {
+	b.Run("all_full_buckets", func(b *testing.B) {
+		limit := NewLimit(10, time.Second)
+		executionTime := ntime.Now()
+		const count int64 = 10000
+
+		// Pre-create all the bucket specs and buckets
+		specs := make([]bucketSpec[string], count)
+		buckets := make([]*bucket, count)
+		for i := range count {
+			key := fmt.Sprintf("key%d", i)
+			specs[i] = bucketSpec[string]{
+				limit:   limit,
+				userKey: key,
+			}
+			bucket := newBucket(executionTime, limit)
+			buckets[i] = &bucket
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			var bm bucketMap[string]
+
+			// We need a fresh map for the benchmark,
+			// but it's not what we want to measure.
+			// Its overhead looks to be ~50% of the
+			// total time, so we can subtract it.
+			for i := range count {
+				bm.m.Store(specs[i], buckets[i])
+			}
+
+			// Run GC
+			bm.gc(func() ntime.Time {
+				return executionTime
+			})
+		}
+	})
+
+	b.Run("mixed_buckets", func(b *testing.B) {
+		limit := NewLimit(10, time.Second)
+		executionTime := ntime.Now()
+		const count int64 = 10000
+
+		// Pre-create all the bucket specs and buckets
+		specs := make([]bucketSpec[string], count)
+		buckets := make([]*bucket, count)
+		for i := range count {
+			key := fmt.Sprintf("key%d", i)
+			specs[i] = bucketSpec[string]{
+				limit:   limit,
+				userKey: key,
+			}
+			bucket := newBucket(executionTime, limit)
+			// Make 1/4 of buckets non-full
+			if i%4 == 0 {
+				bucket.consumeTokens(executionTime, limit, 1)
+			}
+			buckets[i] = &bucket
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			var bm bucketMap[string]
+
+			// We need a fresh map for the benchmark,
+			// but it's not what we want to measure.
+			// Its overhead looks to be ~50% of the
+			// total time, so we can subtract it.
+			for i := range count {
+				bm.m.Store(specs[i], buckets[i])
+			}
+
+			// Run GC
+			bm.gc(func() ntime.Time {
+				return executionTime
+			})
+		}
+	})
+
+	b.Run("few_buckets", func(b *testing.B) {
+		limit := NewLimit(10, time.Second)
+		executionTime := ntime.Now()
+		const count int64 = 100
+
+		// Pre-create all the bucket specs and buckets
+		specs := make([]bucketSpec[string], count)
+		buckets := make([]*bucket, count)
+		for i := range count {
+			key := fmt.Sprintf("key%d", i)
+			specs[i] = bucketSpec[string]{
+				limit:   limit,
+				userKey: key,
+			}
+			bucket := newBucket(executionTime, limit)
+			buckets[i] = &bucket
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			var bm bucketMap[string]
+
+			// We need a fresh map for the benchmark,
+			// but it's not what we want to measure.
+			// Its overhead looks to be ~50% of the
+			// total time, so we can subtract it.
+			for i := range count {
+				bm.m.Store(specs[i], buckets[i])
+			}
+
+			// Run GC
+			bm.gc(func() ntime.Time {
+				return executionTime
+			})
+		}
+	})
+
+	b.Run("many_buckets", func(b *testing.B) {
+		limit := NewLimit(10, time.Second)
+		executionTime := ntime.Now()
+		const count int64 = 1000000
+
+		// Pre-create all the bucket specs and buckets
+		specs := make([]bucketSpec[string], count)
+		buckets := make([]*bucket, count)
+		for i := range count {
+			key := fmt.Sprintf("key%d", i)
+			specs[i] = bucketSpec[string]{
+				limit:   limit,
+				userKey: key,
+			}
+			bucket := newBucket(executionTime, limit)
+			buckets[i] = &bucket
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			var bm bucketMap[string]
+
+			// We need a fresh map for the benchmark,
+			// but it's not what we want to measure.
+			// Its overhead looks to be ~50% of the
+			// total time, so we can subtract it.
+			for i := range count {
+				bm.m.Store(specs[i], buckets[i])
+			}
+
+			// Run GC
+			bm.gc(func() ntime.Time {
+				return executionTime
+			})
+		}
+	})
+
+	b.Run("map_creation_only", func(b *testing.B) {
+		// The above benchmarks require creating a
+		// fresh map for each iteration, which is
+		// not what we want to measure. This benchmark
+		// gives an idea of that overhead, which can
+		// be subtracted from the other benchmarks.
+
+		// Manual observation, on my machine, the
+		// map creation accounts for about half
+		// of the benchmark time. So perhaps
+		// we can halve the ns/op above when
+		// evaluating.
+		limit := NewLimit(10, time.Second)
+		executionTime := ntime.Now()
+		const count int64 = 10000
+
+		// Pre-create all the bucket specs and buckets
+		specs := make([]bucketSpec[string], count)
+		buckets := make([]*bucket, count)
+		for i := range count {
+			key := fmt.Sprintf("key%d", i)
+			specs[i] = bucketSpec[string]{
+				limit:   limit,
+				userKey: key,
+			}
+			bucket := newBucket(executionTime, limit)
+			buckets[i] = &bucket
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			var bm bucketMap[string]
+
+			// Just measure the map creation overhead
+			// to inform the other benchmarks.
+			for i := range count {
+				bm.m.Store(specs[i], buckets[i])
+			}
+		}
+	})
+}

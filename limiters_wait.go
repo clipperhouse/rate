@@ -148,10 +148,8 @@ func (r *Limiters[TInput, TKey]) waitNWithDetails(
 		case <-ctx.Done():
 			// Need to get updated details, since this cancellation
 			// event might have been a while after the last call.
-			// We'll choose the semantics of "cancellation always
-			// means deny".
-			_, details := r.peekNWithDetails(input, currentTime, n)
-			return false, details, ctx.Err()
+			allow, details := r.allowNWithDetails(input, currentTime, n)
+			return allow, details, ctx.Err()
 		case <-time.After(retryAfter):
 			currentTime = currentTime.Add(retryAfter)
 		}
@@ -240,10 +238,8 @@ func (r *Limiters[TInput, TKey]) waitNWithDebug(
 		case <-ctx.Done():
 			// Need to get updated debugs, since this cancellation
 			// event might have been a while after the last call.
-			// We'll choose the semantics of "cancellation always
-			// means deny".
-			_, debugs := r.peekNWithDebug(input, currentTime, n)
-			return false, debugs, ctx.Err()
+			allow, debugs := r.allowNWithDebug(input, currentTime, n)
+			return allow, debugs, ctx.Err()
 		case <-time.After(retryAfter):
 			currentTime = currentTime.Add(retryAfter)
 		}

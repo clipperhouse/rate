@@ -33,8 +33,7 @@ import (
 // Wait makes no ordering guarantees. Multiple concurrent calls may
 // acquire tokens in any order.
 func (r *Limiter[TInput, TKey]) Wait(ctx context.Context, input TInput) (bool, error) {
-	allow, _, err := r.waitNWithDetails(ctx, input, ntime.Now(), 1)
-	return allow, err
+	return r.WaitN(ctx, input, 1)
 }
 
 // WaitN will poll [Limiter.AllowN] for a period of time,
@@ -152,10 +151,8 @@ func (r *Limiter[TInput, TKey]) waitNWithDetails(
 		case <-ctx.Done():
 			// Need to get updated details, since this cancellation
 			// event might have been a while after the last call.
-			// We'll choose the semantics of "cancellation always
-			// means deny".
-			_, details := r.peekNWithDetails(input, currentTime, n)
-			return false, details, ctx.Err()
+			allow, details := r.allowNWithDetails(input, currentTime, n)
+			return allow, details, ctx.Err()
 		case <-time.After(retryAfter):
 			currentTime = currentTime.Add(retryAfter)
 		}
@@ -247,10 +244,8 @@ func (r *Limiter[TInput, TKey]) waitNWithDebug(
 		case <-ctx.Done():
 			// Need to get updated debugs, since this cancellation
 			// event might have been a while after the last call.
-			// We'll choose the semantics of "cancellation always
-			// means deny".
-			_, debugs := r.peekNWithDebug(input, currentTime, n)
-			return false, debugs, ctx.Err()
+			allow, debugs := r.allowNWithDebug(input, currentTime, n)
+			return allow, debugs, ctx.Err()
 		case <-time.After(retryAfter):
 			currentTime = currentTime.Add(retryAfter)
 		}

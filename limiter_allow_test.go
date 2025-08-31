@@ -29,7 +29,7 @@ func TestLimiter_Allow(t *testing.T) {
 
 				now := ntime.Now()
 
-				for range limit.count {
+				for range limit.Count() {
 					require.True(t, limiter.allow("test", now))
 				}
 
@@ -52,7 +52,7 @@ func TestLimiter_Allow(t *testing.T) {
 
 				now := ntime.Now()
 
-				for range limit.count {
+				for range limit.Count() {
 					require.True(t, limiter.allow("test", now))
 				}
 
@@ -213,7 +213,7 @@ func TestLimiter_Allow(t *testing.T) {
 				{
 					var wg sync.WaitGroup
 					for bucketID := range buckets {
-						for processID := range limit.count {
+						for processID := range limit.Count() {
 							wg.Add(1)
 							go func(bucketID int, processID int64) {
 								defer wg.Done()
@@ -228,7 +228,7 @@ func TestLimiter_Allow(t *testing.T) {
 				// Verify that additional requests are rejected, all buckets should be exhausted
 				for bucketID := range buckets {
 					allowed := limiter.allow(bucketID, start)
-					require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, limit.count)
+					require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, limit.Count())
 				}
 
 				// Complete refill
@@ -239,7 +239,7 @@ func TestLimiter_Allow(t *testing.T) {
 						wg.Add(1)
 						go func(bucketID int) {
 							defer wg.Done()
-							for range limit.count {
+							for range limit.Count() {
 								allowed := limiter.allow(bucketID, now)
 								require.True(t, allowed, "bucket %d should be refilled after 1 second", bucketID)
 							}
@@ -262,7 +262,7 @@ func TestLimiter_Allow(t *testing.T) {
 					{
 						var wg sync.WaitGroup
 						for bucketID := range buckets {
-							for processID := range limit.count {
+							for processID := range limit.Count() {
 								wg.Add(1)
 								go func(bucketID int, processID int64) {
 									defer wg.Done()
@@ -282,7 +282,7 @@ func TestLimiter_Allow(t *testing.T) {
 							go func(bucketID int) {
 								defer wg.Done()
 								allowed := limiter.allow(bucketID, start)
-								require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, limit.count)
+								require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, limit.Count())
 							}(bucketID)
 						}
 						wg.Wait()
@@ -296,7 +296,7 @@ func TestLimiter_Allow(t *testing.T) {
 							wg.Add(1)
 							go func(bucketID int) {
 								defer wg.Done()
-								for range limit.count {
+								for range limit.Count() {
 									allowed := limiter.allow(bucketID, now)
 									require.True(t, allowed, "bucket %d should be refilled after 1 second", bucketID)
 								}
@@ -356,7 +356,7 @@ func TestLimiter_Allow(t *testing.T) {
 				{
 					var wg sync.WaitGroup
 					for bucketID := range buckets {
-						for processID := range perSecond.count {
+						for processID := range perSecond.Count() {
 							wg.Add(1)
 							go func(bucketID int, processID int64) {
 								defer wg.Done()
@@ -376,7 +376,7 @@ func TestLimiter_Allow(t *testing.T) {
 						go func(bucketID int) {
 							defer wg.Done()
 							allowed := limiter.allow(bucketID, executionTime)
-							require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, perSecond.count)
+							require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, perSecond.Count())
 						}(bucketID)
 					}
 					wg.Wait()
@@ -421,7 +421,7 @@ func TestLimiter_Allow(t *testing.T) {
 				{
 					var wg sync.WaitGroup
 					for bucketID := range buckets {
-						for processID := range perSecond.count {
+						for processID := range perSecond.Count() {
 							wg.Add(1)
 							go func(bucketID int, processID int64) {
 								defer wg.Done()
@@ -483,7 +483,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d0.ExecutionTime(), now.ToTime())
 		require.Equal(t, d0.TokensRequested(), consume)
 		require.Equal(t, d0.TokensConsumed(), consume)
-		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume)
+		require.Equal(t, d0.TokensRemaining(), perSecond.Count()-consume)
 		require.Equal(t, time.Duration(0), d0.RetryAfter(), "per-second RetryAfter should be 0 when allowed")
 
 		d1 := debugs[1]
@@ -493,7 +493,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d1.ExecutionTime(), now.ToTime())
 		require.Equal(t, d1.TokensRequested(), consume)
 		require.Equal(t, d1.TokensConsumed(), consume)
-		require.Equal(t, d1.TokensRemaining(), perHour.count-consume)
+		require.Equal(t, d1.TokensRemaining(), perHour.Count()-consume)
 		require.Equal(t, time.Duration(0), d1.RetryAfter(), "per-hour RetryAfter should be 0 when allowed")
 
 		consumed += consume
@@ -513,7 +513,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d0.ExecutionTime(), now.ToTime())
 		require.Equal(t, d0.TokensRequested(), consume)
 		require.Equal(t, d0.TokensConsumed(), consume)
-		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume-consumed)
+		require.Equal(t, d0.TokensRemaining(), perSecond.Count()-consume-consumed)
 		require.Equal(t, time.Duration(0), d0.RetryAfter(), "per-second RetryAfter should be 0 when allowed")
 
 		d1 := debugs[1]
@@ -523,7 +523,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d1.ExecutionTime(), now.ToTime())
 		require.Equal(t, d1.TokensRequested(), consume)
 		require.Equal(t, d1.TokensConsumed(), consume)
-		require.Equal(t, d1.TokensRemaining(), perHour.count-consume-consumed)
+		require.Equal(t, d1.TokensRemaining(), perHour.Count()-consume-consumed)
 		require.Equal(t, time.Duration(0), d1.RetryAfter(), "per-hour RetryAfter should be 0 when allowed")
 
 		consumed += consume
@@ -543,7 +543,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d0.ExecutionTime(), now.ToTime())
 		require.Equal(t, d0.TokensRequested(), consume)
 		require.Equal(t, d0.TokensConsumed(), int64(0))
-		require.Equal(t, d0.TokensRemaining(), perSecond.count-consumed)
+		require.Equal(t, d0.TokensRemaining(), perSecond.Count()-consumed)
 		// per-second limit is exhausted, so we need to wait for 2 tokens to refill
 		rounding := time.Nanosecond
 		require.Equal(t, 2*perSecond.durationPerToken, d0.RetryAfter()+rounding, "per-second RetryAfter should be time to refill %d tokens", consume)
@@ -555,7 +555,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d1.ExecutionTime(), now.ToTime())
 		require.Equal(t, d1.TokensRequested(), consume)
 		require.Equal(t, d1.TokensConsumed(), int64(0))
-		require.Equal(t, d1.TokensRemaining(), perHour.count-consumed)
+		require.Equal(t, d1.TokensRemaining(), perHour.Count()-consumed)
 		require.Equal(t, time.Duration(0), d1.RetryAfter(), "per-hour RetryAfter should be 0 when tokens are available")
 
 		consumed += 0
@@ -578,7 +578,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d0.ExecutionTime(), now.ToTime())
 		require.Equal(t, d0.TokensRequested(), consume)
 		require.Equal(t, d0.TokensConsumed(), consume)
-		require.Equal(t, d0.TokensRemaining(), perSecond.count-consume-consumed+refilled)
+		require.Equal(t, d0.TokensRemaining(), perSecond.Count()-consume-consumed+refilled)
 		require.Equal(t, time.Duration(0), d0.RetryAfter(), "per-second RetryAfter should be 0 when allowed after refill")
 
 		d1 := debugs[1]
@@ -588,7 +588,7 @@ func TestLimiter_AllowNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d1.ExecutionTime(), now.ToTime())
 		require.Equal(t, d1.TokensRequested(), consume)
 		require.Equal(t, d1.TokensConsumed(), consume)
-		require.Equal(t, d1.TokensRemaining(), perHour.count-consume-consumed+0) // time passing not enough to refill per-hour
+		require.Equal(t, d1.TokensRemaining(), perHour.Count()-consume-consumed+0) // time passing not enough to refill per-hour
 		require.Equal(t, time.Duration(0), d1.RetryAfter(), "per-hour RetryAfter should be 0 when allowed")
 	}
 }
@@ -682,12 +682,12 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 
 	// Enough concurrent processes for each bucket to precisely exhaust the per-second limit
 	{
-		results := make([][]Debug[int, string], buckets*int(perSecond.count))
+		results := make([][]Debug[int, string], buckets*int(perSecond.Count()))
 		resultIndex := 0
 
 		var wg sync.WaitGroup
 		for bucketID := range buckets {
-			for processID := range perSecond.count {
+			for processID := range perSecond.Count() {
 				wg.Add(1)
 				go func(bucketID int, processID int64, index int) {
 					defer wg.Done()
@@ -703,7 +703,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 
 		// Verify all results have the correct structure
 		for i, debugs := range results {
-			bucketID := i / int(perSecond.count) // Calculate bucketID from index
+			bucketID := i / int(perSecond.Count()) // Calculate bucketID from index
 			expectedKey := fmt.Sprintf("test-bucket-%d", bucketID)
 
 			d0 := debugs[0]
@@ -738,7 +738,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 			go func(bucketID int) {
 				defer wg.Done()
 				allowed, debugs := limiter.allowWithDebug(bucketID, executionTime)
-				require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, perSecond.count)
+				require.False(t, allowed, "bucket %d should be exhausted after %d requests", bucketID, perSecond.Count())
 				require.Len(t, debugs, 2, "should have debugs for both limits")
 				results[bucketID] = debugs
 			}(bucketID)
@@ -878,11 +878,11 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 	// Test concurrent access after full refill
 	{
 		var wg sync.WaitGroup
-		results := make([][]Debug[int, string], buckets*int(perSecond.count))
+		results := make([][]Debug[int, string], buckets*int(perSecond.Count()))
 		resultIndex := 0
 
 		for bucketID := range buckets {
-			for processID := range perSecond.count {
+			for processID := range perSecond.Count() {
 				wg.Add(1)
 				go func(bucketID int, processID int64, index int) {
 					defer wg.Done()
@@ -898,7 +898,7 @@ func TestLimiter_AllowWithDebug_MultipleBuckets_MultipleLimits_Concurrent(t *tes
 
 		// Verify all results after refill
 		for i, debugs := range results {
-			bucketID := i / int(perSecond.count) // Calculate bucketID from index
+			bucketID := i / int(perSecond.Count()) // Calculate bucketID from index
 			expectedKey := fmt.Sprintf("test-bucket-%d", bucketID)
 
 			d0 := debugs[0]
@@ -1028,7 +1028,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 		require.Equal(t, "test-details", d.Key())
 		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
 		require.Equal(t, int64(1), d.TokensConsumed(), "should consume 1 token when allowed")
-		require.Equal(t, limit.count-1, d.TokensRemaining())
+		require.Equal(t, limit.Count()-1, d.TokensRemaining())
 		require.Equal(t, time.Duration(0), d.RetryAfter(), "RetryAfter should be 0 when allowed")
 	})
 
@@ -1066,7 +1066,7 @@ func TestLimiter_AllowWithDebug(t *testing.T) {
 		// Test AllowWithDetails when request is denied
 		t.Run("AllowWithDetails_Denied", func(t *testing.T) {
 			// Exhaust the bucket
-			for range limit.count {
+			for range limit.Count() {
 				limiter.Allow("test-key3")
 			}
 

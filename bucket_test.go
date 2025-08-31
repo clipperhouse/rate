@@ -19,7 +19,7 @@ func TestBucket_HasTokens(t *testing.T) {
 		bucket := newBucket(now, limit)
 		remaining := bucket.remainingTokens(now, limit)
 
-		for range limit.count {
+		for range limit.Count() {
 			actual := bucket.hasTokens(now, limit, n)
 			require.True(t, actual, "expected to have enough tokens initially")
 		}
@@ -28,7 +28,7 @@ func TestBucket_HasTokens(t *testing.T) {
 		require.Equal(t, remaining, bucket.remainingTokens(now, limit), "remaining tokens should not change")
 
 		// Consume all tokens
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(now, limit, n)
 		}
 
@@ -114,7 +114,7 @@ func TestBucket_RemainingTokens(t *testing.T) {
 
 	{
 		actual := bucket.remainingTokens(now, limit)
-		expected := limit.count
+		expected := limit.Count()
 		require.Equal(t, expected, actual, "remaining tokens should equal to limit count")
 	}
 
@@ -123,7 +123,7 @@ func TestBucket_RemainingTokens(t *testing.T) {
 	now = now.Add(time.Hour)
 	{
 		actual := bucket.remainingTokens(now, limit)
-		expected := limit.count
+		expected := limit.Count()
 		require.Equal(t, expected, actual, "remaining tokens should equal to limit count after a long time")
 	}
 }
@@ -150,7 +150,7 @@ func TestBucket_ConsumeTokens(t *testing.T) {
 		bucket := newBucket(executionTime, limit)
 
 		// exhaust the bucket
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(executionTime, limit, 1)
 		}
 		require.False(t, bucket.hasTokens(executionTime, limit, 1), "expected to have no tokens after exhausting the bucket")
@@ -159,7 +159,7 @@ func TestBucket_ConsumeTokens(t *testing.T) {
 		executionTime = executionTime.Add(time.Hour)
 
 		// almost exhaust it
-		for range limit.count - 1 {
+		for range limit.Count() - 1 {
 			bucket.consumeTokens(executionTime, limit, 1)
 		}
 		require.True(t, bucket.hasTokens(executionTime, limit, 1), "expected to have one token after exhausting the old bucket")
@@ -186,7 +186,7 @@ func TestBucket_NextTokensTime(t *testing.T) {
 		require.Equal(t, expected, nextTime, "next tokens time should be calculated from bucket's full state")
 
 		// Consume all tokens
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(now, limit, 1)
 		}
 
@@ -241,7 +241,7 @@ func TestBucket_NextTokensTime(t *testing.T) {
 		bucket := newBucket(now, limit)
 
 		// Consume all tokens
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(now, limit, 1)
 		}
 
@@ -277,7 +277,7 @@ func TestBucket_NextTokensTime(t *testing.T) {
 		bucket := newBucket(now, limit)
 
 		// Consume all tokens
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(now, limit, 1)
 		}
 
@@ -339,7 +339,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 		require.Equal(t, time.Duration(0), retryAfter, "retryAfter should be 0 when tokens are immediately available")
 
 		// Consume all tokens
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(now, limit, 1)
 		}
 
@@ -388,7 +388,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 		bucket := newBucket(now, limit)
 
 		// Consume all tokens
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(now, limit, 1)
 		}
 
@@ -428,7 +428,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 		bucket := newBucket(now, limit)
 
 		// Consume all tokens
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(now, limit, 1)
 		}
 
@@ -551,7 +551,7 @@ func TestBucket_RetryAfter(t *testing.T) {
 		bucket := newBucket(now, limit)
 
 		// Consume all tokens
-		for range limit.count {
+		for range limit.Count() {
 			bucket.consumeTokens(now, limit, 1)
 		}
 

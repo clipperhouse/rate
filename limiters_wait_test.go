@@ -29,7 +29,7 @@ func TestLimiters_Wait(t *testing.T) {
 		executionTime := ntime.Now()
 
 		// Consume all tokens from the more restrictive limiter
-		for range limit1.count {
+		for range limit1.Count() {
 			ok := limiters.allowN("test", executionTime, 1)
 			require.True(t, ok, "should allow initial tokens")
 		}
@@ -72,7 +72,7 @@ func TestLimiters_Wait(t *testing.T) {
 			require.ErrorIs(t, err, context.Canceled, "should return context canceled error")
 		}
 
-		// Test 3: Wait for multiple tokens (limit1.count) with no cancellation
+		// Test 3: Wait for multiple tokens (limit1.Count()) with no cancellation
 		{
 			// Wait for bucket to refill enough tokens
 			executionTime = executionTime.Add(limit1.period)
@@ -81,8 +81,8 @@ func TestLimiters_Wait(t *testing.T) {
 				done: make(chan struct{}), // never closes
 			}
 
-			allow, details, err := limiters.waitNWithDetails(ctx, "test", executionTime, limit1.count)
-			require.True(t, allow, "should acquire %d tokens after waiting", limit1.count)
+			allow, details, err := limiters.waitNWithDetails(ctx, "test", executionTime, limit1.Count())
+			require.True(t, allow, "should acquire %d tokens after waiting", limit1.Count())
 			require.NotZero(t, details, "should return details")
 			require.NoError(t, err, "should not return error")
 		}
@@ -90,10 +90,10 @@ func TestLimiters_Wait(t *testing.T) {
 		// Test 4: Wait for multiple tokens with immediate cancellation
 		{
 			// Wait for bucket to refill enough tokens
-			executionTime = executionTime.Add(limit1.durationPerToken * time.Duration(limit1.count))
+			executionTime = executionTime.Add(limit1.durationPerToken * time.Duration(limit1.Count()))
 
 			// Consume all tokens to exhaust the bucket again
-			for range limit1.count {
+			for range limit1.Count() {
 				ok := limiters.allowN("test", executionTime, 1)
 				require.True(t, ok, "should allow tokens to exhaust bucket")
 			}
@@ -105,8 +105,8 @@ func TestLimiters_Wait(t *testing.T) {
 			}
 			close(done)
 
-			allow, details, err := limiters.waitNWithDetails(ctx, "test", executionTime, limit1.count)
-			require.False(t, allow, "should not acquire %d tokens if context is cancelled immediately", limit1.count)
+			allow, details, err := limiters.waitNWithDetails(ctx, "test", executionTime, limit1.Count())
+			require.False(t, allow, "should not acquire %d tokens if context is cancelled immediately", limit1.Count())
 			require.NotZero(t, details, "should return details even on cancellation")
 			require.ErrorIs(t, err, context.Canceled, "should return context canceled error")
 		}
@@ -129,7 +129,7 @@ func TestLimiters_Wait(t *testing.T) {
 
 			// Exhaust tokens for all buckets from the more restrictive limiter
 			for bucketID := range buckets {
-				for range limit1.count {
+				for range limit1.Count() {
 					allow := limiters.allowN(bucketID, executionTime, 1)
 					require.True(t, allow, "should allow initial tokens for bucket %d", bucketID)
 				}
@@ -181,7 +181,7 @@ func TestLimiters_Wait(t *testing.T) {
 
 			// Exhaust tokens for all buckets from the more restrictive limiter
 			for bucketID := range buckets {
-				for range limit1.count {
+				for range limit1.Count() {
 					allow := limiters.allowN(bucketID, executionTime, 1)
 					require.True(t, allow, "should allow initial tokens for bucket %d", bucketID)
 				}
@@ -240,7 +240,7 @@ func TestLimiters_Wait(t *testing.T) {
 
 				// Exhaust tokens from the more restrictive limiter
 				for bucketID := range buckets {
-					for range limit1.count {
+					for range limit1.Count() {
 						allow := limiters.allowN(bucketID, executionTime, 1)
 						require.True(t, allow, "should allow initial tokens for bucket %d", bucketID)
 					}
@@ -310,7 +310,7 @@ func TestLimiters_Wait(t *testing.T) {
 			executionTime := ntime.Now()
 
 			// Consume all tokens from the more restrictive limiter
-			for range limit1.count {
+			for range limit1.Count() {
 				ok := limiters.allowN("test", executionTime, 1)
 				require.True(t, ok, "should allow initial tokens")
 			}
@@ -421,7 +421,7 @@ func TestLimiters_WaitWithDebug(t *testing.T) {
 		executionTime := ntime.Now()
 
 		// Consume all tokens from the more restrictive limiter
-		for range limit1.count {
+		for range limit1.Count() {
 			ok := limiters.allowN("test", executionTime, 1)
 			require.True(t, ok, "should allow initial tokens")
 		}
@@ -464,17 +464,17 @@ func TestLimiters_WaitWithDebug(t *testing.T) {
 			require.ErrorIs(t, err, context.Canceled, "should return context canceled error")
 		}
 
-		// Test 3: Wait for multiple tokens (limit1.count) with no cancellation
+		// Test 3: Wait for multiple tokens (limit1.Count()) with no cancellation
 		{
 			// Wait for bucket to refill enough tokens
-			executionTime = executionTime.Add(limit1.durationPerToken * time.Duration(limit1.count))
+			executionTime = executionTime.Add(limit1.durationPerToken * time.Duration(limit1.Count()))
 
 			ctx := &testContext{
 				done: make(chan struct{}), // never closes
 			}
 
-			allow, debugs, err := limiters.waitNWithDebug(ctx, "test", executionTime, limit1.count)
-			require.True(t, allow, "should acquire %d tokens after waiting", limit1.count)
+			allow, debugs, err := limiters.waitNWithDebug(ctx, "test", executionTime, limit1.Count())
+			require.True(t, allow, "should acquire %d tokens after waiting", limit1.Count())
 			require.NotNil(t, debugs, "should return debugs")
 			require.NoError(t, err, "should not return error")
 
@@ -485,10 +485,10 @@ func TestLimiters_WaitWithDebug(t *testing.T) {
 		// Test 4: Wait for multiple tokens with immediate cancellation
 		{
 			// Wait for bucket to refill enough tokens
-			executionTime = executionTime.Add(limit1.durationPerToken * time.Duration(limit1.count))
+			executionTime = executionTime.Add(limit1.durationPerToken * time.Duration(limit1.Count()))
 
 			// Consume all tokens to exhaust the bucket again
-			for range limit1.count {
+			for range limit1.Count() {
 				ok := limiters.allowN("test", executionTime, 1)
 				require.True(t, ok, "should allow tokens to exhaust bucket")
 			}
@@ -500,8 +500,8 @@ func TestLimiters_WaitWithDebug(t *testing.T) {
 			}
 			close(done)
 
-			allow, debugs, err := limiters.waitNWithDebug(ctx, "test", executionTime, limit1.count)
-			require.False(t, allow, "should not acquire %d tokens if context is cancelled immediately", limit1.count)
+			allow, debugs, err := limiters.waitNWithDebug(ctx, "test", executionTime, limit1.Count())
+			require.False(t, allow, "should not acquire %d tokens if context is cancelled immediately", limit1.Count())
 			require.NotNil(t, debugs, "should return debugs even on cancellation")
 			require.ErrorIs(t, err, context.Canceled, "should return context canceled error")
 		}
@@ -524,7 +524,7 @@ func TestLimiters_WaitWithDebug(t *testing.T) {
 
 			// Exhaust tokens for all buckets from the more restrictive limiter
 			for bucketID := range buckets {
-				for range limit1.count {
+				for range limit1.Count() {
 					allow := limiters.allowN(bucketID, executionTime, 1)
 					require.True(t, allow, "should allow initial tokens for bucket %d", bucketID)
 				}
@@ -576,7 +576,7 @@ func TestLimiters_WaitWithDebug(t *testing.T) {
 
 			// Exhaust tokens for all buckets from the more restrictive limiter
 			for bucketID := range buckets {
-				for range limit1.count {
+				for range limit1.Count() {
 					allow := limiters.allowN(bucketID, executionTime, 1)
 					require.True(t, allow, "should allow initial tokens for bucket %d", bucketID)
 				}
@@ -635,7 +635,7 @@ func TestLimiters_WaitWithDebug(t *testing.T) {
 				// Exhaust tokens
 				for bucketID := range buckets {
 					// limit 1 being exhausted means the overall combined limiters are exhausted
-					for range limit1.count {
+					for range limit1.Count() {
 						allow := limiters.allowN(bucketID, executionTime, 1)
 						require.True(t, allow, "should allow initial tokens for bucket %d", bucketID)
 					}

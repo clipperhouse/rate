@@ -24,7 +24,7 @@ func TestLimiter_Peek_NeverPersists(t *testing.T) {
 	now := ntime.Now()
 
 	// any number of peeks should be true
-	for range limit1.count * 20 {
+	for range limit1.Count() * 20 {
 		require.True(t, limiter.peek(key, now))
 	}
 
@@ -44,12 +44,12 @@ func TestLimiter_Peek_SingleBucket(t *testing.T) {
 	now := ntime.Now()
 
 	// any number of peeks should be true
-	for range limit.count * 2 {
+	for range limit.Count() * 2 {
 		require.True(t, limiter.peek(key, now))
 	}
 
 	// exhaust the bucket
-	for range limit.count {
+	for range limit.Count() {
 		require.True(t, limiter.allow(key, now))
 	}
 
@@ -99,7 +99,7 @@ func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
 
 	// any number of peeks should be true
 	for bucketID := range buckets {
-		for range limit.count * 2 {
+		for range limit.Count() * 2 {
 			actual := limiter.peek(bucketID, now)
 			require.True(t, actual, now)
 		}
@@ -107,7 +107,7 @@ func TestLimiter_Peek_MultipleBuckets(t *testing.T) {
 
 	// exhaust all buckets
 	for bucketID := range buckets {
-		for range limit.count {
+		for range limit.Count() {
 			actual := limiter.allow(bucketID, now)
 			require.True(t, actual, "bucket %d should have tokens for allow", bucketID)
 		}
@@ -184,7 +184,7 @@ func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 	{
 		var wg sync.WaitGroup
 		for bucketID := range buckets {
-			for i := range limit.count * 2 {
+			for i := range limit.Count() * 2 {
 				wg.Add(1)
 				go func(bucketID int, processID int64) {
 					defer wg.Done()
@@ -198,7 +198,7 @@ func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 
 	// Exhaust all buckets
 	for bucketID := range buckets {
-		for range limit.count {
+		for range limit.Count() {
 			actual := limiter.allow(bucketID, now)
 			require.True(t, actual, "bucket %d should have tokens for allow", bucketID)
 		}
@@ -208,7 +208,7 @@ func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 	{
 		var wg sync.WaitGroup
 		for bucketID := range buckets {
-			for i := range limit.count * 2 {
+			for i := range limit.Count() * 2 {
 				wg.Add(1)
 				go func(bucketID int, processID int64) {
 					defer wg.Done()
@@ -225,7 +225,7 @@ func TestLimiter_Peek_MultipleBuckets_SingleLimit_Concurrent(t *testing.T) {
 		now = now.Add(limit.period)
 		var wg sync.WaitGroup
 		for bucketID := range buckets {
-			for i := range limit.count {
+			for i := range limit.Count() {
 				wg.Add(1)
 				go func(bucketID int, processID int64) {
 					defer wg.Done()
@@ -308,14 +308,14 @@ func TestLimiter_PeekWithDebug_AllowedAndDenied(t *testing.T) {
 		require.Equal(t, now.ToTime(), d.ExecutionTime(), "execution time should match")
 		require.Equal(t, input, d.Input(), "input should match")
 		require.Equal(t, input, d.Key(), "bucket key should match")
-		require.Equal(t, limit.count, d.TokensRemaining(), "should have full tokens remaining for peek")
+		require.Equal(t, limit.Count(), d.TokensRemaining(), "should have full tokens remaining for peek")
 		require.Equal(t, int64(1), d.TokensRequested(), "should request 1 token")
 		require.Equal(t, int64(0), d.TokensConsumed(), "should consume 0 tokens for peek")
 		require.Equal(t, time.Duration(0), d.RetryAfter(), "retry after should be 0 for allowed request")
 	}
 
 	// Consume all tokens with allow calls to create a denied scenario
-	for range limit.count {
+	for range limit.Count() {
 		limiter.allow(input, now)
 	}
 
@@ -352,12 +352,12 @@ func TestLimiter_Peek_SingleBucket_Func(t *testing.T) {
 	now := ntime.Now()
 
 	// any number of peeks should be true
-	for range limit.count * 2 {
+	for range limit.Count() * 2 {
 		require.True(t, limiter.peek(key, now))
 	}
 
 	// exhaust the bucket
-	for range limit.count {
+	for range limit.Count() {
 		require.True(t, limiter.allow(key, now))
 	}
 
@@ -383,7 +383,7 @@ func TestLimiter_Peek_MultipleBuckets_Func(t *testing.T) {
 
 	// any number of peeks should be true
 	for bucketID := range buckets {
-		for range limit.count * 2 {
+		for range limit.Count() * 2 {
 			actual := limiter.peek(bucketID, now)
 			require.True(t, actual, now)
 		}
@@ -391,7 +391,7 @@ func TestLimiter_Peek_MultipleBuckets_Func(t *testing.T) {
 
 	// exhaust all buckets
 	for bucketID := range buckets {
-		for range limit.count {
+		for range limit.Count() {
 			actual := limiter.allow(bucketID, now)
 			require.True(t, actual, "bucket %d should have tokens for allow", bucketID)
 		}
@@ -425,7 +425,7 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 	{
 		var wg sync.WaitGroup
 		for bucketID := range buckets {
-			for i := range limit.count * 2 {
+			for i := range limit.Count() * 2 {
 				wg.Add(1)
 				go func(bucketID int, processID int64) {
 					defer wg.Done()
@@ -439,7 +439,7 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 
 	// Exhaust all buckets
 	for bucketID := range buckets {
-		for range limit.count {
+		for range limit.Count() {
 			actual := limiter.allow(bucketID, now)
 			require.True(t, actual, "bucket %d should have tokens for allow", bucketID)
 		}
@@ -449,7 +449,7 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 	{
 		var wg sync.WaitGroup
 		for bucketID := range buckets {
-			for i := range limit.count * 2 {
+			for i := range limit.Count() * 2 {
 				wg.Add(1)
 				go func(bucketID int, processID int64) {
 					defer wg.Done()
@@ -466,7 +466,7 @@ func TestLimiter_Peek_MultipleBuckets_Concurrent_Func(t *testing.T) {
 		now = now.Add(limit.period)
 		var wg sync.WaitGroup
 		for bucketID := range buckets {
-			for i := range limit.count {
+			for i := range limit.Count() {
 				wg.Add(1)
 				go func(bucketID int, processID int64) {
 					defer wg.Done()
@@ -505,7 +505,7 @@ func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d0.ExecutionTime(), now.ToTime())
 		require.Equal(t, d0.TokensRequested(), request)
 		require.Equal(t, d0.TokensConsumed(), int64(0))
-		require.Equal(t, d0.TokensRemaining(), perSecond.count)
+		require.Equal(t, d0.TokensRemaining(), perSecond.Count())
 
 		d1 := debugs[1]
 		require.True(t, d1.Allowed())
@@ -514,7 +514,7 @@ func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 		require.Equal(t, d1.ExecutionTime(), now.ToTime())
 		require.Equal(t, d1.TokensRequested(), request)
 		require.Equal(t, d1.TokensConsumed(), int64(0))
-		require.Equal(t, d1.TokensRemaining(), perHour.count)
+		require.Equal(t, d1.TokensRemaining(), perHour.Count())
 	}
 
 	{
@@ -530,7 +530,7 @@ func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 		// require.Equal(t, d0.ExecutionTime(), now.ToTime())
 		require.Equal(t, d0.TokensRequested(), request)
 		require.Equal(t, d0.TokensConsumed(), int64(0))
-		require.Equal(t, d0.TokensRemaining(), perSecond.count)
+		require.Equal(t, d0.TokensRemaining(), perSecond.Count())
 
 		d1 := debugs[1]
 		require.True(t, d1.Allowed())
@@ -539,7 +539,7 @@ func TestLimiter_PeekNWithDebug_SingleBucket(t *testing.T) {
 		require.Equal(t, d1.ExecutionTime(), now.ToTime())
 		require.Equal(t, d1.TokensRequested(), request)
 		require.Equal(t, d1.TokensConsumed(), int64(0))
-		require.Equal(t, d1.TokensRemaining(), perHour.count)
+		require.Equal(t, d1.TokensRemaining(), perHour.Count())
 	}
 }
 
@@ -565,7 +565,7 @@ func TestLimiter_PeekWithDebug_Func(t *testing.T) {
 	require.Equal(t, now.ToTime(), d.ExecutionTime(), "execution time should match")
 	require.Equal(t, input, d.Input(), "input should match")
 	require.Equal(t, input, d.Key(), "bucket key should match")
-	require.Equal(t, limit.count, d.TokensRemaining(), "remaining tokens should match")
+	require.Equal(t, limit.Count(), d.TokensRemaining(), "remaining tokens should match")
 	require.Equal(t, int64(1), d.TokensRequested(), "tokens requested should be 1")
 	require.Equal(t, int64(0), d.TokensConsumed(), "tokens consumed should be 0 for peek operation")
 	require.Equal(t, time.Duration(0), d.RetryAfter(), "retry after should be 0 for allowed request")

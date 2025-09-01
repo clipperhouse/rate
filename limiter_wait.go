@@ -251,3 +251,40 @@ func (r *Limiter[TInput, TKey]) waitNWithDebug(
 		}
 	}
 }
+
+// waitNWithDetailsFIFO is the internal implementation that accepts a context.
+// Requests are ordered by their arrival time. It blocks until a tokens
+// becomes available for the given key, or the context is cancelled
+// via ctx.Done().
+//
+// It is a copy of waitNWithDetails right now. It's is intended to be
+// modified with FIFO semantics.
+func (r *Limiter[TInput, TKey]) waitNWithDetailsFIFO(
+	ctx context.Context,
+	input TInput,
+	startTime ntime.Time,
+	n int64,
+) (bool, Details[TInput, TKey], error) {
+	// currentTime is an approximation of the real clock moving forward.
+	// It's imprecise because it depends on time.After below.
+	currentTime := startTime
+
+	for {
+		allow, details := r.allowNWithDetails(input, currentTime, n)
+		if allow {
+			return allow, details, nil
+		}
+
+		retryAfter := details.RetryAfter()
+
+		select {
+		case <-ctx.Done():
+			// Need to get updated details, since this cancellation
+			// event might have been a while after the last call.
+			allow, details := r.allowNWithDetails(input, currentTime, n)
+			return allow, details, ctx.Err()
+		case <-time.After(retryAfter):
+			currentTime = currentTime.Add(retryAfter)
+		}
+	}
+}

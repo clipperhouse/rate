@@ -4,6 +4,10 @@ This sub-package of [github.com/clipperhouse/rate](https://github.com/clipperhou
 various Go rate limiters.
 
 ```
+goos: darwin
+goarch: arm64
+pkg: github.com/clipperhouse/rate/benchmarks
+cpu: Apple M2
 BenchmarkClipperhouse/serial-8         	28714730	        41.83 ns/op	       0 B/op	       0 allocs/op
 BenchmarkClipperhouse/parallel-8       	91543654	        13.09 ns/op	       0 B/op	       0 allocs/op
 BenchmarkSethVargo/serial-8            	22482856	        53.11 ns/op	       0 B/op	       0 allocs/op

@@ -1,13 +1,14 @@
 [![Tests](https://github.com/clipperhouse/rate/actions/workflows/tests.yml/badge.svg)](https://github.com/clipperhouse/rate/actions/workflows/tests.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/clipperhouse/rate.svg)](https://pkg.go.dev/github.com/clipperhouse/rate)
 
-A new, composable rate limiter for Go, with an emphasis on clean API and low overhead.
+A fast and composable rate limiter for Go.
 
-Rate limiters are typically an expression of several layers of policy. You might limit by user, or by resource, or both. You might allow short spikes; you might apply dynamic limits; you may want to stack several limits on top of one another.
+Rate limiters are typically an expression of several layers of policy. You might
+limit by user, or by resource, or both. You might allow short spikes; you might
+apply dynamic limits; you may want to stack several limits on top of one another.
 
-This library intends to make the above use cases expressible, readable and easy to reason about.
-
-Early days! I want your feedback, on GitHub or [on 𝕏](https://x.com/clipperhouse).
+This library intends to make the above use cases expressible, readable and easy
+to reason about.
 
 ## Quick start
 
@@ -35,16 +36,14 @@ if limiter.Allow(r) {
 
 ## Composability
 
-I intend this package to offer a set of basics for rate limiting, that you can compose into
-arbitrary logic, while being easy to reason about. In my experience, rate limiting gets complicated
-in production -- layered policies, dynamic policies, etc.
-
-So, let’s make easy things easy and hard things possible.
+I intend this package to offer a set of basics for rate limiting, that you can
+compose into arbitrary logic, while being easy to reason about. Let's make easy
+things easy and hard things possible.
 
 #### One or many limits
 
-You might wish to allow short spikes while preventing sustained load. So a `Limiter`
-can accept any number of `Limit`’s:
+You might wish to allow short spikes while preventing sustained load. So a
+`Limiter` can accept any number of `Limit`'s:
 
 ```go
 func byIP(req *http.Request) string {
@@ -58,8 +57,8 @@ perMinute := rate.NewLimit(100, time.Minute)
 limiter := rate.NewLimiter(byIP, perSecond, perMinute)
 ```
 
-The `limiter.Allow()` call checks both limits; all must allow or the request is denied.
-If denied, it will deduct no tokens from any limit.
+The `limiter.Allow()` call checks both limits; all must allow or the request is
+denied. If denied, it will deduct no tokens from any limit.
 
 #### One or many limiters
 
@@ -153,48 +152,53 @@ that is what I would like to hear from you.
 
 #### Concurrent
 
-Of course we need to handle concurrency. After all, a rate limiter is
-only important in contended circumstances. We’ve worked to make this correct
-and performant.
+Of course we need to handle concurrency. After all, a rate limiter is only
+important in contended circumstances.
 
 #### Transactional
 
 For a soft definition of “transactional”. Tokens are only deducted when all
-limits pass, otherwise no tokens are deducted. I think this is the right semantics,
-but perhaps more importantly, it mitigates noisy-neighbor DOS attempts.
+limits pass, otherwise no tokens are deducted. I think this is the right
+semantics, but perhaps more importantly, it mitigates noisy-neighbor DOS
+attempts.
 
-There is only one call to `time.Now()`, and all subsequent logic uses that time.
-Inspired by databases, where a transaction has a consistent snapshot view that
-applies throughout.
+There is only one call to `Now()`, and all subsequent logic uses that time.
+Inspired by databases, where a transaction has a consistent snapshot
+view that applies throughout.
 
 #### Efficient
 
-See the `benchmarks/` folder.
+See the [benchmarks package](https://github.com/clipperhouse/rate/tree/main/benchmarks)
+for a comparison of various fine Go rate limiters. I think we’re fast.
 
-You should usually see zero allocations. An `Allow()` call takes
-around 50ns on my machine. Here are some
-[benchmarks of other Go rate limiters](https://github.com/sethvargo/go-limiter#speed-and-performance).
+An `Allow()` call takes around 50ns on my machine. You should usually see zero
+allocations.
 
 At scale, one might create millions of buckets, so we’ve minimized the [data
 size of that struct](https://github.com/clipperhouse/rate/blob/main/bucket.go).
 
-I had the insight that the state of a bucket is completely expressed by a `time` field
-(in combination with a `Limit`). There is no `token` type or field.
-Calculating the available tokens is just arithmetic on time.
+I had the insight that the state of a bucket is completely expressed by a
+timestamp and a `Limit`. There is no `token` type or field; calculating the
+available tokens is just arithmetic on time.
 
-#### Inspectable
+You will find `GC()` and `Clear()` methods, which you can call to prevent
+unbounded memory growth.
 
-You’ll find `Peek`, and `*WithDetails` and `*WithDebug` methods, which give you the
-information you’ll need to return “retry after” or “remaining tokens” headers, or do
-detailed logging.
+#### Observable
+
+You'll find `Peek`, and `*WithDetails` and `*WithDebug` methods, which give
+you the information you'll need to return "retry after" or “remaining tokens”
+headers, or do detailed logging.
 
 #### Generic
 
-The `Limiter` type is generic. You'll define the type via the `KeyFunc` that you pass to `NewLimiter`.
-HTTP is the common case, but you can use whatever your app needs.
+The `Limiter` type is generic. You'll define the type via the `KeyFunc` that
+you pass to `NewLimiter`. HTTP is the common case, but you can use whatever
+your app needs.
 
 ## Roadmap
 
-First and foremost, I want some feedback. Try it, open an issue, or [ping me](https://x.com/clipperhouse).
+You tell me. Open an issue, or [ping me on 𝕏](https://x.com/clipperhouse).
 
-I can imagine a desire to share state across a cluster, perhaps via Redis or other shared database. That would be useful but would likely require sacrificing some of my optimizations, such as [ntime](https://github.com/clipperhouse/ntime). Open to it.
+I can imagine a desire to share state across a cluster, perhaps via Redis or
+other shared database, [here are some thoughts](https://clipperhouse.com/yagni-distributed-rate-limiter/).

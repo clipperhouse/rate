@@ -293,6 +293,8 @@ func TestBucketMap_GC(t *testing.T) {
 		bm.gc(func() ntime.Time {
 			return executionTime
 		})
+
+		// I've seen some flakiness here, returing 199 sometimes
 		require.Equal(t, int64(200), bm.count(), "should have 200 buckets after deletion and GC")
 	})
 

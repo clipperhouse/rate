@@ -3,8 +3,6 @@ package rate
 import (
 	"testing"
 	"time"
-
-	"github.com/clipperhouse/rate"
 )
 
 func BenchmarkLimiter_Peek(b *testing.B) {
@@ -15,8 +13,8 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 
 		b.Run("SingleLimit", func(b *testing.B) {
 			b.Run("Serial", func(b *testing.B) {
-				limit := rate.NewLimit(1000000, time.Second)
-				limiter := rate.NewLimiter(keyFunc, limit)
+				limit := NewLimit(1000000, time.Second)
+				limiter := NewLimiter(keyFunc, limit)
 
 				b.ReportAllocs()
 
@@ -26,8 +24,8 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 			})
 
 			b.Run("Parallel", func(b *testing.B) {
-				limit := rate.NewLimit(1000000, time.Second)
-				limiter := rate.NewLimiter(keyFunc, limit)
+				limit := NewLimit(1000000, time.Second)
+				limiter := NewLimiter(keyFunc, limit)
 
 				b.ReportAllocs()
 
@@ -41,9 +39,9 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 
 		b.Run("MultipleLimits", func(b *testing.B) {
 			b.Run("Serial", func(b *testing.B) {
-				limit1 := rate.NewLimit(1000000, time.Second)
-				limit2 := rate.NewLimit(500000, time.Second/2)
-				limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+				limit1 := NewLimit(1000000, time.Second)
+				limit2 := NewLimit(500000, time.Second/2)
+				limiter := NewLimiter(keyFunc, limit1, limit2)
 
 				b.ReportAllocs()
 
@@ -53,9 +51,9 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 			})
 
 			b.Run("Parallel", func(b *testing.B) {
-				limit1 := rate.NewLimit(1000000, time.Second)
-				limit2 := rate.NewLimit(500000, time.Second/2)
-				limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+				limit1 := NewLimit(1000000, time.Second)
+				limit2 := NewLimit(500000, time.Second/2)
+				limiter := NewLimiter(keyFunc, limit1, limit2)
 
 				b.ReportAllocs()
 
@@ -76,8 +74,8 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 
 		b.Run("SingleLimit", func(b *testing.B) {
 			b.Run("Serial", func(b *testing.B) {
-				limit := rate.NewLimit(1000000, time.Second)
-				limiter := rate.NewLimiter(keyFunc, limit)
+				limit := NewLimit(1000000, time.Second)
+				limiter := NewLimiter(keyFunc, limit)
 
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -88,8 +86,8 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 			})
 
 			b.Run("Parallel", func(b *testing.B) {
-				limit := rate.NewLimit(1000000, time.Second)
-				limiter := rate.NewLimiter(keyFunc, limit)
+				limit := NewLimit(1000000, time.Second)
+				limiter := NewLimiter(keyFunc, limit)
 
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -106,9 +104,9 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 
 		b.Run("MultipleLimits", func(b *testing.B) {
 			b.Run("Serial", func(b *testing.B) {
-				limit1 := rate.NewLimit(1000000, time.Second)
-				limit2 := rate.NewLimit(500000, time.Second/2)
-				limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+				limit1 := NewLimit(1000000, time.Second)
+				limit2 := NewLimit(500000, time.Second/2)
+				limiter := NewLimiter(keyFunc, limit1, limit2)
 
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -119,9 +117,9 @@ func BenchmarkLimiter_Peek(b *testing.B) {
 			})
 
 			b.Run("Parallel", func(b *testing.B) {
-				limit1 := rate.NewLimit(1000000, time.Second)
-				limit2 := rate.NewLimit(500000, time.Second/2)
-				limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+				limit1 := NewLimit(1000000, time.Second)
+				limit2 := NewLimit(500000, time.Second/2)
+				limiter := NewLimiter(keyFunc, limit1, limit2)
 
 				b.ResetTimer()
 				b.ReportAllocs()
@@ -145,8 +143,8 @@ func BenchmarkLimiter_PeekWithDetails(b *testing.B) {
 		}
 
 		b.Run("SingleLimit", func(b *testing.B) {
-			limit := rate.NewLimit(1000000, time.Second)
-			limiter := rate.NewLimiter(keyFunc, limit)
+			limit := NewLimit(1000000, time.Second)
+			limiter := NewLimiter(keyFunc, limit)
 
 			b.ReportAllocs()
 
@@ -156,9 +154,9 @@ func BenchmarkLimiter_PeekWithDetails(b *testing.B) {
 		})
 
 		b.Run("MultipleLimits", func(b *testing.B) {
-			limit1 := rate.NewLimit(1000000, time.Second)
-			limit2 := rate.NewLimit(500000, time.Second/2)
-			limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+			limit1 := NewLimit(1000000, time.Second)
+			limit2 := NewLimit(500000, time.Second/2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 
 			b.ReportAllocs()
 
@@ -175,8 +173,8 @@ func BenchmarkLimiter_PeekWithDetails(b *testing.B) {
 		}
 
 		b.Run("SingleLimit", func(b *testing.B) {
-			limit := rate.NewLimit(1000000, time.Second)
-			limiter := rate.NewLimiter(keyFunc, limit)
+			limit := NewLimit(1000000, time.Second)
+			limiter := NewLimiter(keyFunc, limit)
 
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -187,9 +185,9 @@ func BenchmarkLimiter_PeekWithDetails(b *testing.B) {
 		})
 
 		b.Run("MultipleLimits", func(b *testing.B) {
-			limit1 := rate.NewLimit(1000000, time.Second)
-			limit2 := rate.NewLimit(500000, time.Second/2)
-			limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+			limit1 := NewLimit(1000000, time.Second)
+			limit2 := NewLimit(500000, time.Second/2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -208,8 +206,8 @@ func BenchmarkLimiter_PeekWithDebug(b *testing.B) {
 		}
 
 		b.Run("SingleLimit", func(b *testing.B) {
-			limit := rate.NewLimit(1000000, time.Second)
-			limiter := rate.NewLimiter(keyFunc, limit)
+			limit := NewLimit(1000000, time.Second)
+			limiter := NewLimiter(keyFunc, limit)
 
 			b.ReportAllocs()
 
@@ -219,9 +217,9 @@ func BenchmarkLimiter_PeekWithDebug(b *testing.B) {
 		})
 
 		b.Run("MultipleLimits", func(b *testing.B) {
-			limit1 := rate.NewLimit(1000000, time.Second)
-			limit2 := rate.NewLimit(500000, time.Second/2)
-			limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+			limit1 := NewLimit(1000000, time.Second)
+			limit2 := NewLimit(500000, time.Second/2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 
 			b.ReportAllocs()
 
@@ -238,8 +236,8 @@ func BenchmarkLimiter_PeekWithDebug(b *testing.B) {
 		}
 
 		b.Run("SingleLimit", func(b *testing.B) {
-			limit := rate.NewLimit(1000000, time.Second)
-			limiter := rate.NewLimiter(keyFunc, limit)
+			limit := NewLimit(1000000, time.Second)
+			limiter := NewLimiter(keyFunc, limit)
 
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -250,9 +248,9 @@ func BenchmarkLimiter_PeekWithDebug(b *testing.B) {
 		})
 
 		b.Run("MultipleLimits", func(b *testing.B) {
-			limit1 := rate.NewLimit(1000000, time.Second)
-			limit2 := rate.NewLimit(500000, time.Second/2)
-			limiter := rate.NewLimiter(keyFunc, limit1, limit2)
+			limit1 := NewLimit(1000000, time.Second)
+			limit2 := NewLimit(500000, time.Second/2)
+			limiter := NewLimiter(keyFunc, limit1, limit2)
 
 			b.ResetTimer()
 			b.ReportAllocs()
